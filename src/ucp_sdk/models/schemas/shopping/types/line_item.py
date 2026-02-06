@@ -18,24 +18,31 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from . import payment_identity
+from . import item as item_1
+from . import total
 
 
-class Binding(BaseModel):
+class LineItem(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Line item object. Expected to use the currency of the parent object.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    id: str
+    item: item_1.Item
+    quantity: int = Field(..., ge=1)
     """
-    The checkout session identifier this token is bound to.
+    Quantity of the item being purchased.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    totals: list[total.Total]
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Line item totals breakdown.
+    """
+    parent_id: str | None = None
+    """
+    Parent line item identifier for any nested structures.
     """

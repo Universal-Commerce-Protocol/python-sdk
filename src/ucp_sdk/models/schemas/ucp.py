@@ -18,20 +18,160 @@
 
 from __future__ import annotations
 
-from .._internal import (
-  DiscoveryProfile,
-  ResponseCheckout,
-  ResponseOrder,
-  Services,
-  UcpMetadata,
-  Version,
-)
+from typing import Any
 
-__all__ = [
-  "DiscoveryProfile",
-  "ResponseCheckout",
-  "ResponseOrder",
-  "Services",
-  "UcpMetadata",
-  "Version",
-]
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+
+from . import capability, payment_handler, service
+
+
+class UcpMetadata(RootModel[Any]):
+    root: Any = Field(..., title="UCP Metadata")
+    """
+    Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
+    """
+
+
+class Version(RootModel[str]):
+    root: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+
+
+class ReverseDomainName(RootModel[str]):
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Reverse-domain identifier (e.g., com.google.pay, dev.ucp.shopping.checkout)
+    """
+
+
+class Entity(BaseModel):
+    """
+    Shared foundation for all UCP entities.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    """
+    Entity version in YYYY-MM-DD format.
+    """
+    spec: AnyUrl | None = None
+    """
+    URL to human-readable specification document.
+    """
+    schema_: AnyUrl | None = Field(None, alias="schema")
+    """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+    id: str | None = None
+    """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+    config: dict[str, Any] | None = None
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+
+
+class PlatformSchema(BaseModel):
+    """
+    Full UCP metadata for platform-level configuration. Hosted at a URI advertised by the platform in request headers.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class BusinessSchema(BaseModel):
+    """
+    UCP metadata for business/merchant-level configuration. Subset of platform schema with business-specific settings.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class ResponseCheckoutSchema(BaseModel):
+    """
+    UCP metadata for checkout responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any | None = None
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class ResponseCartSchema(RootModel[Any]):
+    root: Any
+
+
+class Base(BaseModel):
+    """
+    Base UCP metadata with shared properties for all schema types.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    services: dict[ReverseDomainName, list[service.Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: dict[ReverseDomainName, list[capability.Base]] | None = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: dict[ReverseDomainName, list[payment_handler.Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseOrderSchema(BaseModel):
+    """
+    UCP metadata for order responses. No payment handlers needed post-purchase.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: dict[str, list[service.Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: Any | None = None
+    payment_handlers: dict[str, list[payment_handler.Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """

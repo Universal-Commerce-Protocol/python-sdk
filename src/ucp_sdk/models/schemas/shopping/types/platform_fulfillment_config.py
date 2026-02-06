@@ -22,12 +22,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PlatformFulfillmentConfig(BaseModel):
-  """Platform's fulfillment configuration."""
+    """
+    Platform's fulfillment configuration.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  supports_multi_group: bool | None = False
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    supports_multi_group: bool | None = False
+    """
     Enables multiple groups per method.
     """

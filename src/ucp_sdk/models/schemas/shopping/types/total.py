@@ -18,24 +18,24 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
 
-from . import payment_identity
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class Binding(BaseModel):
-    """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
-    """
-
+class Total(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    type: Literal["items_discount", "subtotal", "discount", "fulfillment", "tax", "fee", "total"]
     """
-    The checkout session identifier this token is bound to.
+    Type of total categorization.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    display_text: str | None = None
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Text to display against the amount. Should reflect appropriate method (e.g., 'Shipping', 'Delivery').
+    """
+    amount: int = Field(..., ge=0)
+    """
+    If type == total, sums subtotal - discount + fulfillment + tax + fee. Should be >= 0. Amount in minor (cents) currency units.
     """

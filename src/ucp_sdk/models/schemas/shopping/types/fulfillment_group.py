@@ -20,22 +20,30 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
+from . import fulfillment_option
 
 
-class Binding(BaseModel):
+class FulfillmentGroup(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    A merchant-generated package/group of line items with fulfillment options.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    id: str
     """
-    The checkout session identifier this token is bound to.
+    Group identifier for referencing merchant-generated groups in updates.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    line_item_ids: list[str]
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Line item IDs included in this group/package.
+    """
+    options: list[fulfillment_option.FulfillmentOption] | None = None
+    """
+    Available fulfillment options for this group.
+    """
+    selected_option_id: str | None = None
+    """
+    ID of the selected fulfillment option for this group.
     """

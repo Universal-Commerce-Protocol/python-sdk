@@ -18,24 +18,20 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
-from . import payment_identity
+from .postal_address import PostalAddress
 
 
-class Binding(BaseModel):
+class ShippingDestination(PostalAddress):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Shipping destination.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    id: str
     """
-    The checkout session identifier this token is bound to.
-    """
-    identity: payment_identity.PaymentIdentity | None = None
-    """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    ID specific to this shipping destination.
     """

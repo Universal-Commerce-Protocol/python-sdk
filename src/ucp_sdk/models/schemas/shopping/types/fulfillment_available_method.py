@@ -18,24 +18,32 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
 
-
-class Binding(BaseModel):
+class FulfillmentAvailableMethod(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Inventory availability hint for a fulfillment method type.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    type: Literal["shipping", "pickup"]
     """
-    The checkout session identifier this token is bound to.
+    Fulfillment method type this availability applies to.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    line_item_ids: list[str]
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Line items available for this fulfillment method.
+    """
+    fulfillable_on: str | None = None
+    """
+    'now' for immediate availability, or ISO 8601 date for future (preorders, transfers).
+    """
+    description: str | None = None
+    """
+    Human-readable availability info (e.g., 'Available for pickup at Downtown Store today').
     """

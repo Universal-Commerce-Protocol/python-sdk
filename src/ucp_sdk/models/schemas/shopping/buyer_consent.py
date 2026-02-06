@@ -18,24 +18,39 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any
 
-from . import payment_identity
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 
-class Binding(BaseModel):
+class BuyerConsentExtension(RootModel[Any]):
+    root: Any = Field(..., title="Buyer Consent Extension")
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.
+    """
+
+
+class Consent(BaseModel):
+    """
+    User consent states for data processing
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    analytics: bool | None = None
     """
-    The checkout session identifier this token is bound to.
+    Consent for analytics and performance tracking.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    preferences: bool | None = None
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Consent for storing user preferences.
+    """
+    marketing: bool | None = None
+    """
+    Consent for marketing communications.
+    """
+    sale_of_data: bool | None = None
+    """
+    Consent for selling data to third parties (CCPA).
     """

@@ -20,22 +20,16 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
 
-
-class Binding(BaseModel):
+class EmbeddedTransportConfig(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Per-checkout configuration for embedded transport binding. Allows businesses to vary ECP availability and delegations based on cart contents, agent authorization, or policy.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    delegate: list[str] | None = None
     """
-    The checkout session identifier this token is bound to.
-    """
-    identity: payment_identity.PaymentIdentity | None = None
-    """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
     """

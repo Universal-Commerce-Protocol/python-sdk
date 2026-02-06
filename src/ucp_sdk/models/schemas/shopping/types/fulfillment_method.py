@@ -22,38 +22,38 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-
-class AllowsMultiDestination(BaseModel):
-    """
-    Permits multiple destinations per method type.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    shipping: bool | None = None
-    """
-    Multiple shipping destinations allowed.
-    """
-    pickup: bool | None = None
-    """
-    Multiple pickup locations allowed.
-    """
+from . import fulfillment_destination, fulfillment_group
 
 
-class MerchantFulfillmentConfig(BaseModel):
+class FulfillmentMethod(BaseModel):
     """
-    Merchant's fulfillment configuration.
+    A fulfillment method (shipping or pickup) with destinations and groups.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    allows_multi_destination: AllowsMultiDestination | None = None
+    id: str
     """
-    Permits multiple destinations per method type.
+    Unique fulfillment method identifier.
     """
-    allows_method_combinations: list[list[Literal["shipping", "pickup"]]] | None = None
+    type: Literal["shipping", "pickup"]
     """
-    Allowed method type combinations.
+    Fulfillment method type.
+    """
+    line_item_ids: list[str]
+    """
+    Line item IDs fulfilled via this method.
+    """
+    destinations: list[fulfillment_destination.FulfillmentDestination] | None = None
+    """
+    Available destinations. For shipping: addresses. For pickup: retail locations.
+    """
+    selected_destination_id: str | None = None
+    """
+    ID of the selected destination.
+    """
+    groups: list[fulfillment_group.FulfillmentGroup] | None = None
+    """
+    Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """

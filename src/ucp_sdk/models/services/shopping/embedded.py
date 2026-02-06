@@ -18,24 +18,13 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any
 
-from . import payment_identity
+from pydantic import Field, RootModel
 
 
-class Binding(BaseModel):
+class EmbeddedProtocol(RootModel[Any]):
+    root: Any = Field(..., title="Embedded Protocol")
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    checkout_id: str
-    """
-    The checkout session identifier this token is bound to.
-    """
-    identity: payment_identity.PaymentIdentity | None = None
-    """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Embedded Protocol (EP) methods for UCP capabilities. Methods are sent from Merchant to Host via postMessage/JSON-RPC 2.0. Method prefixes indicate capability scope: ec.* (checkout). Future capabilities may define additional prefixes (e.g., eo.* for order).
     """

@@ -22,18 +22,18 @@ from pydantic import AnyUrl, BaseModel, ConfigDict
 
 
 class Link(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  type: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
     Type of link. Well-known values: `privacy_policy`, `terms_of_service`, `refund_policy`, `shipping_policy`, `faq`. Consumers SHOULD handle unknown values gracefully by displaying them using the `title` field or omitting the link.
     """
-  url: AnyUrl
-  """
+    url: AnyUrl
+    """
     The actual URL pointing to the content to be displayed.
     """
-  title: str | None = None
-  """
+    title: str | None = None
+    """
     Optional display text for the link. When provided, use this instead of generating from type.
     """

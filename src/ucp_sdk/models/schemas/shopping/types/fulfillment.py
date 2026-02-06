@@ -20,22 +20,22 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
+from . import fulfillment_available_method, fulfillment_method
 
 
-class Binding(BaseModel):
+class Fulfillment(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Container for fulfillment methods and availability.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    methods: list[fulfillment_method.FulfillmentMethod] | None = None
     """
-    The checkout session identifier this token is bound to.
+    Fulfillment methods for cart items.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    available_methods: list[fulfillment_available_method.FulfillmentAvailableMethod] | None = None
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Inventory availability hints.
     """

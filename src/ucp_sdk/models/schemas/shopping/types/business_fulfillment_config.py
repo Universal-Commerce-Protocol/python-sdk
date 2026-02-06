@@ -18,24 +18,42 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
 
-
-class Binding(BaseModel):
+class AllowsMultiDestination(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Permits multiple destinations per method type.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    shipping: bool | None = None
     """
-    The checkout session identifier this token is bound to.
+    Multiple shipping destinations allowed.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    pickup: bool | None = None
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Multiple pickup locations allowed.
+    """
+
+
+class BusinessFulfillmentConfig(BaseModel):
+    """
+    Business's fulfillment configuration.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    allows_multi_destination: AllowsMultiDestination | None = None
+    """
+    Permits multiple destinations per method type.
+    """
+    allows_method_combinations: list[list[Literal["shipping", "pickup"]]] | None = None
+    """
+    Allowed method type combinations.
     """

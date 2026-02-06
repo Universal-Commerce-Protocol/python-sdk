@@ -18,16 +18,43 @@
 
 from __future__ import annotations
 
-from pydantic import Field, RootModel
-from . import card_payment_instrument
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, RootModel
+
+from . import payment_credential, postal_address
 
 
-class PaymentInstrument(
-  RootModel[card_payment_instrument.CardPaymentInstrument]
-):
-  root: card_payment_instrument.CardPaymentInstrument = Field(
-    ..., title="Payment Instrument"
-  )
-  """
-    Matches a specific instrument type based on validation logic.
+class SelectedPaymentInstrument(RootModel[Any]):
+    root: Any
+
+
+class PaymentInstrument(BaseModel):
+    """
+    The base definition for any payment instrument. It links the instrument to a specific payment handler.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    A unique identifier for this instrument instance, assigned by the platform.
+    """
+    handler_id: str
+    """
+    The unique identifier for the handler instance that produced this instrument. This corresponds to the 'id' field in the Payment Handler definition.
+    """
+    type: str
+    """
+    The broad category of the instrument (e.g., 'card', 'tokenized_card'). Specific schemas will constrain this to a constant value.
+    """
+    billing_address: postal_address.PostalAddress | None = None
+    """
+    The billing address associated with this payment method.
+    """
+    credential: payment_credential.PaymentCredential | None = None
+    display: dict[str, Any] | None = None
+    """
+    Display information for this payment instrument. Each payment instrument schema defines its specific display properties, as outlined by the payment handler.
     """

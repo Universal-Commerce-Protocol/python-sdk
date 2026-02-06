@@ -20,22 +20,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_identity
+from .types import payment_instrument
 
 
-class Binding(BaseModel):
+class Payment(BaseModel):
     """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+    Payment configuration containing handlers.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    instruments: list[payment_instrument.SelectedPaymentInstrument] | None = None
     """
-    The checkout session identifier this token is bound to.
-    """
-    identity: payment_identity.PaymentIdentity | None = None
-    """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    The payment instruments available for this payment. Each instrument is associated with a specific handler via the handler_id field. Handlers can extend the base payment_instrument schema to add handler-specific fields.
     """

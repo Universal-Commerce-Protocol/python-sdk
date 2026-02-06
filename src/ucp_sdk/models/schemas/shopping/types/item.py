@@ -18,24 +18,26 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
-
-from . import payment_identity
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
 
-class Binding(BaseModel):
-    """
-    Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
-    """
-
+class Item(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_id: str
+    id: str
     """
-    The checkout session identifier this token is bound to.
+    The product identifier, often the SKU, required to resolve the product details associated with this line item. Should be recognized by both the Platform, and the Business.
     """
-    identity: payment_identity.PaymentIdentity | None = None
+    title: str
     """
-    The participant this token is bound to. Required when acting on behalf of another participant (e.g., agent tokenizing for merchant). Omit when the authenticated caller is the binding target.
+    Product title.
+    """
+    price: int = Field(..., ge=0)
+    """
+    Unit price in minor (cents) currency units.
+    """
+    image_url: AnyUrl | None = None
+    """
+    Product image URI.
     """

@@ -22,12 +22,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PaymentAccountInfo(BaseModel):
-  """Non-sensitive backend identifiers for linking."""
+    """
+    Non-sensitive backend identifiers for linking.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  payment_account_reference: str | None = None
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    payment_account_reference: str | None = None
+    """
     EMVCo PAR. A unique identifier linking a payment card to a specific account, enabling tracking across tokens (Apple Pay, physical card, etc).
     """

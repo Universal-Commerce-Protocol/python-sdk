@@ -19,48 +19,53 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import ConfigDict, Field
+
+from .payment_credential import PaymentCredential
 
 
-class CardCredential(BaseModel):
-  """A card credential containing sensitive payment card details including raw Primary Account Numbers (PANs). This credential type MUST NOT be used for checkout, only with payment handlers that tokenize or encrypt credentials. CRITICAL: Both parties handling CardCredential (sender and receiver) MUST be PCI DSS compliant. Transmission MUST use HTTPS/TLS with strong cipher suites."""
+class CardCredential(PaymentCredential):
+    """
+    A card credential containing sensitive payment card details including raw Primary Account Numbers (PANs). This credential type MUST NOT be used for checkout, only with payment handlers that tokenize or encrypt credentials. CRITICAL: Both parties handling CardCredential (sender and receiver) MUST be PCI DSS compliant. Transmission MUST use HTTPS/TLS with strong cipher suites.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  type: Literal["card"]
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["card"]
+    """
     The credential type identifier for card credentials.
     """
-  card_number_type: Literal["fpan", "network_token", "dpan"]
-  """
+    card_number_type: Literal["fpan", "network_token", "dpan"]
+    """
     The type of card number. Network tokens are preferred with fallback to FPAN. See PCI Scope for more details.
     """
-  number: str | None = Field(None, examples=["4242424242424242"])
-  """
+    number: str | None = Field(None, examples=["4242424242424242"])
+    """
     Card number.
     """
-  expiry_month: int | None = None
-  """
+    expiry_month: int | None = None
+    """
     The month of the card's expiration date (1-12).
     """
-  expiry_year: int | None = None
-  """
+    expiry_year: int | None = None
+    """
     The year of the card's expiration date.
     """
-  name: str | None = Field(None, examples=["Jane Doe"])
-  """
+    name: str | None = Field(None, examples=["Jane Doe"])
+    """
     Cardholder name.
     """
-  cvc: str | None = Field(None, examples=["223"], max_length=4)
-  """
+    cvc: str | None = Field(None, examples=["223"], max_length=4)
+    """
     Card CVC number.
     """
-  cryptogram: str | None = Field(None, examples=["gXc5UCLnM6ckD7pjM1TdPA=="])
-  """
+    cryptogram: str | None = Field(None, examples=["gXc5UCLnM6ckD7pjM1TdPA=="])
+    """
     Cryptogram provided with network tokens.
     """
-  eci_value: str | None = Field(None, examples=["07"])
-  """
+    eci_value: str | None = Field(None, examples=["07"])
+    """
     Electronic Commerce Indicator / Security Level Indicator provided with network tokens.
     """

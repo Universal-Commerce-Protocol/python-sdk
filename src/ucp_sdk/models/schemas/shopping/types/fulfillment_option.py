@@ -18,42 +18,44 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict
-
-
-class AllowsMultiDestination(BaseModel):
-    """
-    Permits multiple destinations per method type.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    shipping: bool | None = None
-    """
-    Multiple shipping destinations allowed.
-    """
-    pickup: bool | None = None
-    """
-    Multiple pickup locations allowed.
-    """
+from . import total
 
 
-class MerchantFulfillmentConfig(BaseModel):
+class FulfillmentOption(BaseModel):
     """
-    Merchant's fulfillment configuration.
+    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    allows_multi_destination: AllowsMultiDestination | None = None
+    id: str
     """
-    Permits multiple destinations per method type.
+    Unique fulfillment option identifier.
     """
-    allows_method_combinations: list[list[Literal["shipping", "pickup"]]] | None = None
+    title: str
     """
-    Allowed method type combinations.
+    Short label (e.g., 'Express Shipping', 'Curbside Pickup').
+    """
+    description: str | None = None
+    """
+    Complete context for buyer decision (e.g., 'Arrives Dec 12-15 via FedEx').
+    """
+    carrier: str | None = None
+    """
+    Carrier name (for shipping).
+    """
+    earliest_fulfillment_time: AwareDatetime | None = None
+    """
+    Earliest fulfillment date.
+    """
+    latest_fulfillment_time: AwareDatetime | None = None
+    """
+    Latest fulfillment date.
+    """
+    totals: list[total.Total]
+    """
+    Fulfillment option totals breakdown.
     """
