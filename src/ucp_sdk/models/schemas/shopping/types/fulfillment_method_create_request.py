@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from . import fulfillment_destination, fulfillment_group
+from . import fulfillment_destination, fulfillment_group_create_request
 
 
 class FulfillmentMethodCreateRequest(BaseModel):
@@ -49,7 +49,7 @@ class FulfillmentMethodCreateRequest(BaseModel):
     """
     ID of the selected destination.
     """
-    groups: list[fulfillment_group.FulfillmentGroup] | None = None
+    groups: list[fulfillment_group_create_request.FulfillmentGroupCreateRequest] | None = None
     """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """

@@ -19,6 +19,7 @@ Preprocess JSON schemas for datamodel-code-generator compatibility.
 import json
 import shutil
 import copy
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -159,11 +160,12 @@ def update_refs_for_scenario(obj: Any, scenario: str, schemas_with_scenarios: se
                 elif value.endswith(".json"):
                     # Resolve the relative path from current schema's directory
                     if current_dir:
-                        ref_path = str(Path(current_dir) / value)
+                        combined = os.path.join(current_dir, value)
+                        ref_path = os.path.normpath(combined)
                     else:
-                        ref_path = value
+                        ref_path = os.path.normpath(value)
                     
-                    # Normalize the path
+                    # Normalize the path (force forward slashes)
                     ref_path = ref_path.replace("\\", "/")
                     
                     # Check if the referenced schema has scenarios
@@ -288,7 +290,7 @@ def clean_schema_for_codegen(schema: Dict[str, Any]) -> Dict[str, Any]:
     return schema
 
 
-def preprocess_schema_file(input_path: Path, output_path: Path, schemas_with_scenarios: set) -> None:
+def preprocess_schema_file(input_path: Path, output_path: Path, schemas_with_scenarios: set, schema_dir: str) -> None:
     """Preprocess a single schema file."""
     with open(input_path, 'r', encoding='utf-8') as f:
         schema = json.load(f)
@@ -317,9 +319,6 @@ def preprocess_schema_file(input_path: Path, output_path: Path, schemas_with_sce
     
     # Generate scenario-specific schemas
     base_name = output_path.stem  # filename without extension
-    
-    # Get the directory of this schema relative to the root (for resolving refs)
-    schema_dir = str(output_path.parent.relative_to(output_path.parent.parent.parent))
     
     scenarios = process_ucp_request_scenarios(schema, base_name, schemas_with_scenarios, schema_dir)
     
@@ -383,8 +382,13 @@ def preprocess_schemas(input_dir: Path, output_dir: Path) -> None:
         rel_path = json_file.relative_to(input_dir)
         output_path = output_dir / rel_path
         
+        # Calculate directory of this file relative to valid root
+        file_rel_dir = str(rel_path.parent).replace("\\", "/")
+        if file_rel_dir == ".":
+            file_rel_dir = ""
+
         print(f"  Processing: {rel_path}")
-        preprocess_schema_file(json_file, output_path, schemas_with_scenarios)
+        preprocess_schema_file(json_file, output_path, schemas_with_scenarios, file_rel_dir)
     
     print(f"Preprocessing complete. Output in {output_dir}")
 

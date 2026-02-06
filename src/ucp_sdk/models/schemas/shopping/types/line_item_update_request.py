@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import item as item_1
+from . import item_update_request
 
 
 class LineItemUpdateRequest(BaseModel):
@@ -32,7 +32,7 @@ class LineItemUpdateRequest(BaseModel):
         extra="allow",
     )
     id: str | None = None
-    item: item_1.Item
+    item: item_update_request.ItemUpdateRequest
     quantity: int = Field(..., ge=1)
     """
     Quantity of the item being purchased.

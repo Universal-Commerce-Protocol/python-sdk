@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import fulfillment_method
+from . import fulfillment_method_update_request
 
 
 class FulfillmentUpdateRequest(BaseModel):
@@ -31,7 +31,7 @@ class FulfillmentUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    methods: list[fulfillment_method.FulfillmentMethod] | None = None
+    methods: list[fulfillment_method_update_request.FulfillmentMethodUpdateRequest] | None = None
     """
     Fulfillment methods for cart items.
     """
