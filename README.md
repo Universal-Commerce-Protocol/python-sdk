@@ -38,10 +38,7 @@ For now, you can install the SDK using the following commands:
 mkdir sdk
 
 # Clone the repository
-git clone https://github.com/Universal-Commerce-Protocol/python-sdk.git sdk/python
-
-# Navigate to the directory
-cd sdk/python
+git clone https://github.com/Universal-Commerce-Protocol/python-sdk.git
 
 # Install dependencies
 uv sync
@@ -57,6 +54,12 @@ This project uses `uv` for dependency management.
 
 The models are automatically generated from the JSON schemas in the UCP
 Specification.
+
+Clone the UCP main repository in the same folder:
+
+```bash
+git clone https://github.com/Universal-Commerce-Protocol/ucp.git
+```
 
 To regenerate the models:
 
