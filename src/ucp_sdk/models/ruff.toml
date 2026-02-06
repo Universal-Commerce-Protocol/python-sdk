@@ -1,0 +1,16 @@
+# Ruff configuration for generated models
+# These are auto-generated files, so we're more lenient with style rules
+
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"__init__.py" = ["D104"]
+"*.py" = ["D100", "D101", "D102", "D103", "D200", "D205", "D212"]

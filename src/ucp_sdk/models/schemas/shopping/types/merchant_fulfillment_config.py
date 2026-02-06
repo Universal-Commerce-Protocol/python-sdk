@@ -18,39 +18,42 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
 
 
 class AllowsMultiDestination(BaseModel):
-  """Permits multiple destinations per method type."""
+    """
+    Permits multiple destinations per method type.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  shipping: bool | None = None
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    shipping: bool | None = None
+    """
     Multiple shipping destinations allowed.
     """
-  pickup: bool | None = None
-  """
+    pickup: bool | None = None
+    """
     Multiple pickup locations allowed.
     """
 
 
 class MerchantFulfillmentConfig(BaseModel):
-  """Merchant's fulfillment configuration."""
+    """
+    Merchant's fulfillment configuration.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  allows_multi_destination: AllowsMultiDestination | None = None
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    allows_multi_destination: AllowsMultiDestination | None = None
+    """
     Permits multiple destinations per method type.
     """
-  allows_method_combinations: (
-    list[list[Literal["shipping", "pickup"]]] | None
-  ) = None
-  """
+    allows_method_combinations: list[list[Literal["shipping", "pickup"]]] | None = None
+    """
     Allowed method type combinations.
     """

@@ -19,76 +19,77 @@
 from __future__ import annotations
 
 from pydantic import AnyUrl, BaseModel, ConfigDict
-from .types import (
-  adjustment,
-  expectation,
-  fulfillment_event,
-  order_line_item,
-  total_resp,
-)
-from ..._internal import ResponseOrder
+
+from .. import ucp as ucp_1
+from .types import adjustment, expectation, fulfillment_event, order_line_item, total
 
 
-class PlatformConfig(BaseModel):
-  """Platform's order capability configuration."""
+class PlatformSchema(BaseModel):
+    """
+    Platform's order capability configuration.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  webhook_url: AnyUrl
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    webhook_url: AnyUrl
+    """
     URL where merchant sends order lifecycle events (webhooks).
     """
 
 
 class Fulfillment(BaseModel):
-  """Fulfillment data: buyer expectations and what actually happened."""
+    """
+    Fulfillment data: buyer expectations and what actually happened.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  expectations: list[expectation.Expectation] | None = None
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    expectations: list[expectation.Expectation] | None = None
+    """
     Buyer-facing groups representing when/how items will be delivered. Can be split, merged, or adjusted post-order.
     """
-  events: list[fulfillment_event.FulfillmentEvent] | None = None
-  """
+    events: list[fulfillment_event.FulfillmentEvent] | None = None
+    """
     Append-only event log of actual shipments. Each event references line items by ID.
     """
 
 
 class Order(BaseModel):
-  """Order schema with immutable line items, buyer-facing fulfillment expectations, and append-only event logs."""
+    """
+    Order schema with immutable line items, buyer-facing fulfillment expectations, and append-only event logs.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  ucp: ResponseOrder
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ucp_1.ResponseOrderSchema
+    id: str
+    """
     Unique order identifier.
     """
-  checkout_id: str
-  """
+    checkout_id: str
+    """
     Associated checkout ID for reconciliation.
     """
-  permalink_url: AnyUrl
-  """
+    permalink_url: AnyUrl
+    """
     Permalink to access the order on merchant site.
     """
-  line_items: list[order_line_item.OrderLineItem]
-  """
+    line_items: list[order_line_item.OrderLineItem]
+    """
     Immutable line items — source of truth for what was ordered.
     """
-  fulfillment: Fulfillment
-  """
+    fulfillment: Fulfillment
+    """
     Fulfillment data: buyer expectations and what actually happened.
     """
-  adjustments: list[adjustment.Adjustment] | None = None
-  """
+    adjustments: list[adjustment.Adjustment] | None = None
+    """
     Append-only event log of money movements (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
     """
-  totals: list[total_resp.TotalResponse]
-  """
+    totals: list[total.Total]
+    """
     Different totals for the order.
     """

@@ -19,21 +19,14 @@
 from __future__ import annotations
 
 from pydantic import Field, RootModel
+
 from . import message_error, message_info, message_warning
 
 
-class Message(
-  RootModel[
-    message_error.MessageError
-    | message_warning.MessageWarning
-    | message_info.MessageInfo
-  ]
-):
-  root: (
-    message_error.MessageError
-    | message_warning.MessageWarning
-    | message_info.MessageInfo
-  ) = Field(..., title="Message")
-  """
+class Message(RootModel[message_error.MessageError | message_warning.MessageWarning | message_info.MessageInfo]):
+    root: message_error.MessageError | message_warning.MessageWarning | message_info.MessageInfo = Field(
+        ..., title="Message"
+    )
+    """
     Container for error, warning, or info messages.
     """

@@ -18,20 +18,398 @@
 
 from __future__ import annotations
 
-from .._internal import (
-  DiscoveryProfile,
-  ResponseCheckout,
-  ResponseOrder,
-  Services,
-  UcpMetadata,
-  Version,
-)
+from typing import Any, Literal
 
-__all__ = [
-  "DiscoveryProfile",
-  "ResponseCheckout",
-  "ResponseOrder",
-  "Services",
-  "UcpMetadata",
-  "Version",
-]
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+
+
+class UcpMetadata(RootModel[Any]):
+    root: Any = Field(..., title="UCP Metadata")
+    """
+    Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
+    """
+
+
+class Version(RootModel[str]):
+    root: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+
+
+class ReverseDomainName(RootModel[str]):
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Reverse-domain identifier (e.g., com.google.pay, dev.ucp.shopping.checkout)
+    """
+
+
+class Entity(BaseModel):
+    """
+    Shared foundation for all UCP entities.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    """
+    Entity version in YYYY-MM-DD format.
+    """
+    spec: AnyUrl | None = None
+    """
+    URL to human-readable specification document.
+    """
+    schema_: AnyUrl | None = Field(None, alias="schema")
+    """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+    id: str | None = None
+    """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+    config: dict[str, Any] | None = None
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+
+
+class Base(RootModel[Any]):
+    root: Any
+
+
+class PlatformSchema9(BaseModel):
+    """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["rest"] = "rest"
+
+
+class PlatformSchema10(BaseModel):
+    """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["mcp"] = "mcp"
+
+
+class PlatformSchema11(BaseModel):
+    """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["a2a"] = "a2a"
+
+
+class PlatformSchema12(BaseModel):
+    """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["embedded"] = "embedded"
+
+
+class PlatformSchema8(RootModel[PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12]):
+    root: PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12 = Field(
+        ..., title="Service (Platform Schema)"
+    )
+    """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+
+class BusinessSchema8(BaseModel):
+    """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["rest"] = "rest"
+
+
+class BusinessSchema9(BaseModel):
+    """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["mcp"] = "mcp"
+
+
+class BusinessSchema10(BaseModel):
+    """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["a2a"] = "a2a"
+
+
+class EmbeddedConfig(BaseModel):
+    """
+    Per-checkout configuration for embedded transport binding. Allows businesses to vary ECP availability and delegations based on cart contents, agent authorization, or policy.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    delegate: list[str] | None = None
+    """
+    Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
+    """
+
+
+class ResponseSchema(BaseModel):
+    """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["rest"] = "rest"
+
+
+class ResponseSchema9(BaseModel):
+    """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["mcp"] = "mcp"
+
+
+class ResponseSchema10(BaseModel):
+    """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["a2a"] = "a2a"
+
+
+class ResponseSchema11(BaseModel):
+    """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["embedded"] = "embedded"
+    config: EmbeddedConfig | None = None
+
+
+class ResponseSchema7(RootModel[ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11]):
+    root: ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11 = Field(
+        ..., title="Service (Response Schema)"
+    )
+    """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
+
+
+class PlatformSchema13(RootModel[Any]):
+    root: Any = Field(..., title="Capability (Platform Schema)")
+    """
+    Full capability declaration for platform-level discovery. Includes spec/schema URLs for agent fetching.
+    """
+
+
+class BusinessSchema12(RootModel[Base]):
+    root: Base = Field(..., title="Capability (Business Schema)")
+    """
+    Capability configuration for business/merchant level. May include business-specific config overrides.
+    """
+
+
+class ResponseSchema12(RootModel[Base]):
+    root: Base = Field(..., title="Capability (Response Schema)")
+    """
+    Capability reference in responses. Only name/version required to confirm active capabilities.
+    """
+
+
+class PlatformSchema14(RootModel[Any]):
+    root: Any = Field(..., title="Payment Handler (Platform Schema)")
+    """
+    Platform declaration for discovery profiles. May include partial config state required for discovery.
+    """
+
+
+class BusinessSchema13(RootModel[Base]):
+    root: Base = Field(..., title="Payment Handler (Business Schema)")
+    """
+    Business declaration for discovery profiles. May include partial config state required for discovery.
+    """
+
+
+class ResponseSchema13(RootModel[Base]):
+    root: Base = Field(..., title="Payment Handler (Response Schema)")
+    """
+    Handler reference in responses. May include full config state for runtime usage of the handler.
+    """
+
+
+class PlatformSchema(BaseModel):
+    """
+    Full UCP metadata for platform-level configuration. Hosted at a URI advertised by the platform in request headers.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class BusinessSchema(BaseModel):
+    """
+    UCP metadata for business/merchant-level configuration. Subset of platform schema with business-specific settings.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class ResponseCheckoutSchema(BaseModel):
+    """
+    UCP metadata for checkout responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: Any | None = None
+    capabilities: Any | None = None
+    payment_handlers: Any
+
+
+class ResponseOrderSchema(BaseModel):
+    """
+    UCP metadata for order responses. No payment handlers needed post-purchase.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: dict[str, list[Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: Any | None = None
+    payment_handlers: dict[str, list[Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseCartSchema(BaseModel):
+    """
+    UCP metadata for cart responses. No payment handlers needed pre-checkout.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: dict[str, list[Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: Any | None = None
+    payment_handlers: dict[str, list[Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class BaseModel1(BaseModel):
+    """
+    Base UCP metadata with shared properties for all schema types.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    services: dict[ReverseDomainName, list[Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: dict[ReverseDomainName, list[Base]] | None = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: dict[ReverseDomainName, list[Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class BusinessSchema11(BaseModel):
+    """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    transport: Literal["embedded"] = "embedded"
+    config: EmbeddedConfig | None = None
+
+
+class BusinessSchema7(RootModel[BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11]):
+    root: BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11 = Field(
+        ..., title="Service (Business Schema)"
+    )
+    """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
