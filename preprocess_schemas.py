@@ -198,11 +198,20 @@ def process_ucp_request_scenarios(schema: Dict[str, Any], base_name: str, schema
     
     # Detect which scenarios exist
     scenario_types = set()
+    has_string_directive = False
+
     for prop_name, prop_schema in schema["properties"].items():
         if isinstance(prop_schema, dict) and "ucp_request" in prop_schema:
             ucp_req = prop_schema["ucp_request"]
             if isinstance(ucp_req, dict):
                 scenario_types.update(ucp_req.keys())
+            else:
+                has_string_directive = True
+
+    # If no scenarios detected but plain strings exist, imply "create" and "update" scenarios
+    if not scenario_types and has_string_directive:
+        scenario_types.add("create")
+        scenario_types.add("update")
     
     # If no scenarios detected, return base schema
     if not scenario_types:
@@ -362,12 +371,11 @@ def preprocess_schemas(input_dir: Path, output_dir: Path) -> None:
         if "properties" in schema:
             for prop_schema in schema["properties"].values():
                 if isinstance(prop_schema, dict) and "ucp_request" in prop_schema:
-                    ucp_req = prop_schema["ucp_request"]
-                    if isinstance(ucp_req, dict):
-                        # This schema has scenarios
-                        rel_path = json_file.relative_to(input_dir)
-                        schemas_with_scenarios.add(str(rel_path))
-                        break
+                    # If any ucp_request is present (dict or string), it has scenarios
+                    rel_path = json_file.relative_to(input_dir)
+                    path_str = str(rel_path).replace("\\", "/") # Normalize path separators
+                    schemas_with_scenarios.add(path_str)
+                    break
     
     # Second pass: preprocess and generate schemas
     for json_file in json_files:
