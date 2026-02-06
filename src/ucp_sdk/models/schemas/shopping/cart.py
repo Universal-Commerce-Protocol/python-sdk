@@ -20,8 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict
+from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
 
+from .. import ucp as ucp_1
 from .types import line_item, link, message, total
 
 
@@ -77,6 +78,29 @@ class Buyer(BaseModel):
     """
 
 
+class Ucp(BaseModel):
+    """
+    UCP metadata for cart responses. No payment handlers needed pre-checkout.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+    """
+    UCP version in YYYY-MM-DD format.
+    """
+    services: dict[str, list[ucp_1.Base]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: Any | None = None
+    payment_handlers: dict[str, list[ucp_1.Base]] | None = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
 class Cart(BaseModel):
     """
     Shopping cart with estimated pricing before checkout. Lightweight pre-purchase exploration with no payment info or complex status states. Cart exists (200) or doesn't (404).
@@ -85,7 +109,7 @@ class Cart(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: Any
+    ucp: Ucp
     id: str
     """
     Unique cart identifier.

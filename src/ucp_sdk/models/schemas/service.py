@@ -191,7 +191,3 @@ class ResponseSchema2(RootModel[ResponseSchema | ResponseSchema4 | ResponseSchem
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
-
-
-class Base(RootModel[Any]):
-    root: Any

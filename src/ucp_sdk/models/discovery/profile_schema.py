@@ -116,7 +116,7 @@ class Base(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ucp_1.Base
+    ucp: ucp_1.BaseModel1
     signing_keys: list[SigningKey] | None = None
     """
     Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.

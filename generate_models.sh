@@ -72,7 +72,7 @@ echo "Formatting generated models..."
 uv run ruff format "$OUTPUT_DIR"
 uv run ruff check --fix --config "$OUTPUT_DIR/ruff.toml" "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"
 
-# Clean up temp schemas
+# Clean up temporary schemas
 rm -rf "$TEMP_SCHEMA_DIR"
 
 echo "Done. Models generated in $OUTPUT_DIR"
