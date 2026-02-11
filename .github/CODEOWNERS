@@ -1,2 +1,5 @@
 # Universal Commerce Protocol (UCP) Codeowners
 *  @Universal-Commerce-Protocol/devops-maintainers
+
+# Governance
+/SECURITY.md      @Universal-Commerce-Protocol/governance-council
