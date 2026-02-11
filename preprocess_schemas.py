@@ -42,8 +42,9 @@ def remove_extension_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
             for item in all_of:
                 if isinstance(item, dict) and "$ref" in item:
                     ref = item["$ref"]
-                    # If referencing another top-level schema (not within same file's $defs)
-                    if not ref.startswith("#/"):
+                    # If referencing another top-level schema (not within same file's $defs or root)
+                    # Note: "#" is a reference to the root schema, which is internal
+                    if not ref.startswith("#/") and ref != "#":
                         has_external_ref = True
                         break
             
@@ -109,12 +110,17 @@ def flatten_allof_in_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(def_schema, dict) and "allOf" in def_schema:
             all_of = def_schema["allOf"]
             
-            # Check if all refs are internal
+            # Check if all refs are internal (including root schema references like "#")
             all_internal = True
+            has_root_ref = False
             for item in all_of:
                 if isinstance(item, dict) and "$ref" in item:
                     ref = item["$ref"]
-                    if not ref.startswith("#/"):
+                    # Check for root schema reference
+                    if ref == "#":
+                        has_root_ref = True
+                    # Not internal if it's an external reference (doesn't start with #/)
+                    elif not ref.startswith("#/"):
                         all_internal = False
                         break
             
@@ -122,7 +128,15 @@ def flatten_allof_in_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
                 # Flatten the allOf by inlining refs
                 merged = {}
                 for item in all_of:
-                    resolved = inline_internal_refs(item, defs, set())
+                    # Handle root schema reference "#"
+                    if isinstance(item, dict) and "$ref" in item and item["$ref"] == "#":
+                        # Inline the root schema (exclude $defs, $id, $schema, title, description)
+                        root_copy = {k: v for k, v in schema.items() 
+                                    if k not in ["$defs", "$id", "$schema", "title", "description"]}
+                        resolved = root_copy
+                    else:
+                        resolved = inline_internal_refs(item, defs, set())
+                    
                     # Merge properties
                     for k, v in resolved.items():
                         if k == "properties" and k in merged:

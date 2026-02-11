@@ -20,13 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, RootModel
+from pydantic import BaseModel, ConfigDict
 
 from . import payment_credential, postal_address
-
-
-class SelectedPaymentInstrument(RootModel[Any]):
-    root: Any
 
 
 class PaymentInstrument(BaseModel):
@@ -57,4 +53,43 @@ class PaymentInstrument(BaseModel):
     display: dict[str, Any] | None = None
     """
     Display information for this payment instrument. Each payment instrument schema defines its specific display properties, as outlined by the payment handler.
+    """
+    selected: bool | None = None
+    """
+    Whether this instrument is selected by the user.
+    """
+
+
+class SelectedPaymentInstrument(BaseModel):
+    """
+    A payment instrument with selection state.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    A unique identifier for this instrument instance, assigned by the platform.
+    """
+    handler_id: str
+    """
+    The unique identifier for the handler instance that produced this instrument. This corresponds to the 'id' field in the Payment Handler definition.
+    """
+    type: str
+    """
+    The broad category of the instrument (e.g., 'card', 'tokenized_card'). Specific schemas will constrain this to a constant value.
+    """
+    billing_address: postal_address.PostalAddress | None = None
+    """
+    The billing address associated with this payment method.
+    """
+    credential: payment_credential.PaymentCredential | None = None
+    display: dict[str, Any] | None = None
+    """
+    Display information for this payment instrument. Each payment instrument schema defines its specific display properties, as outlined by the payment handler.
+    """
+    selected: bool | None = None
+    """
+    Whether this instrument is selected by the user.
     """
