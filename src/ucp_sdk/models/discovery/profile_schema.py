@@ -19,77 +19,105 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict
-from ..schemas.shopping.types import payment_handler_resp
-from .._internal import DiscoveryProfile
+
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+from ..schemas import ucp as ucp_1
 
 
 class SigningKey(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  kid: str
-  """
+    """
+    Public key for signature verification in JWK format.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    kid: str
+    """
     Key ID. Referenced in signature headers to identify which key to use for verification.
     """
-  kty: str
-  """
+    kty: str
+    """
     Key type (e.g., 'EC', 'RSA').
     """
-  crv: str | None = None
-  """
+    crv: str | None = None
+    """
     Curve name for EC keys (e.g., 'P-256').
     """
-  x: str | None = None
-  """
+    x: str | None = None
+    """
     X coordinate for EC public keys (base64url encoded).
     """
-  y: str | None = None
-  """
+    y: str | None = None
+    """
     Y coordinate for EC public keys (base64url encoded).
     """
-  n: str | None = None
-  """
+    n: str | None = None
+    """
     Modulus for RSA public keys (base64url encoded).
     """
-  e: str | None = None
-  """
+    e: str | None = None
+    """
     Exponent for RSA public keys (base64url encoded).
     """
-  use: Literal["sig", "enc"] | None = None
-  """
+    use: Literal["sig", "enc"] | None = None
+    """
     Key usage. Should be 'sig' for signing keys.
     """
-  alg: str | None = None
-  """
+    alg: str | None = None
+    """
     Algorithm (e.g., 'ES256', 'RS256').
     """
 
 
-class Payment(BaseModel):
-  """Payment configuration containing handlers."""
+class PlatformProfile(BaseModel):
+    """
+    Full discovery profile for platforms. Exposes complete service, capability, and payment handler registries.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  handlers: list[payment_handler_resp.PaymentHandlerResponse] | None = None
-  """
-    Payment handler definitions that describe how instruments can be collected
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ucp_1.PlatformSchema
+    signing_keys: list[SigningKey] | None = None
+    """
+    Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.
     """
 
 
-class UcpDiscoveryProfile(BaseModel):
-  """Schema for UCP discovery profile returned from /.well-known/ucp."""
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  ucp: DiscoveryProfile
-  payment: Payment | None = None
-  """
-    Payment configuration containing handlers
+class BusinessProfile(BaseModel):
     """
-  signing_keys: list[SigningKey] | None = None
-  """
+    Discovery profile for businesses/merchants. Subset of platform profile with business-specific configuration.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ucp_1.BusinessSchema
+    signing_keys: list[SigningKey] | None = None
+    """
+    Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.
+    """
+
+
+class UcpDiscoveryProfile(RootModel[PlatformProfile | BusinessProfile]):
+    root: PlatformProfile | BusinessProfile = Field(..., title="UCP Discovery Profile")
+    """
+    Schema for UCP discovery profiles. Business profiles are hosted at /.well-known/ucp; platform profiles are hosted at URIs advertised in request headers.
+    """
+
+
+class Base(BaseModel):
+    """
+    Base discovery profile with shared properties for all profile types.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ucp_1.BaseModel1
+    signing_keys: list[SigningKey] | None = None
+    """
     Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.
     """

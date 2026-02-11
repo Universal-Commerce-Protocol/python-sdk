@@ -19,30 +19,31 @@
 from __future__ import annotations
 
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
 class MessageWarning(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  type: Literal["warning"]
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["warning"]
+    """
     Message type discriminator.
     """
-  path: str | None = None
-  """
+    path: str | None = None
+    """
     JSONPath (RFC 9535) to related field (e.g., $.line_items[0]).
     """
-  code: str
-  """
+    code: str
+    """
     Warning code. Machine-readable identifier for the warning type (e.g., final_sale, prop65, fulfillment_changed, age_restricted, etc.).
     """
-  content: str
-  """
+    content: str
+    """
     Human-readable warning message that MUST be displayed.
     """
-  content_type: Literal["plain", "markdown"] | None = "plain"
-  """
+    content_type: Literal["plain", "markdown"] | None = "plain"
+    """
     Content format, default = plain.
     """

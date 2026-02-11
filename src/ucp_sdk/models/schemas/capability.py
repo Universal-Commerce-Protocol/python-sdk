@@ -18,6 +18,38 @@
 
 from __future__ import annotations
 
-from .._internal import Base, Discovery, Response, UcpCapability
+from typing import Any
 
-__all__ = ["Base", "Discovery", "Response", "UcpCapability"]
+from pydantic import Field, RootModel
+
+
+class UcpCapability(RootModel[Any]):
+    root: Any = Field(..., title="UCP Capability")
+    """
+    Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.
+    """
+
+
+class PlatformSchema(RootModel[Any]):
+    root: Any = Field(..., title="Capability (Platform Schema)")
+    """
+    Full capability declaration for platform-level discovery. Includes spec/schema URLs for agent fetching.
+    """
+
+
+class Base(RootModel[Any]):
+    root: Any
+
+
+class BusinessSchema(RootModel[Base]):
+    root: Base = Field(..., title="Capability (Business Schema)")
+    """
+    Capability configuration for business/merchant level. May include business-specific config overrides.
+    """
+
+
+class ResponseSchema(RootModel[Base]):
+    root: Base = Field(..., title="Capability (Response Schema)")
+    """
+    Capability reference in responses. Only name/version required to confirm active capabilities.
+    """

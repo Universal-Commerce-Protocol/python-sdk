@@ -22,54 +22,56 @@ from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class LineItem(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Line item ID reference.
     """
-  quantity: int = Field(..., ge=1)
-  """
+    quantity: int = Field(..., ge=1)
+    """
     Quantity fulfilled in this event.
     """
 
 
 class FulfillmentEvent(BaseModel):
-  """Append-only fulfillment event representing an actual shipment. References line items by ID."""
+    """
+    Append-only fulfillment event representing an actual shipment. References line items by ID.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Fulfillment event identifier.
     """
-  occurred_at: AwareDatetime
-  """
+    occurred_at: AwareDatetime
+    """
     RFC 3339 timestamp when this fulfillment event occurred.
     """
-  type: str
-  """
+    type: str
+    """
     Fulfillment event type. Common values include: processing (preparing to ship), shipped (handed to carrier), in_transit (in delivery network), delivered (received by buyer), failed_attempt (delivery attempt failed), canceled (fulfillment canceled), undeliverable (cannot be delivered), returned_to_sender (returned to merchant).
     """
-  line_items: list[LineItem]
-  """
+    line_items: list[LineItem]
+    """
     Which line items and quantities are fulfilled in this event.
     """
-  tracking_number: str | None = None
-  """
+    tracking_number: str | None = None
+    """
     Carrier tracking number (required if type != processing).
     """
-  tracking_url: AnyUrl | None = None
-  """
+    tracking_url: AnyUrl | None = None
+    """
     URL to track this shipment (required if type != processing).
     """
-  carrier: str | None = None
-  """
+    carrier: str | None = None
+    """
     Carrier name (e.g., 'FedEx', 'USPS').
     """
-  description: str | None = None
-  """
+    description: str | None = None
+    """
     Human-readable description of the shipment status or delivery information (e.g., 'Delivered to front door', 'Out for delivery').
     """

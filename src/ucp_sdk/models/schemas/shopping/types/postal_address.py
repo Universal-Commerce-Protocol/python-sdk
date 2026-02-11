@@ -22,46 +22,42 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PostalAddress(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  extended_address: str | None = None
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    extended_address: str | None = None
+    """
     An address extension such as an apartment number, C/O or alternative name.
     """
-  street_address: str | None = None
-  """
+    street_address: str | None = None
+    """
     The street address.
     """
-  address_locality: str | None = None
-  """
+    address_locality: str | None = None
+    """
     The locality in which the street address is, and which is in the region. For example, Mountain View.
     """
-  address_region: str | None = None
-  """
+    address_region: str | None = None
+    """
     The region in which the locality is, and which is in the country. Required for applicable countries (i.e. state in US, province in CA). For example, California or another appropriate first-level Administrative division.
     """
-  address_country: str | None = None
-  """
+    address_country: str | None = None
+    """
     The country. Recommended to be in 2-letter ISO 3166-1 alpha-2 format, for example "US". For backward compatibility, a 3-letter ISO 3166-1 alpha-3 country code such as "SGP" or a full country name such as "Singapore" can also be used.
     """
-  postal_code: str | None = None
-  """
+    postal_code: str | None = None
+    """
     The postal code. For example, 94043.
     """
-  first_name: str | None = None
-  """
+    first_name: str | None = None
+    """
     Optional. First name of the contact associated with the address.
     """
-  last_name: str | None = None
-  """
+    last_name: str | None = None
+    """
     Optional. Last name of the contact associated with the address.
     """
-  full_name: str | None = None
-  """
-    Optional. Full name of the contact associated with the address (if first_name or last_name fields are present they take precedence).
+    phone_number: str | None = None
     """
-  phone_number: str | None = None
-  """
     Optional. Phone number of the contact associated with the address.
     """

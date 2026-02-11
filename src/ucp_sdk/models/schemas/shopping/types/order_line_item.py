@@ -18,52 +18,57 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
-from . import item_resp, total_resp
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from . import item as item_1
+from . import total as total_1
 
 
 class Quantity(BaseModel):
-  """Quantity tracking. Both total and fulfilled are derived from events."""
+    """
+    Quantity tracking. Both total and fulfilled are derived from events.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  total: int = Field(..., ge=0)
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    total: int = Field(..., ge=0)
+    """
     Current total quantity.
     """
-  fulfilled: int = Field(..., ge=0)
-  """
+    fulfilled: int = Field(..., ge=0)
+    """
     Quantity fulfilled (sum from fulfillment events).
     """
 
 
 class OrderLineItem(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Line item identifier.
     """
-  item: item_resp.ItemResponse
-  """
+    item: item_1.Item
+    """
     Product data (id, title, price, image_url).
     """
-  quantity: Quantity
-  """
+    quantity: Quantity
+    """
     Quantity tracking. Both total and fulfilled are derived from events.
     """
-  totals: list[total_resp.TotalResponse]
-  """
+    totals: list[total_1.Total]
+    """
     Line item totals breakdown.
     """
-  status: Literal["processing", "partial", "fulfilled"]
-  """
+    status: Literal["processing", "partial", "fulfilled"]
+    """
     Derived status: fulfilled if quantity.fulfilled == quantity.total, partial if quantity.fulfilled > 0, otherwise processing.
     """
-  parent_id: str | None = None
-  """
+    parent_id: str | None = None
+    """
     Parent line item identifier for any nested structures.
     """

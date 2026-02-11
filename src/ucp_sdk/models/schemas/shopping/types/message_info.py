@@ -19,30 +19,31 @@
 from __future__ import annotations
 
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
 class MessageInfo(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  type: Literal["info"]
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["info"]
+    """
     Message type discriminator.
     """
-  path: str | None = None
-  """
+    path: str | None = None
+    """
     RFC 9535 JSONPath to the component the message refers to.
     """
-  code: str | None = None
-  """
+    code: str | None = None
+    """
     Info code for programmatic handling.
     """
-  content_type: Literal["plain", "markdown"] | None = "plain"
-  """
+    content_type: Literal["plain", "markdown"] | None = "plain"
+    """
     Content format, default = plain.
     """
-  content: str
-  """
+    content: str
+    """
     Human-readable message.
     """

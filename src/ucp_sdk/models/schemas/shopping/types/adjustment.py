@@ -18,55 +18,58 @@
 
 from __future__ import annotations
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from typing import Literal
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class LineItem(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Line item ID reference.
     """
-  quantity: int = Field(..., ge=1)
-  """
+    quantity: int = Field(..., ge=1)
+    """
     Quantity affected by this adjustment.
     """
 
 
 class Adjustment(BaseModel):
-  """Append-only event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items."""
+    """
+    Append-only event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Adjustment event identifier.
     """
-  type: str
-  """
+    type: str
+    """
     Type of adjustment (open string). Typically money-related like: refund, return, credit, price_adjustment, dispute, cancellation. Can be any value that makes sense for the merchant's business.
     """
-  occurred_at: AwareDatetime
-  """
+    occurred_at: AwareDatetime
+    """
     RFC 3339 timestamp when this adjustment occurred.
     """
-  status: Literal["pending", "completed", "failed"]
-  """
+    status: Literal["pending", "completed", "failed"]
+    """
     Adjustment status.
     """
-  line_items: list[LineItem] | None = None
-  """
+    line_items: list[LineItem] | None = None
+    """
     Which line items and quantities are affected (optional).
     """
-  amount: int | None = None
-  """
+    amount: int | None = None
+    """
     Amount in minor units (cents) for refunds, credits, price adjustments (optional).
     """
-  description: str | None = None
-  """
+    description: str | None = None
+    """
     Human-readable reason or description (e.g., 'Defective item', 'Customer requested').
     """
