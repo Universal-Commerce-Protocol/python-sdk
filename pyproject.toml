@@ -1,10 +1,12 @@
 [project]
 name = "ucp-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "UCP Python SDK"
 readme = "README.md"
 authors = [
-    { name = "Florin Iucha", email = "fiucha@google.com" }
+    { name = "Florin Iucha", email = "fiucha@google.com" },
+    { name = "Federico D'Amato", email = "damaz@google.com" }
+
 ]
 requires-python = ">=3.10"
 dependencies = [
