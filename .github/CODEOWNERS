@@ -2,4 +2,5 @@
 *  @Universal-Commerce-Protocol/devops-maintainers
 
 # Governance
+/.github/CODEOWNERS      @Universal-Commerce-Protocol/governance-council
 /SECURITY.md      @Universal-Commerce-Protocol/governance-council
