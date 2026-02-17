@@ -2,7 +2,7 @@
 # Generate Pydantic models from UCP JSON Schemas
 
 # Ensure we are in the script's directory
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 # Output directory
 OUTPUT_DIR="src/ucp_sdk/models"
