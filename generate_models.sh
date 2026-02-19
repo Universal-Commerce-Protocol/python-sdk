@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright 2026 UCP Authors
 # Generate Pydantic models from UCP JSON Schemas
 
 # Ensure we are in the script's directory
