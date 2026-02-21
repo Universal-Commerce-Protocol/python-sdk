@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright 2026 UCP Authors
 # Generate Pydantic models from UCP JSON Schemas
 
 # Ensure we are in the script's directory
@@ -8,7 +9,7 @@ cd "$(dirname "$0")" || exit
 OUTPUT_DIR="src/ucp_sdk/models"
 
 # Schema directory (relative to this script)
-SCHEMA_DIR="../../spec/"
+SCHEMA_DIR="${SCHEMA_DIR:-../../spec/}"
 
 echo "Generating Pydantic models from $SCHEMA_DIR..."
 
