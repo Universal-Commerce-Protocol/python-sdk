@@ -31,21 +31,20 @@ in Python.
 
 ## Installation
 
-For now, you can install the SDK using the following commands:
+Install the SDK using pip or uv:
 
 ```bash
-# Create a directory for the SDK
-mkdir sdk
-
-# Clone the repository
-git clone https://github.com/Universal-Commerce-Protocol/python-sdk.git sdk/python
-
-# Navigate to the directory
-cd sdk/python
-
-# Install dependencies
-uv sync
+pip install ucp-sdk
 ```
+
+or
+
+```bash
+uv init  # if not already in an initialized project
+uv add ucp-sdk
+```
+
+> **Note:** `uv add` requires an initialized project directory. If you're not starting a new project, ensure you're in a directory with a `pyproject.toml` file, or run `uv init` first.
 
 ## Development
 
