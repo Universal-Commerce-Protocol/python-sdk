@@ -22,7 +22,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from . import fulfillment_destination, fulfillment_group_create_request
+from . import (
+  fulfillment_destination_create_request,
+  fulfillment_group_create_request,
+)
 
 
 class FulfillmentMethodCreateRequest(BaseModel):
@@ -40,9 +43,12 @@ class FulfillmentMethodCreateRequest(BaseModel):
   """
     Line item IDs fulfilled via this method.
     """
-  destinations: list[fulfillment_destination.FulfillmentDestination] | None = (
-    None
-  )
+  destinations: (
+    list[
+      fulfillment_destination_create_request.FulfillmentDestinationCreateRequest
+    ]
+    | None
+  ) = None
   """
     Available destinations. For shipping: addresses. For pickup: retail locations.
     """

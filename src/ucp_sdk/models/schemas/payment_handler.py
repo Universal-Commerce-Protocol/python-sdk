@@ -18,16 +18,70 @@
 
 from __future__ import annotations
 
-from ._internal import Base_1 as Base
-from ._internal import BusinessSchema_1 as BusinessSchema
-from ._internal import PaymentHandler
-from ._internal import PlatformSchema_1 as PlatformSchema
-from ._internal import ResponseSchema_1 as ResponseSchema
+from typing import Any
 
-__all__ = [
-  "Base",
-  "BusinessSchema",
-  "PaymentHandler",
-  "PlatformSchema",
-  "ResponseSchema",
-]
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+
+
+class PaymentHandler(RootModel[Any]):
+  root: Any = Field(..., title="Payment Handler")
+  """
+    Schema for UCP payment handlers. Handlers define how payment instruments are processed.
+    """
+
+
+class Version(RootModel[Any]):
+  root: Any
+
+
+class Base(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  version: Version
+  """
+    Entity version in YYYY-MM-DD format.
+    """
+  spec: AnyUrl | None = None
+  """
+    URL to human-readable specification document.
+    """
+  schema_: AnyUrl | None = Field(None, alias="schema")
+  """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+  id: str
+  """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+  config: dict[str, Any] | None = None
+  """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+
+
+class PlatformSchema(Base):
+  """Platform declaration for discovery profiles. May include partial config state required for discovery.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema(Base):
+  """Business declaration for discovery profiles. May include partial config state required for discovery.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema(Base):
+  """Handler reference in responses. May include full config state for runtime usage of the handler.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )

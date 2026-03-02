@@ -27,10 +27,10 @@ rm -rf ucp
 git clone -b "$BRANCH" --depth 1 https://github.com/Universal-Commerce-Protocol/ucp ucp
 
 # Output directory
-OUTPUT_DIR="src/ucp_sdk/models"
+OUTPUT_DIR="src/ucp_sdk/models/schemas"
 
 # Schema directory (relative to this script)
-SCHEMA_DIR="ucp/source"
+SCHEMA_DIR="ucp/source/schemas"
 
 echo "Preprocessing schemas..."
 uv run python preprocess_schemas.py

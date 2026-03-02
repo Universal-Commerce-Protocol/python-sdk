@@ -20,7 +20,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import fulfillment_destination, fulfillment_group_update_request
+from . import (
+  fulfillment_destination_update_request,
+  fulfillment_group_update_request,
+)
 
 
 class FulfillmentMethodUpdateRequest(BaseModel):
@@ -38,9 +41,12 @@ class FulfillmentMethodUpdateRequest(BaseModel):
   """
     Line item IDs fulfilled via this method.
     """
-  destinations: list[fulfillment_destination.FulfillmentDestination] | None = (
-    None
-  )
+  destinations: (
+    list[
+      fulfillment_destination_update_request.FulfillmentDestinationUpdateRequest
+    ]
+    | None
+  ) = None
   """
     Available destinations. For shipping: addresses. For pickup: retail locations.
     """

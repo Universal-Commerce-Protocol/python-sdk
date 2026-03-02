@@ -18,10 +18,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pydantic import Field, RootModel
 
-from pydantic import RootModel
+from . import retail_location, shipping_destination
 
 
-class Model(RootModel[Any]):
-  root: Any
+class FulfillmentDestinationUpdateRequest(
+  RootModel[
+    shipping_destination.ShippingDestination | retail_location.RetailLocation
+  ]
+):
+  root: (
+    shipping_destination.ShippingDestination | retail_location.RetailLocation
+  ) = Field(..., title="Fulfillment Destination Update Request")
+  """
+    A destination for fulfillment.
+    """

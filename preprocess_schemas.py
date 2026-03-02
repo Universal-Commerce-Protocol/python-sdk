@@ -18,6 +18,32 @@ from pathlib import Path
 import sys
 
 
+def flatten_entity(schema, entity_def):
+  """Recursively replaces refs to 'ucp.json#/$defs/entity' with the actual schema to flatten inheritance."""
+  if isinstance(schema, dict):
+    if "allOf" in schema:
+      new_all_of = []
+      for item in schema["allOf"]:
+        if isinstance(item, dict) and item.get("$ref", "").endswith(
+          "ucp.json#/$defs/entity"
+        ):
+          # Replace with a copy of entity_def, removing title/description to avoid creating a named class
+          e_copy = copy.deepcopy(entity_def)
+          e_copy.pop("title", None)
+          e_copy.pop("description", None)
+          new_all_of.append(e_copy)
+        else:
+          flatten_entity(item, entity_def)
+          new_all_of.append(item)
+      schema["allOf"] = new_all_of
+    else:
+      for v in schema.values():
+        flatten_entity(v, entity_def)
+  elif isinstance(schema, list):
+    for item in schema:
+      flatten_entity(item, entity_def)
+
+
 def get_explicit_ops(schema):
   """Finds ops explicitly mentioned in ucp_request fields."""
   ops = set()
@@ -158,8 +184,59 @@ def generate_variants(schema_file, schema, ops, all_variant_needs):
     print(f"Generated {variant_path}")
 
 
+def fix_ucp_metadata(schema_dir_path):
+  """Ensures all 'ucp' properties point to the generic UcpMetadata union."""
+  ucp_path = schema_dir_path / "ucp.json"
+  if not ucp_path.exists():
+    print(f"Warning: {ucp_path} not found, skipping metadata fix.")
+    return
+
+  with open(ucp_path, "r") as f:
+    ucp_schema = json.load(f)
+
+  # 1. Update ucp.json to have a oneOf at the root to create UcpMetadata union
+  ucp_schema["oneOf"] = [
+    {"$ref": "#/$defs/platform_schema"},
+    {"$ref": "#/$defs/business_schema"},
+    {"$ref": "#/$defs/response_checkout_schema"},
+    {"$ref": "#/$defs/response_order_schema"},
+    {"$ref": "#/$defs/response_cart_schema"},
+  ]
+
+  with open(ucp_path, "w") as f:
+    json.dump(ucp_schema, f, indent=2)
+  print(f"Updated {ucp_path} with oneOf union")
+
+  # 2. Update all other schemas to point their 'ucp' property to ucp.json root
+  all_files = list(schema_dir_path.rglob("*.json"))
+  for f in all_files:
+    if f.name == "ucp.json":
+      continue
+    try:
+      with open(f, "r") as open_f:
+        schema = json.load(open_f)
+    except Exception:
+      continue
+
+    changed = False
+    if isinstance(schema, dict) and "properties" in schema:
+      if "ucp" in schema["properties"]:
+        prop_data = schema["properties"]["ucp"]
+        if isinstance(prop_data, dict) and "$ref" in prop_data:
+          ref = prop_data["$ref"]
+          if "ucp.json" in ref:
+            # Point to root instead of specific $def
+            prop_data["$ref"] = ref.split("#")[0]
+            changed = True
+
+    if changed:
+      with open(f, "w") as open_f:
+        json.dump(schema, open_f, indent=2)
+      print(f"Updated {f} to point ucp property to ucp.json root")
+
+
 def main():
-  schema_dir = "ucp/source"
+  schema_dir = "ucp/source/schemas"
   if len(sys.argv) > 1:
     schema_dir = sys.argv[1]
 
@@ -168,8 +245,18 @@ def main():
     print(f"Directory {schema_dir} does not exist.")
     return
 
-  all_files = list(schema_dir_path.rglob("*.json"))
+  # Fix metadata types before processing
+  fix_ucp_metadata(schema_dir_path)
 
+  # 0. Load ucp.json to get the central 'entity' definition for flattening
+  ucp_path = schema_dir_path / "ucp.json"
+  entity_def = {}
+  if ucp_path.exists():
+    with open(ucp_path, "r") as f:
+      ucp_schema = json.load(f)
+      entity_def = ucp_schema.get("$defs", {}).get("entity", {})
+
+  all_files = list(schema_dir_path.rglob("*.json"))
   schemas_cache = {}
   schema_props_refs = {}
   all_variant_needs = {}
@@ -181,11 +268,22 @@ def main():
     try:
       with open(f, "r") as open_f:
         schema = json.load(open_f)
+
+        # Flatten entity references immediately
+        if entity_def:
+          flatten_entity(schema, entity_def)
+
+        # Save the flattened schema back to disk for use by datamodel-codegen
+        with open(f, "w") as out_f:
+          json.dump(schema, out_f, indent=2)
+
         if (
           not isinstance(schema, dict)
           or schema.get("type") != "object"
           or "properties" not in schema
         ):
+          # Still save it even if not an object, as it might have been flattened
+          schemas_cache[str(f.resolve())] = schema
           continue
 
         abs_path = str(f.resolve())

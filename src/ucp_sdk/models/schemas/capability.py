@@ -18,18 +18,76 @@
 
 from __future__ import annotations
 
-from ._internal import (
-  Base,
-  BusinessSchema,
-  PlatformSchema,
-  ResponseSchema,
-  UcpCapability,
-)
+from typing import Any
 
-__all__ = [
-  "Base",
-  "BusinessSchema",
-  "PlatformSchema",
-  "ResponseSchema",
-  "UcpCapability",
-]
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+
+
+class UcpCapability(RootModel[Any]):
+  root: Any = Field(..., title="UCP Capability")
+  """
+    Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.
+    """
+
+
+class Version(RootModel[Any]):
+  root: Any
+
+
+class Base(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  version: Version
+  """
+    Entity version in YYYY-MM-DD format.
+    """
+  spec: AnyUrl | None = None
+  """
+    URL to human-readable specification document.
+    """
+  schema_: AnyUrl | None = Field(None, alias="schema")
+  """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+  id: str | None = None
+  """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+  config: dict[str, Any] | None = None
+  """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+  extends: str | None = Field(
+    None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
+  )
+  """
+    Parent capability this extends. Present for extensions, absent for root capabilities.
+    """
+
+
+class PlatformSchema(Base):
+  """Full capability declaration for platform-level discovery. Includes spec/schema URLs for agent fetching.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema(Base):
+  """Capability configuration for business/merchant level. May include business-specific config overrides.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema(Base):
+  """Capability reference in responses. Only name/version required to confirm active capabilities.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )

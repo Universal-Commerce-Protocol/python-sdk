@@ -18,76 +18,322 @@
 
 from __future__ import annotations
 
-from ._internal import Base_2 as Base
-from ._internal import (
-  BusinessSchema2,
-  BusinessSchema4,
-  BusinessSchema5,
-  BusinessSchema6,
-  BusinessSchema7,
-  BusinessSchema8,
-  BusinessSchema9,
-  BusinessSchema10,
-  BusinessSchema11,
-)
-from ._internal import BusinessSchema_2 as BusinessSchema
-from ._internal import (
-  PlatformSchema3,
-  PlatformSchema5,
-  PlatformSchema6,
-  PlatformSchema7,
-  PlatformSchema8,
-  PlatformSchema9,
-  PlatformSchema10,
-  PlatformSchema11,
-  PlatformSchema12,
-)
-from ._internal import PlatformSchema_2 as PlatformSchema
-from ._internal import (
-  ResponseSchema2,
-  ResponseSchema4,
-  ResponseSchema5,
-  ResponseSchema6,
-  ResponseSchema7,
-  ResponseSchema8,
-  ResponseSchema9,
-  ResponseSchema10,
-  ResponseSchema11,
-)
-from ._internal import ResponseSchema_2 as ResponseSchema
-from ._internal import UcpService
+from typing import Any, Literal
 
-__all__ = [
-  "Base",
-  "BusinessSchema",
-  "BusinessSchema10",
-  "BusinessSchema11",
-  "BusinessSchema2",
-  "BusinessSchema4",
-  "BusinessSchema5",
-  "BusinessSchema6",
-  "BusinessSchema7",
-  "BusinessSchema8",
-  "BusinessSchema9",
-  "PlatformSchema",
-  "PlatformSchema10",
-  "PlatformSchema11",
-  "PlatformSchema12",
-  "PlatformSchema3",
-  "PlatformSchema5",
-  "PlatformSchema6",
-  "PlatformSchema7",
-  "PlatformSchema8",
-  "PlatformSchema9",
-  "ResponseSchema",
-  "ResponseSchema10",
-  "ResponseSchema11",
-  "ResponseSchema2",
-  "ResponseSchema4",
-  "ResponseSchema5",
-  "ResponseSchema6",
-  "ResponseSchema7",
-  "ResponseSchema8",
-  "ResponseSchema9",
-  "UcpService",
-]
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+
+from .transports import embedded_config
+
+
+class UcpService(RootModel[Any]):
+  root: Any = Field(..., title="UCP Service")
+  """
+    Service binding for a specific transport. Each transport binding is a separate entry in the service array.
+    """
+
+
+class PlatformSchema(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["rest"] = "rest"
+
+
+class PlatformSchema5(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["mcp"] = "mcp"
+
+
+class PlatformSchema6(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["a2a"] = "a2a"
+
+
+class PlatformSchema7(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["embedded"] = "embedded"
+
+
+class BusinessSchema(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["rest"] = "rest"
+
+
+class BusinessSchema4(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["mcp"] = "mcp"
+
+
+class BusinessSchema5(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["a2a"] = "a2a"
+
+
+class BusinessSchema6(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["embedded"] = "embedded"
+  config: embedded_config.EmbeddedTransportConfig | None = None
+
+
+class ResponseSchema(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["rest"] = "rest"
+
+
+class ResponseSchema4(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["mcp"] = "mcp"
+
+
+class ResponseSchema5(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["a2a"] = "a2a"
+
+
+class ResponseSchema6(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  transport: Literal["embedded"] = "embedded"
+  config: embedded_config.EmbeddedTransportConfig | None = None
+
+
+class Version(RootModel[Any]):
+  root: Any
+
+
+class Base(BaseModel):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  version: Version
+  """
+    Entity version in YYYY-MM-DD format.
+    """
+  spec: AnyUrl | None = None
+  """
+    URL to human-readable specification document.
+    """
+  schema_: AnyUrl | None = Field(None, alias="schema")
+  """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+  id: str | None = None
+  """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+  config: dict[str, Any] | None = None
+  """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+  transport: Literal["rest", "mcp", "a2a", "embedded"]
+  """
+    Transport protocol for this service binding.
+    """
+  endpoint: AnyUrl | None = None
+  """
+    Endpoint URL for this transport binding.
+    """
+
+
+class PlatformSchema8(Base):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema9(PlatformSchema, PlatformSchema8):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema10(PlatformSchema5, PlatformSchema8):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema11(PlatformSchema6, PlatformSchema8):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema12(PlatformSchema7, PlatformSchema8):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema3(
+  RootModel[
+    PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
+  ]
+):
+  """Full service declaration for platform-level discovery. Different transports require different fields.
+  """
+
+  root: (
+    PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
+  ) = Field(..., title="Service (Platform Schema)")
+  """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
+
+
+class BusinessSchema7(Base):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema8(BusinessSchema, BusinessSchema7):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema9(BusinessSchema4, BusinessSchema7):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema10(BusinessSchema5, BusinessSchema7):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema11(BusinessSchema6, BusinessSchema7):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema2(
+  RootModel[
+    BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
+  ]
+):
+  """Service binding for business/merchant configuration. May override platform endpoints.
+  """
+
+  root: (
+    BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
+  ) = Field(..., title="Service (Business Schema)")
+  """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
+
+
+class ResponseSchema7(Base):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema8(ResponseSchema, ResponseSchema7):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema9(ResponseSchema4, ResponseSchema7):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema10(ResponseSchema5, ResponseSchema7):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema11(ResponseSchema6, ResponseSchema7):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema2(
+  RootModel[
+    ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
+  ]
+):
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  """
+
+  root: (
+    ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
+  ) = Field(..., title="Service (Response Schema)")
+  """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
