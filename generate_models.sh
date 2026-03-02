@@ -70,6 +70,9 @@ uv run \
     --no-use-annotated \
     --allow-extra-fields
 
+echo "Post-processing generated models..."
+uv run python postprocess_models.py "$OUTPUT_DIR"
+
 echo "Formatting generated models..."
 uv run ruff format
 uv run ruff check --fix "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"

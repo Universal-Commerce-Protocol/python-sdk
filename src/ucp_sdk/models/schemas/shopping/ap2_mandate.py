@@ -26,6 +26,9 @@ from .checkout import Checkout as Checkout_1
 
 
 class Ap2MandateExtension(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any = Field(..., title="AP2 Mandate Extension")
   """
     Extends Checkout with cryptographic mandate support for non-repudiable authorization per the AP2 protocol. Uses embedded signature model with ap2 namespace.
@@ -33,6 +36,9 @@ class Ap2MandateExtension(RootModel[Any]):
 
 
 class MerchantAuthorization(RootModel[str]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: str = Field(
     ...,
     pattern="^[A-Za-z0-9_-]+\\.\\.[A-Za-z0-9_-]+$",
@@ -44,6 +50,9 @@ class MerchantAuthorization(RootModel[str]):
 
 
 class CheckoutMandate(RootModel[str]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: str = Field(
     ...,
     pattern="^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$",
@@ -99,6 +108,9 @@ class ErrorCode(
     ]
   ]
 ):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Literal[
     "mandate_required",
     "agent_missing_key",

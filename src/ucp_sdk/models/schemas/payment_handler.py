@@ -24,6 +24,9 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
 
 class PaymentHandler(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any = Field(..., title="Payment Handler")
   """
     Schema for UCP payment handlers. Handlers define how payment instruments are processed.

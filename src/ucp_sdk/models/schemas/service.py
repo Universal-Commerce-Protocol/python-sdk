@@ -26,6 +26,9 @@ from .transports import embedded_config
 
 
 class UcpService(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any = Field(..., title="UCP Service")
   """
     Service binding for a specific transport. Each transport binding is a separate entry in the service array.
@@ -206,8 +209,12 @@ class PlatformSchema3(
     PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
   ]
 ):
-  """Full service declaration for platform-level discovery. Different transports require different fields.
+  model_config = ConfigDict(
+    frozen=True,
+  )
   """
+    Full service declaration for platform-level discovery. Different transports require different fields.
+    """
 
   root: (
     PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
@@ -267,8 +274,12 @@ class BusinessSchema2(
     BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
   ]
 ):
-  """Service binding for business/merchant configuration. May override platform endpoints.
+  model_config = ConfigDict(
+    frozen=True,
+  )
   """
+    Service binding for business/merchant configuration. May override platform endpoints.
+    """
 
   root: (
     BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
@@ -328,8 +339,12 @@ class ResponseSchema2(
     ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
   ]
 ):
-  """Service binding in API responses. Includes per-resource transport configuration via typed config.
+  model_config = ConfigDict(
+    frozen=True,
+  )
   """
+    Service binding in API responses. Includes per-resource transport configuration via typed config.
+    """
 
   root: (
     ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11

@@ -24,6 +24,9 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
 
 class UcpCapability(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any = Field(..., title="UCP Capability")
   """
     Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.

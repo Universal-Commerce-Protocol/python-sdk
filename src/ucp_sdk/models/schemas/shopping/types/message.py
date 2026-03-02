@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field, RootModel
+from pydantic import ConfigDict, Field, RootModel
 
 from . import message_error, message_info, message_warning
 
@@ -30,6 +30,9 @@ class Message(
     | message_info.MessageInfo
   ]
 ):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: (
     message_error.MessageError
     | message_warning.MessageWarning

@@ -20,8 +20,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import RootModel
+from pydantic import ConfigDict, RootModel
 
 
 class Fulfillment(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any

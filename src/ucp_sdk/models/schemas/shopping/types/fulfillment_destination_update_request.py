@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field, RootModel
+from pydantic import ConfigDict, Field, RootModel
 
 from . import retail_location, shipping_destination
 
@@ -28,6 +28,9 @@ class FulfillmentDestinationUpdateRequest(
     shipping_destination.ShippingDestination | retail_location.RetailLocation
   ]
 ):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: (
     shipping_destination.ShippingDestination | retail_location.RetailLocation
   ) = Field(..., title="Fulfillment Destination Update Request")

@@ -26,6 +26,9 @@ from . import capability, payment_handler, service
 
 
 class Version(RootModel[str]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
   """
     UCP version in YYYY-MM-DD format.
@@ -33,6 +36,9 @@ class Version(RootModel[str]):
 
 
 class ReverseDomainName(RootModel[str]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
   """
     Reverse-domain identifier (e.g., com.google.pay, dev.ucp.shopping.checkout)
@@ -195,6 +201,9 @@ class UcpMetadata(
     | ResponseCartSchema
   ]
 ):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: (
     PlatformSchema
     | BusinessSchema

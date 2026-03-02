@@ -26,6 +26,9 @@ from .checkout import Checkout as Checkout_1
 
 
 class DiscountExtension(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any = Field(..., title="Discount Extension")
   """
     Extends Checkout with discount code support, enabling agents to apply promotional, loyalty, referral, and other discount codes.
