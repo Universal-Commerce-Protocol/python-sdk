@@ -19,11 +19,13 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
+
 from . import payment_identity
 
 
 class Binding(BaseModel):
-  """Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants."""
+  """Binds a token to a specific checkout session and participant. Prevents token reuse across different checkouts or participants.
+  """
 
   model_config = ConfigDict(
     extra="allow",

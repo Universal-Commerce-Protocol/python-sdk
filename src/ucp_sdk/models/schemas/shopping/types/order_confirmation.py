@@ -22,7 +22,8 @@ from pydantic import AnyUrl, BaseModel, ConfigDict
 
 
 class OrderConfirmation(BaseModel):
-  """Order details available at the time of checkout completion."""
+  """Order details available at the time of checkout completion.
+  """
 
   model_config = ConfigDict(
     extra="allow",

@@ -19,18 +19,20 @@
 from __future__ import annotations
 
 from pydantic import AnyUrl, BaseModel, ConfigDict
+
+from .._internal import ResponseOrderSchema
 from .types import (
   adjustment,
   expectation,
   fulfillment_event,
   order_line_item,
-  total_resp,
+  total,
 )
-from ..._internal import ResponseOrder
 
 
-class PlatformConfig(BaseModel):
-  """Platform's order capability configuration."""
+class PlatformSchema(BaseModel):
+  """Platform's order capability configuration.
+  """
 
   model_config = ConfigDict(
     extra="allow",
@@ -42,7 +44,8 @@ class PlatformConfig(BaseModel):
 
 
 class Fulfillment(BaseModel):
-  """Fulfillment data: buyer expectations and what actually happened."""
+  """Fulfillment data: buyer expectations and what actually happened.
+  """
 
   model_config = ConfigDict(
     extra="allow",
@@ -58,12 +61,13 @@ class Fulfillment(BaseModel):
 
 
 class Order(BaseModel):
-  """Order schema with immutable line items, buyer-facing fulfillment expectations, and append-only event logs."""
+  """Order schema with immutable line items, buyer-facing fulfillment expectations, and append-only event logs.
+  """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  ucp: ResponseOrder
+  ucp: ResponseOrderSchema
   id: str
   """
     Unique order identifier.
@@ -88,7 +92,7 @@ class Order(BaseModel):
   """
     Append-only event log of money movements (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
     """
-  totals: list[total_resp.TotalResponse]
+  totals: list[total.Total]
   """
     Different totals for the order.
     """

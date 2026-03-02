@@ -18,8 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from typing import Literal
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class LineItem(BaseModel):
@@ -37,7 +38,8 @@ class LineItem(BaseModel):
 
 
 class Adjustment(BaseModel):
-  """Append-only event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items."""
+  """Append-only event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items.
+  """
 
   model_config = ConfigDict(
     extra="allow",

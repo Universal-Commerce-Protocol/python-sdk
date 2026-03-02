@@ -22,7 +22,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PaymentAccountInfo(BaseModel):
-  """Non-sensitive backend identifiers for linking."""
+  """Non-sensitive backend identifiers for linking.
+  """
 
   model_config = ConfigDict(
     extra="allow",

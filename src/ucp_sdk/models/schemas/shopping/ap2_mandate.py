@@ -19,8 +19,10 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field, RootModel
-from .checkout_resp import CheckoutResponse
+
+from .checkout import Checkout as Checkout_1
 
 
 class Ap2MandateExtension(RootModel[Any]):
@@ -52,28 +54,36 @@ class CheckoutMandate(RootModel[str]):
     """
 
 
-class Ap2CheckoutResponse(BaseModel):
-  """The ap2 object included in checkout responses when AP2 is negotiated."""
+class Ap2WithMerchantAuthorization(BaseModel):
+  """AP2 extension data including merchant authorization.
+  """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  merchant_authorization: MerchantAuthorization
+  merchant_authorization: MerchantAuthorization | None = None
   """
     Merchant's signature proving checkout terms are authentic.
     """
 
 
-class Ap2CompleteRequest(BaseModel):
-  """The ap2 object included in complete_checkout requests when AP2 is negotiated."""
+class Ap2WithCheckoutMandate(BaseModel):
+  """AP2 extension data including checkout mandate.
+  """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  checkout_mandate: CheckoutMandate
+  checkout_mandate: CheckoutMandate | None = None
   """
     SD-JWT+kb proving user authorized this checkout.
     """
+
+
+class Ap2(Ap2WithMerchantAuthorization, Ap2WithCheckoutMandate):
+  model_config = ConfigDict(
+    extra="allow",
+  )
 
 
 class ErrorCode(
@@ -103,25 +113,11 @@ class ErrorCode(
     """
 
 
-class CompleteRequestWithAp2(BaseModel):
-  """Extension fields for complete_checkout when AP2 is negotiated."""
+class Checkout(Checkout_1):
+  """Checkout extended with AP2 mandate support.
+  """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  ap2: Ap2CompleteRequest | None = None
-  """
-    AP2 extension data including checkout mandate.
-    """
-
-
-class CheckoutResponseWithAp2(CheckoutResponse):
-  """Checkout extended with AP2 embedded signature support."""
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  ap2: Ap2CheckoutResponse | None = None
-  """
-    AP2 extension data including merchant authorization.
-    """
+  ap2: Ap2 | None = None

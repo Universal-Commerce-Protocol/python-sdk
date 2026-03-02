@@ -22,7 +22,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PaymentIdentity(BaseModel):
-  """Identity of a participant for token binding. The access_token uniquely identifies the participant who tokens should be bound to."""
+  """Identity of a participant for token binding. The access_token uniquely identifies the participant who tokens should be bound to.
+  """
 
   model_config = ConfigDict(
     extra="allow",
