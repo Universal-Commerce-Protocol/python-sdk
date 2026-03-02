@@ -24,4 +24,4 @@ from pydantic import RootModel
 
 
 class Model(RootModel[Any]):
-    root: Any
+  root: Any

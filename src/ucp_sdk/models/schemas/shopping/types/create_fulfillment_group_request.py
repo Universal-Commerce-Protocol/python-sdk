@@ -18,42 +18,17 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
 
-class AllowsMultiDestination(BaseModel):
-  """Permits multiple destinations per method type.
+class CreateFulfillmentGroupRequest(BaseModel):
+  """A merchant-generated package/group of line items with fulfillment options.
   """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  shipping: bool | None = None
+  selected_option_id: str | None = None
   """
-    Multiple shipping destinations allowed.
-    """
-  pickup: bool | None = None
-  """
-    Multiple pickup locations allowed.
-    """
-
-
-class BusinessFulfillmentConfig(BaseModel):
-  """Business's fulfillment configuration.
-  """
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  allows_multi_destination: AllowsMultiDestination | None = None
-  """
-    Permits multiple destinations per method type.
-    """
-  allows_method_combinations: (
-    list[list[Literal["shipping", "pickup"]]] | None
-  ) = None
-  """
-    Allowed method type combinations.
+    ID of the selected fulfillment option for this group.
     """

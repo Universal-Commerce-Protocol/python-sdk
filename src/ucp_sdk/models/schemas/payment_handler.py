@@ -25,9 +25,9 @@ from ._internal import PlatformSchema_1 as PlatformSchema
 from ._internal import ResponseSchema_1 as ResponseSchema
 
 __all__ = [
-    "Base",
-    "BusinessSchema",
-    "PaymentHandler",
-    "PlatformSchema",
-    "ResponseSchema",
+  "Base",
+  "BusinessSchema",
+  "PaymentHandler",
+  "PlatformSchema",
+  "ResponseSchema",
 ]

@@ -30,64 +30,63 @@ from .types import line_item, link, message, order_confirmation, total
 
 
 class Checkout(BaseModel):
-    """
-    Base checkout schema. Extensions compose onto this using allOf.
-    """
+  """Base checkout schema. Extensions compose onto this using allOf.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: ResponseCheckoutSchema
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: ResponseCheckoutSchema
+  id: str
+  """
     Unique identifier of the checkout session.
     """
-    line_items: list[line_item.LineItem]
-    """
+  line_items: list[line_item.LineItem]
+  """
     List of line items being checked out.
     """
-    buyer: buyer_1.Buyer | None = None
-    """
+  buyer: buyer_1.Buyer | None = None
+  """
     Representation of the buyer.
     """
-    context: context_1.Context | None = None
-    status: Literal[
-        "incomplete",
-        "requires_escalation",
-        "ready_for_complete",
-        "complete_in_progress",
-        "completed",
-        "canceled",
-    ]
-    """
+  context: context_1.Context | None = None
+  status: Literal[
+    "incomplete",
+    "requires_escalation",
+    "ready_for_complete",
+    "complete_in_progress",
+    "completed",
+    "canceled",
+  ]
+  """
     Checkout state indicating the current phase and required action. See Checkout Status lifecycle documentation for state transition details.
     """
-    currency: str
-    """
+  currency: str
+  """
     ISO 4217 currency code reflecting the merchant's market determination. Derived from address, context, and geo IP—buyers provide signals, merchants determine currency.
     """
-    totals: list[total.Total]
-    """
+  totals: list[total.Total]
+  """
     Different cart totals.
     """
-    messages: list[message.Message] | None = None
-    """
+  messages: list[message.Message] | None = None
+  """
     List of messages with error and info about the checkout session state.
     """
-    links: list[link.Link]
-    """
+  links: list[link.Link]
+  """
     Links to be displayed by the platform (Privacy Policy, TOS). Mandatory for legal compliance.
     """
-    expires_at: AwareDatetime | None = None
-    """
+  expires_at: AwareDatetime | None = None
+  """
     RFC 3339 expiry timestamp. Default TTL is 6 hours from creation if not sent.
     """
-    continue_url: AnyUrl | None = None
-    """
+  continue_url: AnyUrl | None = None
+  """
     URL for checkout handoff and session recovery. MUST be provided when status is requires_escalation. See specification for format and availability requirements.
     """
-    payment: payment_1.Payment | None = None
-    order: order_confirmation.OrderConfirmation | None = None
-    """
+  payment: payment_1.Payment | None = None
+  order: order_confirmation.OrderConfirmation | None = None
+  """
     Details about an order created for this checkout session.
     """

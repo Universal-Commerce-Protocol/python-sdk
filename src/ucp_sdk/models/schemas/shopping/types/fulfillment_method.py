@@ -26,36 +26,35 @@ from . import fulfillment_destination, fulfillment_group
 
 
 class FulfillmentMethod(BaseModel):
-    """
-    A fulfillment method (shipping or pickup) with destinations and groups.
-    """
+  """A fulfillment method (shipping or pickup) with destinations and groups.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     Unique fulfillment method identifier.
     """
-    type: Literal["shipping", "pickup"]
-    """
+  type: Literal["shipping", "pickup"]
+  """
     Fulfillment method type.
     """
-    line_item_ids: list[str]
-    """
+  line_item_ids: list[str]
+  """
     Line item IDs fulfilled via this method.
     """
-    destinations: (
-        list[fulfillment_destination.FulfillmentDestination] | None
-    ) = None
-    """
+  destinations: list[fulfillment_destination.FulfillmentDestination] | None = (
+    None
+  )
+  """
     Available destinations. For shipping: addresses. For pickup: retail locations.
     """
-    selected_destination_id: str | None = None
-    """
+  selected_destination_id: str | None = None
+  """
     ID of the selected destination.
     """
-    groups: list[fulfillment_group.FulfillmentGroup] | None = None
-    """
+  groups: list[fulfillment_group.FulfillmentGroup] | None = None
+  """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """

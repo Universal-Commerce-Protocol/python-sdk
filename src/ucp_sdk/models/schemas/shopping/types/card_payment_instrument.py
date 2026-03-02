@@ -26,52 +26,50 @@ from .payment_instrument import PaymentInstrument
 
 
 class Display(BaseModel):
-    """
-    Display information for this card payment instrument.
-    """
+  """Display information for this card payment instrument.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    brand: str | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  brand: str | None = None
+  """
     The card brand/network (e.g., visa, mastercard, amex).
     """
-    last_digits: str | None = None
-    """
+  last_digits: str | None = None
+  """
     Last 4 digits of the card number.
     """
-    expiry_month: int | None = None
-    """
+  expiry_month: int | None = None
+  """
     The month of the card's expiration date (1-12).
     """
-    expiry_year: int | None = None
-    """
+  expiry_year: int | None = None
+  """
     The year of the card's expiration date.
     """
-    description: str | None = None
-    """
+  description: str | None = None
+  """
     An optional rich text description of the card to display to the user (e.g., 'Visa ending in 1234, expires 12/2025').
     """
-    card_art: AnyUrl | None = None
-    """
+  card_art: AnyUrl | None = None
+  """
     An optional URI to a rich image representing the card (e.g., card art provided by the issuer).
     """
 
 
 class CardPaymentInstrument(PaymentInstrument):
-    """
-    A basic card payment instrument with visible card details. Can be inherited by a handler's instrument schema to define handler-specific display details or more complex credential structures.
-    """
+  """A basic card payment instrument with visible card details. Can be inherited by a handler's instrument schema to define handler-specific display details or more complex credential structures.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: Literal["card"]
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  type: Literal["card"]
+  """
     Indicates this is a card payment instrument.
     """
-    display: Display | None = None
-    """
+  display: Display | None = None
+  """
     Display information for this card payment instrument.
     """

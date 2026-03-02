@@ -4,6 +4,9 @@
 # Ensure we are in the script's directory
 cd "$(dirname "$0")" || exit
 
+# Add ~/.local/bin to PATH for uv
+export PATH="$HOME/.local/bin:$PATH"
+
 # Check if git is installed
 if ! command -v git &> /dev/null; then
     echo "Error: git not found. Please install git."
@@ -30,7 +33,7 @@ OUTPUT_DIR="src/ucp_sdk/models"
 SCHEMA_DIR="ucp/source"
 
 echo "Preprocessing schemas..."
-# uv run python preprocess_schemas.py
+uv run python preprocess_schemas.py
 
 echo "Generating Pydantic models from preprocessed schemas..."
 

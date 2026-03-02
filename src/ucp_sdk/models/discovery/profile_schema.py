@@ -26,92 +26,88 @@ from ..schemas._internal import Base_3, BusinessSchema_3, PlatformSchema_3
 
 
 class SigningKey(BaseModel):
-    """
-    Public key for signature verification in JWK format.
-    """
+  """Public key for signature verification in JWK format.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    kid: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  kid: str
+  """
     Key ID. Referenced in signature headers to identify which key to use for verification.
     """
-    kty: str
-    """
+  kty: str
+  """
     Key type (e.g., 'EC', 'RSA').
     """
-    crv: str | None = None
-    """
+  crv: str | None = None
+  """
     Curve name for EC keys (e.g., 'P-256').
     """
-    x: str | None = None
-    """
+  x: str | None = None
+  """
     X coordinate for EC public keys (base64url encoded).
     """
-    y: str | None = None
-    """
+  y: str | None = None
+  """
     Y coordinate for EC public keys (base64url encoded).
     """
-    n: str | None = None
-    """
+  n: str | None = None
+  """
     Modulus for RSA public keys (base64url encoded).
     """
-    e: str | None = None
-    """
+  e: str | None = None
+  """
     Exponent for RSA public keys (base64url encoded).
     """
-    use: Literal["sig", "enc"] | None = None
-    """
+  use: Literal["sig", "enc"] | None = None
+  """
     Key usage. Should be 'sig' for signing keys.
     """
-    alg: str | None = None
-    """
+  alg: str | None = None
+  """
     Algorithm (e.g., 'ES256', 'RS256').
     """
 
 
 class Base(BaseModel):
-    """
-    Base discovery profile with shared properties for all profile types.
-    """
+  """Base discovery profile with shared properties for all profile types.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: Base_3
-    signing_keys: list[SigningKey] | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: Base_3
+  signing_keys: list[SigningKey] | None = None
+  """
     Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.
     """
 
 
 class PlatformProfile(Base):
-    """
-    Full discovery profile for platforms. Exposes complete service, capability, and payment handler registries.
-    """
+  """Full discovery profile for platforms. Exposes complete service, capability, and payment handler registries.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: PlatformSchema_3 | None = None
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: PlatformSchema_3 | None = None
 
 
 class BusinessProfile(Base):
-    """
-    Discovery profile for businesses/merchants. Subset of platform profile with business-specific configuration.
-    """
+  """Discovery profile for businesses/merchants. Subset of platform profile with business-specific configuration.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: BusinessSchema_3 | None = None
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: BusinessSchema_3 | None = None
 
 
 class UcpDiscoveryProfile(RootModel[PlatformProfile | BusinessProfile]):
-    root: PlatformProfile | BusinessProfile = Field(
-        ..., title="UCP Discovery Profile"
-    )
-    """
+  root: PlatformProfile | BusinessProfile = Field(
+    ..., title="UCP Discovery Profile"
+  )
+  """
     Schema for UCP discovery profiles. Business profiles are hosted at /.well-known/ucp; platform profiles are hosted at URIs advertised in request headers.
     """

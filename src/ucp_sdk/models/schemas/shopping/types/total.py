@@ -24,26 +24,26 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Total(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: Literal[
-        "items_discount",
-        "subtotal",
-        "discount",
-        "fulfillment",
-        "tax",
-        "fee",
-        "total",
-    ]
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  type: Literal[
+    "items_discount",
+    "subtotal",
+    "discount",
+    "fulfillment",
+    "tax",
+    "fee",
+    "total",
+  ]
+  """
     Type of total categorization.
     """
-    display_text: str | None = None
-    """
+  display_text: str | None = None
+  """
     Text to display against the amount. Should reflect appropriate method (e.g., 'Shipping', 'Delivery').
     """
-    amount: int = Field(..., ge=0)
-    """
+  amount: int = Field(..., ge=0)
+  """
     If type == total, sums subtotal - discount + fulfillment + tax + fee. Should be >= 0. Amount in minor (cents) currency units.
     """

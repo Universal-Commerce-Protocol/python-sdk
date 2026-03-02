@@ -24,22 +24,21 @@ from . import postal_address
 
 
 class RetailLocation(BaseModel):
-    """
-    A pickup location (retail store, locker, etc.).
-    """
+  """A pickup location (retail store, locker, etc.).
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     Unique location identifier.
     """
-    name: str
-    """
+  name: str
+  """
     Location name (e.g., store name).
     """
-    address: postal_address.PostalAddress | None = None
-    """
+  address: postal_address.PostalAddress | None = None
+  """
     Physical address of the location.
     """

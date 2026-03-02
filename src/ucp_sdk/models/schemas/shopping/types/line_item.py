@@ -25,24 +25,23 @@ from . import total
 
 
 class LineItem(BaseModel):
-    """
-    Line item object. Expected to use the currency of the parent object.
-    """
+  """Line item object. Expected to use the currency of the parent object.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    item: item_1.Item
-    quantity: int = Field(..., ge=1)
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  item: item_1.Item
+  quantity: int = Field(..., ge=1)
+  """
     Quantity of the item being purchased.
     """
-    totals: list[total.Total]
-    """
+  totals: list[total.Total]
+  """
     Line item totals breakdown.
     """
-    parent_id: str | None = None
-    """
+  parent_id: str | None = None
+  """
     Parent line item identifier for any nested structures.
     """

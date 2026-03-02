@@ -18,42 +18,32 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
-
-class AllowsMultiDestination(BaseModel):
-  """Permits multiple destinations per method type.
-  """
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  shipping: bool | None = None
-  """
-    Multiple shipping destinations allowed.
-    """
-  pickup: bool | None = None
-  """
-    Multiple pickup locations allowed.
-    """
+from . import payment as payment_1
+from .types import buyer as buyer_1
+from .types import context as context_1
+from .types import update_line_item_request
 
 
-class BusinessFulfillmentConfig(BaseModel):
-  """Business's fulfillment configuration.
+class UpdateCheckoutRequest(BaseModel):
+  """Base checkout schema. Extensions compose onto this using allOf.
   """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  allows_multi_destination: AllowsMultiDestination | None = None
+  id: str
   """
-    Permits multiple destinations per method type.
+    Unique identifier of the checkout session.
     """
-  allows_method_combinations: (
-    list[list[Literal["shipping", "pickup"]]] | None
-  ) = None
+  line_items: list[update_line_item_request.UpdateLineItemRequest]
   """
-    Allowed method type combinations.
+    List of line items being checked out.
     """
+  buyer: buyer_1.Buyer | None = None
+  """
+    Representation of the buyer.
+    """
+  context: context_1.Context | None = None
+  payment: payment_1.Payment | None = None

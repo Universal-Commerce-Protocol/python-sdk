@@ -18,42 +18,20 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
 
-from pydantic import BaseModel, ConfigDict
+from . import item as item_1
 
 
-class AllowsMultiDestination(BaseModel):
-  """Permits multiple destinations per method type.
+class CreateLineItemRequest(BaseModel):
+  """Line item object. Expected to use the currency of the parent object.
   """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  shipping: bool | None = None
+  item: item_1.Item
+  quantity: int = Field(..., ge=1)
   """
-    Multiple shipping destinations allowed.
-    """
-  pickup: bool | None = None
-  """
-    Multiple pickup locations allowed.
-    """
-
-
-class BusinessFulfillmentConfig(BaseModel):
-  """Business's fulfillment configuration.
-  """
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  allows_multi_destination: AllowsMultiDestination | None = None
-  """
-    Permits multiple destinations per method type.
-    """
-  allows_method_combinations: (
-    list[list[Literal["shipping", "pickup"]]] | None
-  ) = None
-  """
-    Allowed method type combinations.
+    Quantity of the item being purchased.
     """

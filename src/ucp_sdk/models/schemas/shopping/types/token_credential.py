@@ -24,18 +24,17 @@ from .payment_credential import PaymentCredential
 
 
 class TokenCredential(PaymentCredential):
-    """
-    Base token credential schema. Concrete payment handlers may extend this schema with additional fields and define their own constraints.
-    """
+  """Base token credential schema. Concrete payment handlers may extend this schema with additional fields and define their own constraints.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  type: str
+  """
     The specific type of token produced by the handler (e.g., 'stripe_token').
     """
-    token: str
-    """
+  token: str
+  """
     The token value.
     """

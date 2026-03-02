@@ -22,14 +22,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class PaymentCredential(BaseModel):
-    """
-    The base definition for any payment credential. Handlers define specific credential types.
-    """
+  """The base definition for any payment credential. Handlers define specific credential types.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  type: str
+  """
     The credential type discriminator. Specific schemas will constrain this to a constant value.
     """

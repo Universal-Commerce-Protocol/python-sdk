@@ -25,51 +25,50 @@ from pydantic import ConfigDict, Field, RootModel
 from ..checkout import Checkout as Checkout_1
 from ..types import fulfillment as fulfillment_1
 from ..types import (
-    fulfillment_available_method,
-    fulfillment_group,
-    fulfillment_method,
-    fulfillment_option,
+  fulfillment_available_method,
+  fulfillment_group,
+  fulfillment_method,
+  fulfillment_option,
 )
 
 
 class FulfillmentExtension(RootModel[Any]):
-    root: Any = Field(..., title="Fulfillment Extension")
-    """
+  root: Any = Field(..., title="Fulfillment Extension")
+  """
     Extends Checkout with fulfillment support using methods, destinations, and groups.
     """
 
 
 class FulfillmentAvailableMethod(
-    RootModel[fulfillment_available_method.FulfillmentAvailableMethod]
+  RootModel[fulfillment_available_method.FulfillmentAvailableMethod]
 ):
-    root: fulfillment_available_method.FulfillmentAvailableMethod
+  root: fulfillment_available_method.FulfillmentAvailableMethod
 
 
 class FulfillmentOption(RootModel[fulfillment_option.FulfillmentOption]):
-    root: fulfillment_option.FulfillmentOption
+  root: fulfillment_option.FulfillmentOption
 
 
 class FulfillmentGroup(RootModel[fulfillment_group.FulfillmentGroup]):
-    root: fulfillment_group.FulfillmentGroup
+  root: fulfillment_group.FulfillmentGroup
 
 
 class FulfillmentMethod(RootModel[fulfillment_method.FulfillmentMethod]):
-    root: fulfillment_method.FulfillmentMethod
+  root: fulfillment_method.FulfillmentMethod
 
 
 class Fulfillment(RootModel[fulfillment_1.Fulfillment]):
-    root: fulfillment_1.Fulfillment
+  root: fulfillment_1.Fulfillment
 
 
 class Checkout(Checkout_1):
-    """
-    Checkout extended with hierarchical fulfillment.
-    """
+  """Checkout extended with hierarchical fulfillment.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    fulfillment: Fulfillment | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  fulfillment: Fulfillment | None = None
+  """
     Fulfillment details.
     """

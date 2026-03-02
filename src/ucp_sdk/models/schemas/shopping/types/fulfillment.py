@@ -24,20 +24,19 @@ from . import fulfillment_available_method, fulfillment_method
 
 
 class Fulfillment(BaseModel):
-    """
-    Container for fulfillment methods and availability.
-    """
+  """Container for fulfillment methods and availability.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    methods: list[fulfillment_method.FulfillmentMethod] | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  methods: list[fulfillment_method.FulfillmentMethod] | None = None
+  """
     Fulfillment methods for cart items.
     """
-    available_methods: (
-        list[fulfillment_available_method.FulfillmentAvailableMethod] | None
-    ) = None
-    """
+  available_methods: (
+    list[fulfillment_available_method.FulfillmentAvailableMethod] | None
+  ) = None
+  """
     Inventory availability hints.
     """

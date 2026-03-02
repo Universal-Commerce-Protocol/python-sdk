@@ -22,22 +22,22 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Buyer(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    first_name: str | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  first_name: str | None = None
+  """
     First name of the buyer.
     """
-    last_name: str | None = None
-    """
+  last_name: str | None = None
+  """
     Last name of the buyer.
     """
-    email: str | None = None
-    """
+  email: str | None = None
+  """
     Email of the buyer.
     """
-    phone_number: str | None = None
-    """
+  phone_number: str | None = None
+  """
     E.164 standard.
     """

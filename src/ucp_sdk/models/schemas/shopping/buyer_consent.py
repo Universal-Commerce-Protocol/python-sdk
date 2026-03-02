@@ -27,61 +27,58 @@ from .types.buyer import Buyer as Buyer_1
 
 
 class BuyerConsentExtension(RootModel[Any]):
-    root: Any = Field(..., title="Buyer Consent Extension")
-    """
+  root: Any = Field(..., title="Buyer Consent Extension")
+  """
     Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.
     """
 
 
 class Consent(BaseModel):
-    """
-    User consent states for data processing
-    """
+  """User consent states for data processing
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    analytics: bool | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  analytics: bool | None = None
+  """
     Consent for analytics and performance tracking.
     """
-    preferences: bool | None = None
-    """
+  preferences: bool | None = None
+  """
     Consent for storing user preferences.
     """
-    marketing: bool | None = None
-    """
+  marketing: bool | None = None
+  """
     Consent for marketing communications.
     """
-    sale_of_data: bool | None = None
-    """
+  sale_of_data: bool | None = None
+  """
     Consent for selling data to third parties (CCPA).
     """
 
 
 class Buyer(Buyer_1):
-    """
-    Buyer object extended with consent tracking.
-    """
+  """Buyer object extended with consent tracking.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    consent: Consent | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  consent: Consent | None = None
+  """
     Consent tracking fields.
     """
 
 
 class Checkout(Checkout_1):
-    """
-    Checkout extended with consent tracking via buyer object.
-    """
+  """Checkout extended with consent tracking via buyer object.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    buyer: Buyer | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  buyer: Buyer | None = None
+  """
     Buyer with consent tracking.
     """

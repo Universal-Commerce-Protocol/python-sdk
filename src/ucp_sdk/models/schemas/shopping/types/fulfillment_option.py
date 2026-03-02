@@ -24,38 +24,37 @@ from . import total
 
 
 class FulfillmentOption(BaseModel):
-    """
-    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
-    """
+  """A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     Unique fulfillment option identifier.
     """
-    title: str
-    """
+  title: str
+  """
     Short label (e.g., 'Express Shipping', 'Curbside Pickup').
     """
-    description: str | None = None
-    """
+  description: str | None = None
+  """
     Complete context for buyer decision (e.g., 'Arrives Dec 12-15 via FedEx').
     """
-    carrier: str | None = None
-    """
+  carrier: str | None = None
+  """
     Carrier name (for shipping).
     """
-    earliest_fulfillment_time: AwareDatetime | None = None
-    """
+  earliest_fulfillment_time: AwareDatetime | None = None
+  """
     Earliest fulfillment date.
     """
-    latest_fulfillment_time: AwareDatetime | None = None
-    """
+  latest_fulfillment_time: AwareDatetime | None = None
+  """
     Latest fulfillment date.
     """
-    totals: list[total.Total]
-    """
+  totals: list[total.Total]
+  """
     Fulfillment option totals breakdown.
     """

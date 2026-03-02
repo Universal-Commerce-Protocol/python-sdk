@@ -22,14 +22,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class EmbeddedTransportConfig(BaseModel):
-    """
-    Per-checkout configuration for embedded transport binding. Allows businesses to vary ECP availability and delegations based on cart contents, agent authorization, or policy.
-    """
+  """Per-checkout configuration for embedded transport binding. Allows businesses to vary ECP availability and delegations based on cart contents, agent authorization, or policy.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    delegate: list[str] | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  delegate: list[str] | None = None
+  """
     Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
     """

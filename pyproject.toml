@@ -49,15 +49,19 @@ custom-file-header = """
 
 [tool.ruff]
 line-length = 80
-target-version = "py311"
+indent-width = 2
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
-ignore = ["E501"]
+select = ["E", "F", "W", "B", "C4", "SIM", "N", "UP", "D", "PTH", "T20"]
 
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["D104"]
-"*.py" = ["D100", "D101", "D102", "D103", "D200", "D205", "D212"]
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+case-sensitive = true

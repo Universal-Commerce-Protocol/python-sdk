@@ -24,26 +24,25 @@ from . import fulfillment_option
 
 
 class FulfillmentGroup(BaseModel):
-    """
-    A merchant-generated package/group of line items with fulfillment options.
-    """
+  """A merchant-generated package/group of line items with fulfillment options.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     Group identifier for referencing merchant-generated groups in updates.
     """
-    line_item_ids: list[str]
-    """
+  line_item_ids: list[str]
+  """
     Line item IDs included in this group/package.
     """
-    options: list[fulfillment_option.FulfillmentOption] | None = None
-    """
+  options: list[fulfillment_option.FulfillmentOption] | None = None
+  """
     Available fulfillment options for this group.
     """
-    selected_option_id: str | None = None
-    """
+  selected_option_id: str | None = None
+  """
     ID of the selected fulfillment option for this group.
     """

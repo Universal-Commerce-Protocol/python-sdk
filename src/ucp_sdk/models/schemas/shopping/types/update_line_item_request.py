@@ -18,54 +18,23 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import item as item_1
-from . import total as total_1
 
 
-class Quantity(BaseModel):
-  """Quantity tracking. Both total and fulfilled are derived from events.
+class UpdateLineItemRequest(BaseModel):
+  """Line item object. Expected to use the currency of the parent object.
   """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  total: int = Field(..., ge=0)
-  """
-    Current total quantity.
-    """
-  fulfilled: int = Field(..., ge=0)
-  """
-    Quantity fulfilled (sum from fulfillment events).
-    """
-
-
-class OrderLineItem(BaseModel):
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
-    Line item identifier.
-    """
+  id: str | None = None
   item: item_1.Item
+  quantity: int = Field(..., ge=1)
   """
-    Product data (id, title, price, image_url).
-    """
-  quantity: Quantity
-  """
-    Quantity tracking. Both total and fulfilled are derived from events.
-    """
-  totals: list[total_1.Total]
-  """
-    Line item totals breakdown.
-    """
-  status: Literal["processing", "partial", "fulfilled"]
-  """
-    Derived status: fulfilled if quantity.fulfilled == quantity.total, partial if quantity.fulfilled > 0, otherwise processing.
+    Quantity of the item being purchased.
     """
   parent_id: str | None = None
   """

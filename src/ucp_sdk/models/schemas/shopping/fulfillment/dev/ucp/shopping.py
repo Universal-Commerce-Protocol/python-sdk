@@ -24,4 +24,4 @@ from pydantic import RootModel
 
 
 class Fulfillment(RootModel[Any]):
-    root: Any
+  root: Any

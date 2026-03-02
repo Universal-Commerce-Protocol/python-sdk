@@ -24,26 +24,25 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FulfillmentAvailableMethod(BaseModel):
-    """
-    Inventory availability hint for a fulfillment method type.
-    """
+  """Inventory availability hint for a fulfillment method type.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: Literal["shipping", "pickup"]
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  type: Literal["shipping", "pickup"]
+  """
     Fulfillment method type this availability applies to.
     """
-    line_item_ids: list[str]
-    """
+  line_item_ids: list[str]
+  """
     Line items available for this fulfillment method.
     """
-    fulfillable_on: str | None = None
-    """
+  fulfillable_on: str | None = None
+  """
     'now' for immediate availability, or ISO 8601 date for future (preorders, transfers).
     """
-    description: str | None = None
-    """
+  description: str | None = None
+  """
     Human-readable availability info (e.g., 'Available for pickup at Downtown Store today').
     """

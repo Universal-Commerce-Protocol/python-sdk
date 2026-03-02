@@ -24,14 +24,13 @@ from .postal_address import PostalAddress
 
 
 class ShippingDestination(PostalAddress):
-    """
-    Shipping destination.
-    """
+  """Shipping destination.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     ID specific to this shipping destination.
     """

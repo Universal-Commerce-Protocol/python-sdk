@@ -22,22 +22,22 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
 
 class Item(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  id: str
+  """
     Should be recognized by both the Platform, and the Business. For Google it should match the id provided in the "id" field in the product feed.
     """
-    title: str
-    """
+  title: str
+  """
     Product title.
     """
-    price: int = Field(..., ge=0)
-    """
+  price: int = Field(..., ge=0)
+  """
     Unit price in minor (cents) currency units.
     """
-    image_url: AnyUrl | None = None
-    """
+  image_url: AnyUrl | None = None
+  """
     Product image URI.
     """

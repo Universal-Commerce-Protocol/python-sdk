@@ -26,101 +26,98 @@ from .checkout import Checkout as Checkout_1
 
 
 class Ap2MandateExtension(RootModel[Any]):
-    root: Any = Field(..., title="AP2 Mandate Extension")
-    """
+  root: Any = Field(..., title="AP2 Mandate Extension")
+  """
     Extends Checkout with cryptographic mandate support for non-repudiable authorization per the AP2 protocol. Uses embedded signature model with ap2 namespace.
     """
 
 
 class MerchantAuthorization(RootModel[str]):
-    root: str = Field(
-        ...,
-        pattern="^[A-Za-z0-9_-]+\\.\\.[A-Za-z0-9_-]+$",
-        title="Merchant Authorization",
-    )
-    """
+  root: str = Field(
+    ...,
+    pattern="^[A-Za-z0-9_-]+\\.\\.[A-Za-z0-9_-]+$",
+    title="Merchant Authorization",
+  )
+  """
     JWS Detached Content signature (RFC 7515 Appendix F) over the checkout response body (excluding ap2 field). Format: `<base64url-header>..<base64url-signature>`. The header MUST contain 'alg' (ES256/ES384/ES512) and 'kid' claims. The signature covers both the header and JCS-canonicalized checkout payload.
     """
 
 
 class CheckoutMandate(RootModel[str]):
-    root: str = Field(
-        ...,
-        pattern="^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$",
-        title="Checkout Mandate",
-    )
-    """
+  root: str = Field(
+    ...,
+    pattern="^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$",
+    title="Checkout Mandate",
+  )
+  """
     SD-JWT+kb credential in `ap2.checkout_mandate`. Proving user authorization for the checkout. Contains the full checkout including `ap2.merchant_authorization`.
     """
 
 
 class Ap2WithMerchantAuthorization(BaseModel):
-    """
-    AP2 extension data including merchant authorization.
-    """
+  """AP2 extension data including merchant authorization.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    merchant_authorization: MerchantAuthorization | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  merchant_authorization: MerchantAuthorization | None = None
+  """
     Merchant's signature proving checkout terms are authentic.
     """
 
 
 class Ap2WithCheckoutMandate(BaseModel):
-    """
-    AP2 extension data including checkout mandate.
-    """
+  """AP2 extension data including checkout mandate.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    checkout_mandate: CheckoutMandate | None = None
-    """
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  checkout_mandate: CheckoutMandate | None = None
+  """
     SD-JWT+kb proving user authorized this checkout.
     """
 
 
 class Ap2(Ap2WithMerchantAuthorization, Ap2WithCheckoutMandate):
-    model_config = ConfigDict(
-        extra="allow",
-    )
+  model_config = ConfigDict(
+    extra="allow",
+  )
 
 
 class ErrorCode(
-    RootModel[
-        Literal[
-            "mandate_required",
-            "agent_missing_key",
-            "mandate_invalid_signature",
-            "mandate_expired",
-            "mandate_scope_mismatch",
-            "merchant_authorization_invalid",
-            "merchant_authorization_missing",
-        ]
+  RootModel[
+    Literal[
+      "mandate_required",
+      "agent_missing_key",
+      "mandate_invalid_signature",
+      "mandate_expired",
+      "mandate_scope_mismatch",
+      "merchant_authorization_invalid",
+      "merchant_authorization_missing",
     ]
+  ]
 ):
-    root: Literal[
-        "mandate_required",
-        "agent_missing_key",
-        "mandate_invalid_signature",
-        "mandate_expired",
-        "mandate_scope_mismatch",
-        "merchant_authorization_invalid",
-        "merchant_authorization_missing",
-    ] = Field(..., title="AP2 Error Code")
-    """
+  root: Literal[
+    "mandate_required",
+    "agent_missing_key",
+    "mandate_invalid_signature",
+    "mandate_expired",
+    "mandate_scope_mismatch",
+    "merchant_authorization_invalid",
+    "merchant_authorization_missing",
+  ] = Field(..., title="AP2 Error Code")
+  """
     Error codes specific to AP2 mandate verification.
     """
 
 
 class Checkout(Checkout_1):
-    """
-    Checkout extended with AP2 mandate support.
-    """
+  """Checkout extended with AP2 mandate support.
+  """
 
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ap2: Ap2 | None = None
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ap2: Ap2 | None = None
