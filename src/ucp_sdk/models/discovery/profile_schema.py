@@ -102,7 +102,9 @@ class BusinessProfile(BaseModel):
 
 
 class UcpDiscoveryProfile(RootModel[PlatformProfile | BusinessProfile]):
-    root: PlatformProfile | BusinessProfile = Field(..., title="UCP Discovery Profile")
+    root: PlatformProfile | BusinessProfile = Field(
+        ..., title="UCP Discovery Profile"
+    )
     """
     Schema for UCP discovery profiles. Business profiles are hosted at /.well-known/ucp; platform profiles are hosted at URIs advertised in request headers.
     """

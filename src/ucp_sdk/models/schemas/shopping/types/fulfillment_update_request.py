@@ -31,7 +31,10 @@ class FulfillmentUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    methods: list[fulfillment_method_update_request.FulfillmentMethodUpdateRequest] | None = None
+    methods: (
+        list[fulfillment_method_update_request.FulfillmentMethodUpdateRequest]
+        | None
+    ) = None
     """
     Fulfillment methods for cart items.
     """

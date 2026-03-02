@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel, constr
 
 
 class UcpMetadata(RootModel[Any]):
@@ -122,10 +122,14 @@ class PlatformSchema12(BaseModel):
     transport: Literal["embedded"] = "embedded"
 
 
-class PlatformSchema8(RootModel[PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12]):
-    root: PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12 = Field(
-        ..., title="Service (Platform Schema)"
-    )
+class PlatformSchema8(
+    RootModel[
+        PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
+    ]
+):
+    root: (
+        PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
+    ) = Field(..., title="Service (Platform Schema)")
     """
     Full service declaration for platform-level discovery. Different transports require different fields.
     """
@@ -223,10 +227,14 @@ class ResponseSchema11(BaseModel):
     config: EmbeddedConfig | None = None
 
 
-class ResponseSchema7(RootModel[ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11]):
-    root: ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11 = Field(
-        ..., title="Service (Response Schema)"
-    )
+class ResponseSchema7(
+    RootModel[
+        ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
+    ]
+):
+    root: (
+        ResponseSchema | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
+    ) = Field(..., title="Service (Response Schema)")
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
@@ -337,35 +345,24 @@ class ResponseOrderSchema(BaseModel):
     """
     UCP version in YYYY-MM-DD format.
     """
-    services: dict[str, list[Base]] | None = None
+    services: (
+        dict[
+            constr(pattern=r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$"),
+            list[Base],
+        ]
+        | None
+    ) = None
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: Any | None = None
-    payment_handlers: dict[str, list[Base]] | None = None
-    """
-    Payment handler registry keyed by reverse-domain name.
-    """
-
-
-class ResponseCartSchema(BaseModel):
-    """
-    UCP metadata for cart responses. No payment handlers needed pre-checkout.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
-    """
-    UCP version in YYYY-MM-DD format.
-    """
-    services: dict[str, list[Base]] | None = None
-    """
-    Service registry keyed by reverse-domain name.
-    """
-    capabilities: Any | None = None
-    payment_handlers: dict[str, list[Base]] | None = None
+    payment_handlers: (
+        dict[
+            constr(pattern=r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$"),
+            list[Base],
+        ]
+        | None
+    ) = None
     """
     Payment handler registry keyed by reverse-domain name.
     """
@@ -406,10 +403,14 @@ class BusinessSchema11(BaseModel):
     config: EmbeddedConfig | None = None
 
 
-class BusinessSchema7(RootModel[BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11]):
-    root: BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11 = Field(
-        ..., title="Service (Business Schema)"
-    )
+class BusinessSchema7(
+    RootModel[
+        BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
+    ]
+):
+    root: (
+        BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
+    ) = Field(..., title="Service (Business Schema)")
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """

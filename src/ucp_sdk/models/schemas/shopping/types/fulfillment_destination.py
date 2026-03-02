@@ -23,10 +23,16 @@ from pydantic import Field, RootModel
 from . import retail_location, shipping_destination
 
 
-class FulfillmentDestination(RootModel[shipping_destination.ShippingDestination | retail_location.RetailLocation]):
-    root: shipping_destination.ShippingDestination | retail_location.RetailLocation = Field(
-        ..., title="Fulfillment Destination"
-    )
+class FulfillmentDestination(
+    RootModel[
+        shipping_destination.ShippingDestination
+        | retail_location.RetailLocation
+    ]
+):
+    root: (
+        shipping_destination.ShippingDestination
+        | retail_location.RetailLocation
+    ) = Field(..., title="Fulfillment Destination")
     """
     A destination for fulfillment.
     """

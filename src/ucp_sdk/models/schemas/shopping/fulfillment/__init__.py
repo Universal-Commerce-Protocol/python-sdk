@@ -38,7 +38,9 @@ class FulfillmentExtension(RootModel[Any]):
     """
 
 
-class FulfillmentAvailableMethod(RootModel[fulfillment_available_method.FulfillmentAvailableMethod]):
+class FulfillmentAvailableMethod(
+    RootModel[fulfillment_available_method.FulfillmentAvailableMethod]
+):
     root: fulfillment_available_method.FulfillmentAvailableMethod
 
 

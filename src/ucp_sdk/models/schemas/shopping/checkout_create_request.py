@@ -22,33 +22,8 @@ from pydantic import BaseModel, ConfigDict
 
 from . import payment as payment_1
 from .types import buyer as buyer_1
+from .types import context as context_1
 from .types import line_item_create_request
-
-
-class Context(BaseModel):
-    """
-    Provisional buyer signals for relevance and localization: product availability, pricing, currency, tax, shipping, payment methods, and eligibility (e.g., student or affiliation discounts). Businesses SHOULD use these values when authoritative data (e.g., address) is absent, and MAY ignore unsupported values without returning errors. Context SHOULD be non-identifying and can be disclosed progressively—coarse signals early, finer resolution as the session progresses. Higher-resolution data (shipping address, billing address) supersedes context. Platforms SHOULD progressively enhance context throughout the buyer journey.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    address_country: str | None = None
-    """
-    The country. Recommended to be in 2-letter ISO 3166-1 alpha-2 format, for example "US". For backward compatibility, a 3-letter ISO 3166-1 alpha-3 country code such as "SGP" or a full country name such as "Singapore" can also be used. Optional hint for market context (currency, availability, pricing)—higher-resolution data (e.g., shipping address) supersedes this value.
-    """
-    address_region: str | None = None
-    """
-    The region in which the locality is, and which is in the country. For example, California or another appropriate first-level Administrative division. Optional hint for progressive localization—higher-resolution data (e.g., shipping address) supersedes this value.
-    """
-    postal_code: str | None = None
-    """
-    The postal code. For example, 94043. Optional hint for regional refinement—higher-resolution data (e.g., shipping address) supersedes this value.
-    """
-    intent: str | None = None
-    """
-    Background context describing buyer's intent (e.g., 'looking for a gift under $50', 'need something durable for outdoor use'). Informs relevance, recommendations, and personalization.
-    """
 
 
 class CheckoutCreateRequest(BaseModel):
@@ -67,5 +42,5 @@ class CheckoutCreateRequest(BaseModel):
     """
     Representation of the buyer.
     """
-    context: Context | None = None
+    context: context_1.Context | None = None
     payment: payment_1.Payment | None = None

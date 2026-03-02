@@ -35,7 +35,9 @@ class Fulfillment(BaseModel):
     """
     Fulfillment methods for cart items.
     """
-    available_methods: list[fulfillment_available_method.FulfillmentAvailableMethod] | None = None
+    available_methods: (
+        list[fulfillment_available_method.FulfillmentAvailableMethod] | None
+    ) = None
     """
     Inventory availability hints.
     """

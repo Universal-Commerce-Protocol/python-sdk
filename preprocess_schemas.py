@@ -16,6 +16,7 @@
 """
 Preprocess JSON schemas for datamodel-code-generator compatibility.
 """
+
 import json
 import shutil
 import copy
@@ -31,9 +32,9 @@ def remove_extension_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     if "$defs" not in schema:
         return schema
-    
+
     defs_to_remove = []
-    
+
     for def_name, def_schema in schema["$defs"].items():
         if isinstance(def_schema, dict) and "allOf" in def_schema:
             # Check if this extends an external schema
@@ -47,30 +48,32 @@ def remove_extension_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
                     if not ref.startswith("#/") and ref != "#":
                         has_external_ref = True
                         break
-            
+
             if has_external_ref:
                 print(f"    -> Removing extension def: {def_name}")
                 defs_to_remove.append(def_name)
-    
+
     # Remove extension defs
     for def_name in defs_to_remove:
         del schema["$defs"][def_name]
-    
+
     # Remove empty $defs
     if "$defs" in schema and not schema["$defs"]:
         del schema["$defs"]
-    
+
     return schema
 
 
-def inline_internal_refs(obj: Any, defs: Dict[str, Any], processed: set = None) -> Any:
+def inline_internal_refs(
+    obj: Any, defs: Dict[str, Any], processed: set = None
+) -> Any:
     """
     Recursively inline $ref references that point to #/$defs/...
     This resolves internal references to avoid cross-file confusion.
     """
     if processed is None:
         processed = set()
-    
+
     if isinstance(obj, dict):
         # Check for $ref
         if "$ref" in obj and len(obj) == 1:
@@ -86,7 +89,7 @@ def inline_internal_refs(obj: Any, defs: Dict[str, Any], processed: set = None) 
                     processed.remove(def_name)
                     return result
             return obj
-        
+
         # Recursively process all properties
         result = {}
         for key, value in obj.items():
@@ -103,13 +106,13 @@ def flatten_allof_in_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     if "$defs" not in schema:
         return schema
-    
+
     defs = schema["$defs"]
-    
+
     for def_name, def_schema in list(defs.items()):
         if isinstance(def_schema, dict) and "allOf" in def_schema:
             all_of = def_schema["allOf"]
-            
+
             # Check if all refs are internal (including root schema references like "#")
             all_internal = True
             has_root_ref = False
@@ -123,20 +126,34 @@ def flatten_allof_in_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
                     elif not ref.startswith("#/"):
                         all_internal = False
                         break
-            
+
             if all_internal:
                 # Flatten the allOf by inlining refs
                 merged = {}
                 for item in all_of:
                     # Handle root schema reference "#"
-                    if isinstance(item, dict) and "$ref" in item and item["$ref"] == "#":
+                    if (
+                        isinstance(item, dict)
+                        and "$ref" in item
+                        and item["$ref"] == "#"
+                    ):
                         # Inline the root schema (exclude $defs, $id, $schema, title, description)
-                        root_copy = {k: v for k, v in schema.items() 
-                                    if k not in ["$defs", "$id", "$schema", "title", "description"]}
+                        root_copy = {
+                            k: v
+                            for k, v in schema.items()
+                            if k
+                            not in [
+                                "$defs",
+                                "$id",
+                                "$schema",
+                                "title",
+                                "description",
+                            ]
+                        }
                         resolved = root_copy
                     else:
                         resolved = inline_internal_refs(item, defs, set())
-                    
+
                     # Merge properties
                     for k, v in resolved.items():
                         if k == "properties" and k in merged:
@@ -145,19 +162,21 @@ def flatten_allof_in_defs(schema: Dict[str, Any]) -> Dict[str, Any]:
                             merged[k] = list(set(merged[k] + v))
                         elif k not in ["title", "description", "allOf"]:
                             merged[k] = v
-                
+
                 # Keep original title and description
                 if "title" in def_schema:
                     merged["title"] = def_schema["title"]
                 if "description" in def_schema:
                     merged["description"] = def_schema["description"]
-                
+
                 defs[def_name] = merged
-    
+
     return schema
 
 
-def update_refs_for_scenario(obj: Any, scenario: str, schemas_with_scenarios: set, current_dir: str = "") -> Any:
+def update_refs_for_scenario(
+    obj: Any, scenario: str, schemas_with_scenarios: set, current_dir: str = ""
+) -> Any:
     """
     Recursively update $ref paths to point to scenario-specific schemas.
     For example, changes "types/line_item.json" to "types/line_item_create_request.json" for create scenario.
@@ -178,10 +197,10 @@ def update_refs_for_scenario(obj: Any, scenario: str, schemas_with_scenarios: se
                         ref_path = os.path.normpath(combined)
                     else:
                         ref_path = os.path.normpath(value)
-                    
+
                     # Normalize the path (force forward slashes)
                     ref_path = ref_path.replace("\\", "/")
-                    
+
                     # Check if the referenced schema has scenarios
                     if ref_path in schemas_with_scenarios:
                         base_path = value[:-5]  # Remove .json
@@ -193,25 +212,37 @@ def update_refs_for_scenario(obj: Any, scenario: str, schemas_with_scenarios: se
                 else:
                     result[key] = value
             else:
-                result[key] = update_refs_for_scenario(value, scenario, schemas_with_scenarios, current_dir)
+                result[key] = update_refs_for_scenario(
+                    value, scenario, schemas_with_scenarios, current_dir
+                )
         return result
     elif isinstance(obj, list):
-        return [update_refs_for_scenario(item, scenario, schemas_with_scenarios, current_dir) for item in obj]
+        return [
+            update_refs_for_scenario(
+                item, scenario, schemas_with_scenarios, current_dir
+            )
+            for item in obj
+        ]
     return obj
 
 
-def process_ucp_request_scenarios(schema: Dict[str, Any], base_name: str, schemas_with_scenarios: set, schema_dir: str = "") -> Dict[str, Dict[str, Any]]:
+def process_ucp_request_scenarios(
+    schema: Dict[str, Any],
+    base_name: str,
+    schemas_with_scenarios: set,
+    schema_dir: str = "",
+) -> Dict[str, Dict[str, Any]]:
     """
     Generate separate schemas for create, update, and complete scenarios based on ucp_request annotations.
-    
+
     Returns a dict mapping scenario names (e.g., 'create', 'update', 'complete') to their schemas.
     """
     scenarios = {}
-    
+
     # Check if this schema has properties with ucp_request annotations
     if "properties" not in schema:
         return {"base": schema}
-    
+
     # Detect which scenarios exist
     scenario_types = set()
     has_string_directive = False
@@ -228,30 +259,32 @@ def process_ucp_request_scenarios(schema: Dict[str, Any], base_name: str, schema
     if not scenario_types and has_string_directive:
         scenario_types.add("create")
         scenario_types.add("update")
-    
+
     # If no scenarios detected, return base schema
     if not scenario_types:
         return {"base": schema}
-    
+
     # Generate a schema for each scenario
     for scenario in scenario_types:
         scenario_schema = copy.deepcopy(schema)
-        
+
         # Update title and description to reflect the scenario
         if "title" in scenario_schema:
-            scenario_schema["title"] = f"{scenario_schema['title']} ({scenario.capitalize()} Request)"
-        
+            scenario_schema["title"] = (
+                f"{scenario_schema['title']} ({scenario.capitalize()} Request)"
+            )
+
         # Process each property based on its ucp_request directive
         properties_to_remove = []
         required_fields = set(scenario_schema.get("required", []))
-        
+
         for prop_name, prop_schema in scenario_schema["properties"].items():
             if isinstance(prop_schema, dict) and "ucp_request" in prop_schema:
                 ucp_req = prop_schema["ucp_request"]
-                
+
                 # Clean up the ucp_request annotation from the property
                 del prop_schema["ucp_request"]
-                
+
                 # Determine the directive for this scenario
                 if isinstance(ucp_req, str):
                     directive = ucp_req
@@ -259,7 +292,7 @@ def process_ucp_request_scenarios(schema: Dict[str, Any], base_name: str, schema
                     directive = ucp_req.get(scenario, "optional")
                 else:
                     directive = "optional"
-                
+
                 # Handle the directive
                 if directive == "omit":
                     properties_to_remove.append(prop_name)
@@ -268,22 +301,24 @@ def process_ucp_request_scenarios(schema: Dict[str, Any], base_name: str, schema
                     required_fields.add(prop_name)
                 elif directive == "optional":
                     required_fields.discard(prop_name)
-        
+
         # Remove omitted properties
         for prop_name in properties_to_remove:
             del scenario_schema["properties"][prop_name]
-        
+
         # Update required fields
         if required_fields:
             scenario_schema["required"] = sorted(list(required_fields))
         elif "required" in scenario_schema:
             del scenario_schema["required"]
-        
+
         # Update all $ref paths to point to scenario-specific schemas
-        scenario_schema = update_refs_for_scenario(scenario_schema, scenario, schemas_with_scenarios, schema_dir)
-        
+        scenario_schema = update_refs_for_scenario(
+            scenario_schema, scenario, schemas_with_scenarios, schema_dir
+        )
+
         scenarios[scenario] = scenario_schema
-    
+
     return scenarios
 
 
@@ -294,21 +329,26 @@ def clean_schema_for_codegen(schema: Dict[str, Any]) -> Dict[str, Any]:
     - Remove $schema fields
     """
     schema = copy.deepcopy(schema)
-    
+
     # Remove fields that can cause URL resolution issues
     if "$id" in schema:
         del schema["$id"]
     if "$schema" in schema:
         del schema["$schema"]
-    
+
     return schema
 
 
-def preprocess_schema_file(input_path: Path, output_path: Path, schemas_with_scenarios: set, schema_dir: str) -> None:
+def preprocess_schema_file(
+    input_path: Path,
+    output_path: Path,
+    schemas_with_scenarios: set,
+    schema_dir: str,
+) -> None:
     """Preprocess a single schema file."""
-    with open(input_path, 'r', encoding='utf-8') as f:
+    with open(input_path, "r", encoding="utf-8") as f:
         schema = json.load(f)
-    
+
     # WARN: Workaround for datamodel-codegen issue with relative paths
     # When ucp.json is referenced from a subdirectory (e.g. schemas/shopping/checkout.json referencing ../ucp.json),
     # the subsequent reference to service.json (in ucp.json) is incorrectly resolved relative to the subdirectory.
@@ -317,48 +357,58 @@ def preprocess_schema_file(input_path: Path, output_path: Path, schemas_with_sce
         # Force absolute paths for all sibling references in ucp.json
         # This fixes resolution issues when ucp.json is referenced from subdirectories
         schema_str = json.dumps(schema)
-        
+
         input_dir_abs = output_path.parent.resolve()
-        for ref_file in ["service.json", "capability.json", "payment_handler.json"]:
+        for ref_file in [
+            "service.json",
+            "capability.json",
+            "payment_handler.json",
+        ]:
             ref_path = input_dir_abs / ref_file
-            schema_str = schema_str.replace(f'"{ref_file}', f'"file://{ref_path}')
-            
+            schema_str = schema_str.replace(
+                f'"{ref_file}', f'"file://{ref_path}'
+            )
+
         schema = json.loads(schema_str)
 
     # Remove extension definitions that reference external schemas
     schema = remove_extension_defs(schema)
-    
+
     # Flatten allOf patterns within $defs that only use internal refs
     schema = flatten_allof_in_defs(schema)
-    
+
     # Generate scenario-specific schemas
     base_name = output_path.stem  # filename without extension
-    
-    scenarios = process_ucp_request_scenarios(schema, base_name, schemas_with_scenarios, schema_dir)
-    
+
+    scenarios = process_ucp_request_scenarios(
+        schema, base_name, schemas_with_scenarios, schema_dir
+    )
+
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Write preprocessed schema(s)
     if len(scenarios) == 1 and "base" in scenarios:
         # No scenarios, write single file
         cleaned = clean_schema_for_codegen(scenarios["base"])
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(cleaned, f, indent=2)
     else:
         # Write both base schema and scenario-specific files
         # First, write the base schema (for non-scenario-specific references)
         base_schema = copy.deepcopy(schema)
         cleaned_base = clean_schema_for_codegen(base_schema)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(cleaned_base, f, indent=2)
-        
+
         # Then write separate files for each scenario
         for scenario_name, scenario_schema in scenarios.items():
-            scenario_path = output_path.parent / f"{base_name}_{scenario_name}_request.json"
+            scenario_path = (
+                output_path.parent / f"{base_name}_{scenario_name}_request.json"
+            )
             print(f"    -> Generating {scenario_name} request schema")
             cleaned = clean_schema_for_codegen(scenario_schema)
-            with open(scenario_path, 'w', encoding='utf-8') as f:
+            with open(scenario_path, "w", encoding="utf-8") as f:
                 json.dump(cleaned, f, indent=2)
 
 
@@ -368,42 +418,49 @@ def preprocess_schemas(input_dir: Path, output_dir: Path) -> None:
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
-    
+
     # Find all JSON files
     json_files = list(input_dir.rglob("*.json"))
-    
+
     print(f"Preprocessing {len(json_files)} schema files...")
-    
+
     # First pass: track which schemas have scenarios
     schemas_with_scenarios = set()
     for json_file in json_files:
-        with open(json_file, 'r', encoding='utf-8') as f:
+        with open(json_file, "r", encoding="utf-8") as f:
             schema = json.load(f)
-        
+
         # Check if this schema has ucp_request scenarios
         if "properties" in schema:
             for prop_schema in schema["properties"].values():
-                if isinstance(prop_schema, dict) and "ucp_request" in prop_schema:
+                if (
+                    isinstance(prop_schema, dict)
+                    and "ucp_request" in prop_schema
+                ):
                     # If any ucp_request is present (dict or string), it has scenarios
                     rel_path = json_file.relative_to(input_dir)
-                    path_str = str(rel_path).replace("\\", "/") # Normalize path separators
+                    path_str = str(rel_path).replace(
+                        "\\", "/"
+                    )  # Normalize path separators
                     schemas_with_scenarios.add(path_str)
                     break
-    
+
     # Second pass: preprocess and generate schemas
     for json_file in json_files:
         # Calculate relative path
         rel_path = json_file.relative_to(input_dir)
         output_path = output_dir / rel_path
-        
+
         # Calculate directory of this file relative to valid root
         file_rel_dir = str(rel_path.parent).replace("\\", "/")
         if file_rel_dir == ".":
             file_rel_dir = ""
 
         print(f"  Processing: {rel_path}")
-        preprocess_schema_file(json_file, output_path, schemas_with_scenarios, file_rel_dir)
-    
+        preprocess_schema_file(
+            json_file, output_path, schemas_with_scenarios, file_rel_dir
+        )
+
     print(f"Preprocessing complete. Output in {output_dir}")
 
 
@@ -411,5 +468,5 @@ if __name__ == "__main__":
     script_dir = Path(__file__).parent
     input_schemas = script_dir / "ucp" / "source"
     output_schemas = script_dir / "temp_schemas"
-    
+
     preprocess_schemas(input_schemas, output_schemas)

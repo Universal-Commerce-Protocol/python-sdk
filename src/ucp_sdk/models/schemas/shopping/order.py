@@ -21,7 +21,13 @@ from __future__ import annotations
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
-from .types import adjustment, expectation, fulfillment_event, order_line_item, total
+from .types import (
+    adjustment,
+    expectation,
+    fulfillment_event,
+    order_line_item,
+    total,
+)
 
 
 class PlatformSchema(BaseModel):

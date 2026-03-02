@@ -60,7 +60,7 @@ class Ap2WithMerchantAuthorization(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    merchant_authorization: str | None = None
+    merchant_authorization: MerchantAuthorization | None = None
     """
     Merchant's signature proving checkout terms are authentic.
     """
@@ -74,7 +74,7 @@ class Ap2WithCheckoutMandate(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    checkout_mandate: str | None = None
+    checkout_mandate: CheckoutMandate | None = None
     """
     SD-JWT+kb proving user authorized this checkout.
     """

@@ -4,6 +4,25 @@
 # Ensure we are in the script's directory
 cd "$(dirname "$0")"
 
+# Check if git is installed
+if ! command -v git &> /dev/null; then
+    echo "Error: git not found. Please install git."
+    exit 1
+fi
+
+# UCP Version to use (if provided, use release/$1 branch; otherwise, use main)
+if [ -z "$1" ]; then
+    BRANCH="main"
+    echo "No version specified, cloning main branch..."
+else
+    BRANCH="release/$1"
+    echo "Cloning version $1 (branch: $BRANCH)..."
+fi
+
+# Ensure ucp directory is clean before cloning
+rm -rf ucp
+git clone -b "$BRANCH" --depth 1 https://github.com/Universal-Commerce-Protocol/ucp ucp
+
 # Output directory
 OUTPUT_DIR="src/ucp_sdk/models"
 
@@ -12,7 +31,7 @@ SCHEMA_DIR="ucp/source"
 TEMP_SCHEMA_DIR="temp_schemas"
 
 echo "Preprocessing schemas..."
-python3 preprocess_schemas.py
+uv run python preprocess_schemas.py
 
 echo "Generating Pydantic models from preprocessed schemas..."
 
@@ -27,30 +46,11 @@ fi
 rm -r -f "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# Create ruff configuration for generated code
-cat > "$OUTPUT_DIR/ruff.toml" << 'EOF'
-# Ruff configuration for generated models
-# These are auto-generated files, so we're more lenient with style rules
-
-line-length = 120
-target-version = "py311"
-
-[lint]
-select = ["E", "F", "I"]
-ignore = ["E501"]
-
-[lint.pydocstyle]
-convention = "google"
-
-[lint.per-file-ignores]
-"__init__.py" = ["D104"]
-"*.py" = ["D100", "D101", "D102", "D103", "D200", "D205", "D212"]
-EOF
 
 # Run generation using uv
 # We use --use-schema-description to use descriptions from JSON schema as docstrings
 # We use --field-constraints to include validation constraints (regex, min/max, etc.)
-# Note: Formatters removed as they can hang on large schemas
+# Note: Formatting is done as a post-processing step.
 uv run \
     --link-mode=copy \
     --extra-index-url https://pypi.org/simple python \
@@ -69,8 +69,8 @@ uv run \
     --allow-extra-fields
 
 echo "Formatting generated models..."
-uv run ruff format "$OUTPUT_DIR"
-uv run ruff check --fix --config "$OUTPUT_DIR/ruff.toml" "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"
+uv run ruff format
+uv run ruff check --fix "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"
 
 # Clean up temporary schemas
 rm -rf "$TEMP_SCHEMA_DIR"

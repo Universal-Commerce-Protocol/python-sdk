@@ -41,7 +41,9 @@ class FulfillmentMethodCreateRequest(BaseModel):
     """
     Line item IDs fulfilled via this method.
     """
-    destinations: list[fulfillment_destination.FulfillmentDestination] | None = None
+    destinations: (
+        list[fulfillment_destination.FulfillmentDestination] | None
+    ) = None
     """
     Available destinations. For shipping: addresses. For pickup: retail locations.
     """
@@ -49,7 +51,10 @@ class FulfillmentMethodCreateRequest(BaseModel):
     """
     ID of the selected destination.
     """
-    groups: list[fulfillment_group_create_request.FulfillmentGroupCreateRequest] | None = None
+    groups: (
+        list[fulfillment_group_create_request.FulfillmentGroupCreateRequest]
+        | None
+    ) = None
     """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """

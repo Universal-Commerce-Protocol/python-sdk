@@ -27,7 +27,15 @@ class Total(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    type: Literal["items_discount", "subtotal", "discount", "fulfillment", "tax", "fee", "total"]
+    type: Literal[
+        "items_discount",
+        "subtotal",
+        "discount",
+        "fulfillment",
+        "tax",
+        "fee",
+        "total",
+    ]
     """
     Type of total categorization.
     """

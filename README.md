@@ -55,12 +55,6 @@ This project uses `uv` for dependency management.
 The models are automatically generated from the JSON schemas in the UCP
 Specification.
 
-Clone the UCP main repository in the same folder:
-
-```bash
-git clone https://github.com/Universal-Commerce-Protocol/ucp.git
-```
-
 To regenerate the models:
 
 ```bash
@@ -68,11 +62,17 @@ uv sync
 ./generate_models.sh
 ```
 
-The generated code is automatically formatted using `ruff`.
+By default, it uses the version `release-2026.01.23`. You can specify a different tag or branch as an argument:
+
+```bash
+./generate_models.sh v2026.03.01
+```
+
+The latest version of the [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) is automatically downloaded and used to generate the models. The generated code is automatically formatted using `ruff`.
 
 ## Contributing
 
-We welcome community contributions. See our [Contribution Guide](https://github.com/Universal-Commerce-Protocol/ucp/blob/main/CONTRIBUTING.md) for details.
+We welcome community contributions. See our [Contribution Guide](https://github.com/Universal-Commerce-Protocol/.github/blob/main/CONTRIBUTING.md) for details.
 
 ## License
 

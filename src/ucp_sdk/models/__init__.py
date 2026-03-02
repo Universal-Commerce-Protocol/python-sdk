@@ -16,25 +16,3 @@
 # pylint: disable=all
 # pyformat: disable
 
-from __future__ import annotations
-
-from pydantic import BaseModel, ConfigDict
-
-from . import fulfillment_method_create_request
-
-
-class FulfillmentCreateRequest(BaseModel):
-    """
-    Container for fulfillment methods and availability.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    methods: (
-        list[fulfillment_method_create_request.FulfillmentMethodCreateRequest]
-        | None
-    ) = None
-    """
-    Fulfillment methods for cart items.
-    """

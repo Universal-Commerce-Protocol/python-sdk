@@ -27,7 +27,7 @@ class Item(BaseModel):
     )
     id: str
     """
-    The product identifier, often the SKU, required to resolve the product details associated with this line item. Should be recognized by both the Platform, and the Business.
+    Should be recognized by both the Platform, and the Business. For Google it should match the id provided in the "id" field in the product feed.
     """
     title: str
     """
