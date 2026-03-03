@@ -73,6 +73,9 @@ class FulfillmentMethod(RootModel[fulfillment_method.FulfillmentMethod]):
 
 
 class Fulfillment(RootModel[fulfillment_1.Fulfillment]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: fulfillment_1.Fulfillment
 
 

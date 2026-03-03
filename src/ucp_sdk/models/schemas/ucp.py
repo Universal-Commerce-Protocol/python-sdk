@@ -75,6 +75,9 @@ class Entity(BaseModel):
 
 
 class ResponseCartSchema(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any
 
 

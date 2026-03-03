@@ -68,10 +68,10 @@ uv run \
     --disable-timestamp \
     --use-double-quotes \
     --no-use-annotated \
-    --allow-extra-fields
+    --allow-extra-fields \
+    --custom-template-dir templates \
+    --additional-imports pydantic.ConfigDict
 
-echo "Post-processing generated models..."
-uv run python postprocess_models.py "$OUTPUT_DIR"
 
 echo "Formatting generated models..."
 uv run ruff format

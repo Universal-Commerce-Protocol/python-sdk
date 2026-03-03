@@ -34,6 +34,9 @@ class PaymentHandler(RootModel[Any]):
 
 
 class Version(RootModel[Any]):
+  model_config = ConfigDict(
+    frozen=True,
+  )
   root: Any
 
 
