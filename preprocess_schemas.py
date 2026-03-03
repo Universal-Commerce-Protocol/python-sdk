@@ -18,6 +18,7 @@ from pathlib import Path
 import sys
 
 
+<<<<<<< HEAD
 def flatten_entity(schema, entity_def):
   """Recursively replaces refs to 'ucp.json#/$defs/entity' with the actual schema to flatten inheritance."""
   if isinstance(schema, dict):
@@ -44,6 +45,8 @@ def flatten_entity(schema, entity_def):
       flatten_entity(item, entity_def)
 
 
+=======
+>>>>>>> main
 def get_explicit_ops(schema):
   """Finds ops explicitly mentioned in ucp_request fields."""
   ops = set()
@@ -184,6 +187,7 @@ def generate_variants(schema_file, schema, ops, all_variant_needs):
     print(f"Generated {variant_path}")
 
 
+<<<<<<< HEAD
 def fix_ucp_metadata(schema_dir_path):
   """Ensures all 'ucp' properties point to the generic UcpMetadata union."""
   ucp_path = schema_dir_path / "ucp.json"
@@ -237,6 +241,10 @@ def fix_ucp_metadata(schema_dir_path):
 
 def main():
   schema_dir = "ucp/source/schemas"
+=======
+def main():
+  schema_dir = "ucp/source"
+>>>>>>> main
   if len(sys.argv) > 1:
     schema_dir = sys.argv[1]
 
@@ -245,6 +253,7 @@ def main():
     print(f"Directory {schema_dir} does not exist.")
     return
 
+<<<<<<< HEAD
   # Fix metadata types before processing
   fix_ucp_metadata(schema_dir_path)
 
@@ -257,6 +266,10 @@ def main():
       entity_def = ucp_schema.get("$defs", {}).get("entity", {})
 
   all_files = list(schema_dir_path.rglob("*.json"))
+=======
+  all_files = list(schema_dir_path.rglob("*.json"))
+
+>>>>>>> main
   schemas_cache = {}
   schema_props_refs = {}
   all_variant_needs = {}
@@ -268,6 +281,7 @@ def main():
     try:
       with open(f, "r") as open_f:
         schema = json.load(open_f)
+<<<<<<< HEAD
 
         # Flatten entity references immediately
         if entity_def:
@@ -277,13 +291,18 @@ def main():
         with open(f, "w") as out_f:
           json.dump(schema, out_f, indent=2)
 
+=======
+>>>>>>> main
         if (
           not isinstance(schema, dict)
           or schema.get("type") != "object"
           or "properties" not in schema
         ):
+<<<<<<< HEAD
           # Still save it even if not an object, as it might have been flattened
           schemas_cache[str(f.resolve())] = schema
+=======
+>>>>>>> main
           continue
 
         abs_path = str(f.resolve())

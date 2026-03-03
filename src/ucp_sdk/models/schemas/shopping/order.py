@@ -20,7 +20,11 @@ from __future__ import annotations
 
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
+<<<<<<< HEAD
 from .. import ucp as ucp_1
+=======
+from .._internal import ResponseOrderSchema
+>>>>>>> main
 from .types import (
   adjustment,
   expectation,
@@ -67,7 +71,11 @@ class Order(BaseModel):
   model_config = ConfigDict(
     extra="allow",
   )
+<<<<<<< HEAD
   ucp: ucp_1.UcpMetadata
+=======
+  ucp: ResponseOrderSchema
+>>>>>>> main
   id: str
   """
     Unique order identifier.

@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 from typing import Any
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
@@ -214,3 +215,28 @@ class UcpMetadata(
   """
     Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
     """
+=======
+from ._internal import Base_3 as Base
+from ._internal import BusinessSchema_3 as BusinessSchema
+from ._internal import Entity
+from ._internal import PlatformSchema_3 as PlatformSchema
+from ._internal import (
+  ResponseCheckoutSchema,
+  ResponseOrderSchema,
+  ReverseDomainName,
+  UcpMetadata,
+  Version,
+)
+
+__all__ = [
+  "Base",
+  "BusinessSchema",
+  "Entity",
+  "PlatformSchema",
+  "ResponseCheckoutSchema",
+  "ResponseOrderSchema",
+  "ReverseDomainName",
+  "UcpMetadata",
+  "Version",
+]
+>>>>>>> main

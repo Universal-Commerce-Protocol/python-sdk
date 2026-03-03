@@ -33,9 +33,12 @@ from ..types import (
 
 
 class FulfillmentExtension(RootModel[Any]):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: Any = Field(..., title="Fulfillment Extension")
   """
     Extends Checkout with fulfillment support using methods, destinations, and groups.
@@ -45,30 +48,42 @@ class FulfillmentExtension(RootModel[Any]):
 class FulfillmentAvailableMethod(
   RootModel[fulfillment_available_method.FulfillmentAvailableMethod]
 ):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: fulfillment_available_method.FulfillmentAvailableMethod
 
 
 class FulfillmentOption(RootModel[fulfillment_option.FulfillmentOption]):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: fulfillment_option.FulfillmentOption
 
 
 class FulfillmentGroup(RootModel[fulfillment_group.FulfillmentGroup]):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: fulfillment_group.FulfillmentGroup
 
 
 class FulfillmentMethod(RootModel[fulfillment_method.FulfillmentMethod]):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: fulfillment_method.FulfillmentMethod
 
 

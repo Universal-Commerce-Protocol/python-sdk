@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-<<<<<<< HEAD
 from typing import Any, Literal
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
@@ -26,17 +25,100 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 from .transports import embedded_config
 
 
-class UcpService(RootModel[Any]):
+class UcpCapability(RootModel[Any]):
+  root: Any = Field(..., title="UCP Capability")
+  """
+    Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.
+    """
+
+
+class Base(Entity):
   model_config = ConfigDict(
-    frozen=True,
+    extra="allow",
   )
+  extends: str | None = Field(
+    None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
+  )
+  """
+    Parent capability this extends. Present for extensions, absent for root capabilities.
+    """
+
+
+class PlatformSchema(Base):
+  """Full capability declaration for platform-level discovery. Includes spec/schema URLs for agent fetching.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema(Base):
+  """Capability configuration for business/merchant level. May include business-specific config overrides.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema(Base):
+  """Capability reference in responses. Only name/version required to confirm active capabilities.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PaymentHandler(RootModel[Any]):
+  root: Any = Field(..., title="Payment Handler")
+  """
+    Schema for UCP payment handlers. Handlers define how payment instruments are processed.
+    """
+
+
+class Base_1(Entity):
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class PlatformSchema_1(Base_1):
+  """Platform declaration for discovery profiles. May include partial config state required for discovery.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class BusinessSchema_1(Base_1):
+  """Business declaration for discovery profiles. May include partial config state required for discovery.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class ResponseSchema_1(Base_1):
+  """Handler reference in responses. May include full config state for runtime usage of the handler.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class UcpService(RootModel[Any]):
   root: Any = Field(..., title="UCP Service")
   """
     Service binding for a specific transport. Each transport binding is a separate entry in the service array.
     """
 
 
-class PlatformSchema(BaseModel):
+class PlatformSchema_2(BaseModel):
   model_config = ConfigDict(
     extra="allow",
   )
@@ -64,7 +146,7 @@ class PlatformSchema7(BaseModel):
   transport: Literal["embedded"] = "embedded"
 
 
-class BusinessSchema(BaseModel):
+class BusinessSchema_2(BaseModel):
   model_config = ConfigDict(
     extra="allow",
   )
@@ -93,7 +175,7 @@ class BusinessSchema6(BaseModel):
   config: embedded_config.EmbeddedTransportConfig | None = None
 
 
-class ResponseSchema(BaseModel):
+class ResponseSchema_2(BaseModel):
   model_config = ConfigDict(
     extra="allow",
   )
@@ -122,34 +204,10 @@ class ResponseSchema6(BaseModel):
   config: embedded_config.EmbeddedTransportConfig | None = None
 
 
-class Version(RootModel[Any]):
-  root: Any
-
-
-class Base(BaseModel):
+class Base_2(Entity):
   model_config = ConfigDict(
     extra="allow",
   )
-  version: Version
-  """
-    Entity version in YYYY-MM-DD format.
-    """
-  spec: AnyUrl | None = None
-  """
-    URL to human-readable specification document.
-    """
-  schema_: AnyUrl | None = Field(None, alias="schema")
-  """
-    URL to JSON Schema defining this entity's structure and payloads.
-    """
-  id: str | None = None
-  """
-    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
-    """
-  config: dict[str, Any] | None = None
-  """
-    Entity-specific configuration. Structure defined by each entity's schema.
-    """
   transport: Literal["rest", "mcp", "a2a", "embedded"]
   """
     Transport protocol for this service binding.
@@ -160,7 +218,7 @@ class Base(BaseModel):
     """
 
 
-class PlatformSchema8(Base):
+class PlatformSchema8(Base_2):
   """Full service declaration for platform-level discovery. Different transports require different fields.
   """
 
@@ -169,7 +227,7 @@ class PlatformSchema8(Base):
   )
 
 
-class PlatformSchema9(PlatformSchema, PlatformSchema8):
+class PlatformSchema9(PlatformSchema_2, PlatformSchema8):
   """Full service declaration for platform-level discovery. Different transports require different fields.
   """
 
@@ -210,12 +268,8 @@ class PlatformSchema3(
     PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
   ]
 ):
-  model_config = ConfigDict(
-    frozen=True,
-  )
+  """Full service declaration for platform-level discovery. Different transports require different fields.
   """
-    Full service declaration for platform-level discovery. Different transports require different fields.
-    """
 
   root: (
     PlatformSchema9 | PlatformSchema10 | PlatformSchema11 | PlatformSchema12
@@ -225,7 +279,7 @@ class PlatformSchema3(
     """
 
 
-class BusinessSchema7(Base):
+class BusinessSchema7(Base_2):
   """Service binding for business/merchant configuration. May override platform endpoints.
   """
 
@@ -234,7 +288,7 @@ class BusinessSchema7(Base):
   )
 
 
-class BusinessSchema8(BusinessSchema, BusinessSchema7):
+class BusinessSchema8(BusinessSchema_2, BusinessSchema7):
   """Service binding for business/merchant configuration. May override platform endpoints.
   """
 
@@ -275,12 +329,8 @@ class BusinessSchema2(
     BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
   ]
 ):
-  model_config = ConfigDict(
-    frozen=True,
-  )
+  """Service binding for business/merchant configuration. May override platform endpoints.
   """
-    Service binding for business/merchant configuration. May override platform endpoints.
-    """
 
   root: (
     BusinessSchema8 | BusinessSchema9 | BusinessSchema10 | BusinessSchema11
@@ -290,7 +340,7 @@ class BusinessSchema2(
     """
 
 
-class ResponseSchema7(Base):
+class ResponseSchema7(Base_2):
   """Service binding in API responses. Includes per-resource transport configuration via typed config.
   """
 
@@ -299,7 +349,7 @@ class ResponseSchema7(Base):
   )
 
 
-class ResponseSchema8(ResponseSchema, ResponseSchema7):
+class ResponseSchema8(ResponseSchema_2, ResponseSchema7):
   """Service binding in API responses. Includes per-resource transport configuration via typed config.
   """
 
@@ -340,12 +390,8 @@ class ResponseSchema2(
     ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
   ]
 ):
-  model_config = ConfigDict(
-    frozen=True,
-  )
+  """Service binding in API responses. Includes per-resource transport configuration via typed config.
   """
-    Service binding in API responses. Includes per-resource transport configuration via typed config.
-    """
 
   root: (
     ResponseSchema8 | ResponseSchema9 | ResponseSchema10 | ResponseSchema11
@@ -353,78 +399,151 @@ class ResponseSchema2(
   """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
-=======
-from ._internal import Base_2 as Base
-from ._internal import (
-  BusinessSchema2,
-  BusinessSchema4,
-  BusinessSchema5,
-  BusinessSchema6,
-  BusinessSchema7,
-  BusinessSchema8,
-  BusinessSchema9,
-  BusinessSchema10,
-  BusinessSchema11,
-)
-from ._internal import BusinessSchema_2 as BusinessSchema
-from ._internal import (
-  PlatformSchema3,
-  PlatformSchema5,
-  PlatformSchema6,
-  PlatformSchema7,
-  PlatformSchema8,
-  PlatformSchema9,
-  PlatformSchema10,
-  PlatformSchema11,
-  PlatformSchema12,
-)
-from ._internal import PlatformSchema_2 as PlatformSchema
-from ._internal import (
-  ResponseSchema2,
-  ResponseSchema4,
-  ResponseSchema5,
-  ResponseSchema6,
-  ResponseSchema7,
-  ResponseSchema8,
-  ResponseSchema9,
-  ResponseSchema10,
-  ResponseSchema11,
-)
-from ._internal import ResponseSchema_2 as ResponseSchema
-from ._internal import UcpService
 
-__all__ = [
-  "Base",
-  "BusinessSchema",
-  "BusinessSchema10",
-  "BusinessSchema11",
-  "BusinessSchema2",
-  "BusinessSchema4",
-  "BusinessSchema5",
-  "BusinessSchema6",
-  "BusinessSchema7",
-  "BusinessSchema8",
-  "BusinessSchema9",
-  "PlatformSchema",
-  "PlatformSchema10",
-  "PlatformSchema11",
-  "PlatformSchema12",
-  "PlatformSchema3",
-  "PlatformSchema5",
-  "PlatformSchema6",
-  "PlatformSchema7",
-  "PlatformSchema8",
-  "PlatformSchema9",
-  "ResponseSchema",
-  "ResponseSchema10",
-  "ResponseSchema11",
-  "ResponseSchema2",
-  "ResponseSchema4",
-  "ResponseSchema5",
-  "ResponseSchema6",
-  "ResponseSchema7",
-  "ResponseSchema8",
-  "ResponseSchema9",
-  "UcpService",
-]
->>>>>>> main
+
+class UcpMetadata(RootModel[Any]):
+  root: Any = Field(..., title="UCP Metadata")
+  """
+    Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
+    """
+
+
+class Version(RootModel[str]):
+  root: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
+  """
+    UCP version in YYYY-MM-DD format.
+    """
+
+
+class ReverseDomainName(RootModel[str]):
+  root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+  """
+    Reverse-domain identifier (e.g., com.google.pay, dev.ucp.shopping.checkout)
+    """
+
+
+class Entity(BaseModel):
+  """Shared foundation for all UCP entities.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  version: Version
+  """
+    Entity version in YYYY-MM-DD format.
+    """
+  spec: AnyUrl | None = None
+  """
+    URL to human-readable specification document.
+    """
+  schema_: AnyUrl | None = Field(None, alias="schema")
+  """
+    URL to JSON Schema defining this entity's structure and payloads.
+    """
+  id: str | None = None
+  """
+    Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
+    """
+  config: dict[str, Any] | None = None
+  """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+
+
+class Base_3(BaseModel):
+  """Base UCP metadata with shared properties for all schema types.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  version: Version
+  services: dict[ReverseDomainName, list[Base_2]] | None = None
+  """
+    Service registry keyed by reverse-domain name.
+    """
+  capabilities: dict[ReverseDomainName, list[Base]] | None = None
+  """
+    Capability registry keyed by reverse-domain name.
+    """
+  payment_handlers: dict[ReverseDomainName, list[Base_1]] | None = None
+  """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class PlatformSchema_3(Base_3):
+  """Full UCP metadata for platform-level configuration. Hosted at a URI advertised by the platform in request headers.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  services: dict[ReverseDomainName, list[PlatformSchema3]]
+  """
+    Service registry keyed by reverse-domain name.
+    """
+  capabilities: dict[ReverseDomainName, list[PlatformSchema]] | None = None
+  """
+    Capability registry keyed by reverse-domain name.
+    """
+  payment_handlers: dict[ReverseDomainName, list[PlatformSchema_1]]
+  """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class BusinessSchema_3(Base_3):
+  """UCP metadata for business/merchant-level configuration. Subset of platform schema with business-specific settings.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  services: dict[ReverseDomainName, list[BusinessSchema2]]
+  """
+    Service registry keyed by reverse-domain name.
+    """
+  capabilities: dict[ReverseDomainName, list[BusinessSchema]] | None = None
+  """
+    Capability registry keyed by reverse-domain name.
+    """
+  payment_handlers: dict[ReverseDomainName, list[BusinessSchema_1]]
+  """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseCheckoutSchema(Base_3):
+  """UCP metadata for checkout responses.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  services: dict[ReverseDomainName, list[ResponseSchema2]] | None = None
+  """
+    Service registry keyed by reverse-domain name.
+    """
+  capabilities: dict[ReverseDomainName, list[ResponseSchema]] | None = None
+  """
+    Capability registry keyed by reverse-domain name.
+    """
+  payment_handlers: dict[ReverseDomainName, list[ResponseSchema_1]]
+  """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseOrderSchema(Base_3):
+  """UCP metadata for order responses. No payment handlers needed post-purchase.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  capabilities: dict[ReverseDomainName, list[ResponseSchema]] | None = None
+  """
+    Capability registry keyed by reverse-domain name.
+    """

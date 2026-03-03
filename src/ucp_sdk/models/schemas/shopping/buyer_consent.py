@@ -27,9 +27,12 @@ from .types.buyer import Buyer as Buyer_1
 
 
 class BuyerConsentExtension(RootModel[Any]):
+<<<<<<< HEAD
   model_config = ConfigDict(
     frozen=True,
   )
+=======
+>>>>>>> main
   root: Any = Field(..., title="Buyer Consent Extension")
   """
     Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.

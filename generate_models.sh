@@ -30,7 +30,11 @@ git clone -b "$BRANCH" --depth 1 https://github.com/Universal-Commerce-Protocol/
 OUTPUT_DIR="src/ucp_sdk/models/schemas"
 
 # Schema directory (relative to this script)
+<<<<<<< HEAD
 SCHEMA_DIR="ucp/source/schemas"
+=======
+SCHEMA_DIR="ucp/source"
+>>>>>>> main
 
 echo "Preprocessing schemas..."
 uv run python preprocess_schemas.py
@@ -70,9 +74,12 @@ uv run \
     --no-use-annotated \
     --allow-extra-fields
 
+<<<<<<< HEAD
 echo "Post-processing generated models..."
 uv run python postprocess_models.py "$OUTPUT_DIR"
 
+=======
+>>>>>>> main
 echo "Formatting generated models..."
 uv run ruff format
 uv run ruff check --fix "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"

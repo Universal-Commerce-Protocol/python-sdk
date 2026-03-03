@@ -20,22 +20,11 @@ from __future__ import annotations
 
 from typing import Any
 
-<<<<<<< HEAD
-<<<<<<<< HEAD:src/ucp_sdk/models/schemas/shopping/fulfillment/dev/ucp/shopping.py
-from pydantic import ConfigDict, RootModel
-========
-from pydantic import RootModel
->>>>>>>> main:src/ucp_sdk/models/handlers/tokenization/openapi.py
+from pydantic import Field, RootModel
 
 
-class Fulfillment(RootModel[Any]):
-  model_config = ConfigDict(
-    frozen=True,
-  )
-=======
-from pydantic import RootModel
-
-
-class Fulfillment(RootModel[Any]):
->>>>>>> main
-  root: Any
+class EmbeddedProtocol(RootModel[Any]):
+  root: Any = Field(..., title="Embedded Protocol")
+  """
+    Embedded Protocol (EP) methods for UCP capabilities. Methods are sent from Merchant to Host via postMessage/JSON-RPC 2.0. Method prefixes indicate capability scope: ec.* (checkout). Future capabilities may define additional prefixes (e.g., eo.* for order).
+    """
