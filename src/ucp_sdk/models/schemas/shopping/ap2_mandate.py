@@ -121,3 +121,19 @@ class Checkout(Checkout_1):
     extra="allow",
   )
   ap2: Ap2 | None = None
+
+
+class Ap2CompleteRequest(Ap2WithCheckoutMandate):
+  """Legacy completion payload alias used by conformance and samples."""
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+
+
+class CheckoutResponseWithAp2(Checkout):
+  """Legacy response alias used by samples."""
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
