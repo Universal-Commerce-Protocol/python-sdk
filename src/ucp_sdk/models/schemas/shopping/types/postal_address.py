@@ -57,10 +57,6 @@ class PostalAddress(BaseModel):
   """
     Optional. Last name of the contact associated with the address.
     """
-  full_name: str | None = None
-  """
-    Optional. Full name of the contact associated with the address (if first_name or last_name fields are present they take precedence).
-    """
   phone_number: str | None = None
   """
     Optional. Phone number of the contact associated with the address.

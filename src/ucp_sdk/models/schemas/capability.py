@@ -18,6 +18,18 @@
 
 from __future__ import annotations
 
-from .._internal import Base, Discovery, Response, UcpCapability
+from ._internal import (
+  Base,
+  BusinessSchema,
+  PlatformSchema,
+  ResponseSchema,
+  UcpCapability,
+)
 
-__all__ = ["Base", "Discovery", "Response", "UcpCapability"]
+__all__ = [
+  "Base",
+  "BusinessSchema",
+  "PlatformSchema",
+  "ResponseSchema",
+  "UcpCapability",
+]

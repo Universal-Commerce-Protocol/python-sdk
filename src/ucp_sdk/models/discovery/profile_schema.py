@@ -19,12 +19,16 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict
-from ..schemas.shopping.types import payment_handler_resp
-from .._internal import DiscoveryProfile
+
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+from ..schemas._internal import Base_3, BusinessSchema_3, PlatformSchema_3
 
 
 class SigningKey(BaseModel):
+  """Public key for signature verification in JWK format.
+  """
+
   model_config = ConfigDict(
     extra="allow",
   )
@@ -66,30 +70,44 @@ class SigningKey(BaseModel):
     """
 
 
-class Payment(BaseModel):
-  """Payment configuration containing handlers."""
+class Base(BaseModel):
+  """Base discovery profile with shared properties for all profile types.
+  """
 
   model_config = ConfigDict(
     extra="allow",
   )
-  handlers: list[payment_handler_resp.PaymentHandlerResponse] | None = None
-  """
-    Payment handler definitions that describe how instruments can be collected
-    """
-
-
-class UcpDiscoveryProfile(BaseModel):
-  """Schema for UCP discovery profile returned from /.well-known/ucp."""
-
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  ucp: DiscoveryProfile
-  payment: Payment | None = None
-  """
-    Payment configuration containing handlers
-    """
+  ucp: Base_3
   signing_keys: list[SigningKey] | None = None
   """
     Public keys for signature verification (JWK format). Used to verify signed responses, webhooks, and other authenticated messages from this party.
+    """
+
+
+class PlatformProfile(Base):
+  """Full discovery profile for platforms. Exposes complete service, capability, and payment handler registries.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: PlatformSchema_3 | None = None
+
+
+class BusinessProfile(Base):
+  """Discovery profile for businesses/merchants. Subset of platform profile with business-specific configuration.
+  """
+
+  model_config = ConfigDict(
+    extra="allow",
+  )
+  ucp: BusinessSchema_3 | None = None
+
+
+class UcpDiscoveryProfile(RootModel[PlatformProfile | BusinessProfile]):
+  root: PlatformProfile | BusinessProfile = Field(
+    ..., title="UCP Discovery Profile"
+  )
+  """
+    Schema for UCP discovery profiles. Business profiles are hosted at /.well-known/ucp; platform profiles are hosted at URIs advertised in request headers.
     """

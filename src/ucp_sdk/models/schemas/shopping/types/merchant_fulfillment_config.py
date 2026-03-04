@@ -18,12 +18,14 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
 
 
 class AllowsMultiDestination(BaseModel):
-  """Permits multiple destinations per method type."""
+  """Permits multiple destinations per method type.
+  """
 
   model_config = ConfigDict(
     extra="allow",
@@ -39,7 +41,8 @@ class AllowsMultiDestination(BaseModel):
 
 
 class MerchantFulfillmentConfig(BaseModel):
-  """Merchant's fulfillment configuration."""
+  """Merchant's fulfillment configuration.
+  """
 
   model_config = ConfigDict(
     extra="allow",

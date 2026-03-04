@@ -18,8 +18,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from . import postal_address
 
 
@@ -38,7 +40,8 @@ class LineItem(BaseModel):
 
 
 class Expectation(BaseModel):
-  """Buyer-facing fulfillment expectation representing logical groupings of items (e.g., 'package'). Can be split, merged, or adjusted post-order to set buyer expectations for when/how items arrive."""
+  """Buyer-facing fulfillment expectation representing logical groupings of items (e.g., 'package'). Can be split, merged, or adjusted post-order to set buyer expectations for when/how items arrive.
+  """
 
   model_config = ConfigDict(
     extra="allow",

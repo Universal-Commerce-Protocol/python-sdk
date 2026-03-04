@@ -18,13 +18,17 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
-from . import item_resp, total_resp
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from . import item as item_1
+from . import total as total_1
 
 
 class Quantity(BaseModel):
-  """Quantity tracking. Both total and fulfilled are derived from events."""
+  """Quantity tracking. Both total and fulfilled are derived from events.
+  """
 
   model_config = ConfigDict(
     extra="allow",
@@ -47,7 +51,7 @@ class OrderLineItem(BaseModel):
   """
     Line item identifier.
     """
-  item: item_resp.ItemResponse
+  item: item_1.Item
   """
     Product data (id, title, price, image_url).
     """
@@ -55,7 +59,7 @@ class OrderLineItem(BaseModel):
   """
     Quantity tracking. Both total and fulfilled are derived from events.
     """
-  totals: list[total_resp.TotalResponse]
+  totals: list[total_1.Total]
   """
     Line item totals breakdown.
     """

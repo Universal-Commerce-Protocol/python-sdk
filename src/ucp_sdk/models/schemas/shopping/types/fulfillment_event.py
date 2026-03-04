@@ -36,7 +36,8 @@ class LineItem(BaseModel):
 
 
 class FulfillmentEvent(BaseModel):
-  """Append-only fulfillment event representing an actual shipment. References line items by ID."""
+  """Append-only fulfillment event representing an actual shipment. References line items by ID.
+  """
 
   model_config = ConfigDict(
     extra="allow",

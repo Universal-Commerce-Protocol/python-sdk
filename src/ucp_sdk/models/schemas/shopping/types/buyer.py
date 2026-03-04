@@ -33,10 +33,6 @@ class Buyer(BaseModel):
   """
     Last name of the buyer.
     """
-  full_name: str | None = None
-  """
-    Optional, buyer's full name (if first_name or last_name fields are present they take precedence).
-    """
   email: str | None = None
   """
     Email of the buyer.
