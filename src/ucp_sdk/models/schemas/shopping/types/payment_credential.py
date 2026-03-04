@@ -18,20 +18,18 @@
 
 from __future__ import annotations
 
-from pydantic import Field, RootModel
-from . import card_credential, token_credential_resp
+from pydantic import BaseModel, ConfigDict
 
 
-class PaymentCredential(
-  RootModel[
-    token_credential_resp.TokenCredentialResponse
-    | card_credential.CardCredential
-  ]
-):
-  root: (
-    token_credential_resp.TokenCredentialResponse
-    | card_credential.CardCredential
-  ) = Field(..., title="Payment Credential")
-  """
-    Container for sensitive payment data. Use the specific schema matching the 'type' field.
+class PaymentCredential(BaseModel):
+    """
+    The base definition for any payment credential. Handlers define specific credential types.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
+    The credential type discriminator. Specific schemas will constrain this to a constant value.
     """

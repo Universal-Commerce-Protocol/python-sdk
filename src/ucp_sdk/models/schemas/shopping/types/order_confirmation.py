@@ -22,16 +22,18 @@ from pydantic import AnyUrl, BaseModel, ConfigDict
 
 
 class OrderConfirmation(BaseModel):
-  """Order details available at the time of checkout completion."""
+    """
+    Order details available at the time of checkout completion.
+    """
 
-  model_config = ConfigDict(
-    extra="allow",
-  )
-  id: str
-  """
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
     Unique order identifier.
     """
-  permalink_url: AnyUrl
-  """
+    permalink_url: AnyUrl
+    """
     Permalink to access the order on merchant site.
     """
