@@ -1,0 +1,5 @@
+node_modules/
+.ruff_cache/
+__pycache__/
+.venv/
+*.py[cod]
