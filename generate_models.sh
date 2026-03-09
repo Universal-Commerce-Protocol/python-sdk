@@ -4,13 +4,38 @@
 # Ensure we are in the script's directory
 cd "$(dirname "$0")" || exit
 
+# Add ~/.local/bin to PATH for uv
+export PATH="$HOME/.local/bin:$PATH"
+
+# Check if git is installed
+if ! command -v git &> /dev/null; then
+    echo "Error: git not found. Please install git."
+    exit 1
+fi
+
+# UCP Version to use (if provided, use release/$1 branch; otherwise, use main)
+if [ -z "$1" ]; then
+    BRANCH="main"
+    echo "No version specified, cloning main branch..."
+else
+    BRANCH="release/$1"
+    echo "Cloning version $1 (branch: $BRANCH)..."
+fi
+
+# Ensure ucp directory is clean before cloning
+rm -rf ucp
+git clone -b "$BRANCH" --depth 1 https://github.com/Universal-Commerce-Protocol/ucp ucp
+
 # Output directory
-OUTPUT_DIR="src/ucp_sdk/models"
+OUTPUT_DIR="src/ucp_sdk/models/schemas"
 
 # Schema directory (relative to this script)
-SCHEMA_DIR="../../spec/"
+SCHEMA_DIR="ucp/source/schemas"
 
-echo "Generating Pydantic models from $SCHEMA_DIR..."
+echo "Preprocessing schemas..."
+uv run python preprocess_schemas.py
+
+echo "Generating Pydantic models from preprocessed schemas..."
 
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
@@ -23,9 +48,11 @@ fi
 rm -r -f "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
+
 # Run generation using uv
 # We use --use-schema-description to use descriptions from JSON schema as docstrings
 # We use --field-constraints to include validation constraints (regex, min/max, etc.)
+# Note: Formatting is done as a post-processing step.
 uv run \
     --link-mode=copy \
     --extra-index-url https://pypi.org/simple python \
@@ -42,6 +69,13 @@ uv run \
     --use-double-quotes \
     --no-use-annotated \
     --allow-extra-fields \
-    --formatters ruff-format ruff-check
+    --custom-template-dir templates \
+    --additional-imports pydantic.ConfigDict
+
+
+echo "Formatting generated models..."
+uv run ruff format
+uv run ruff check --fix "$OUTPUT_DIR" 2>&1 | grep -E "^(All checks passed|Fixed|Found)" || echo "Formatting complete"
+
 
 echo "Done. Models generated in $OUTPUT_DIR"

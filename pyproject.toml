@@ -1,10 +1,12 @@
 [project]
 name = "ucp-sdk"
-version = "0.1.0"
+version = "0.0.3"
 description = "UCP Python SDK"
 readme = "README.md"
+license-files = ["LICENSE"]
 authors = [
-    { name = "Florin Iucha", email = "fiucha@google.com" }
+    { name = "Florin Iucha", email = "fiucha@google.com" },
+    { name = "Federico D'Amato", email = "damaz@google.com" },
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -47,17 +49,20 @@ custom-file-header = """
 
 [tool.ruff]
 line-length = 80
-indent-width = 2
+indent-width = 4
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-docstring-code-format = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "C4", "SIM", "N", "UP", "D", "PTH", "T20"]
+ignore = ["D212", "D200"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
