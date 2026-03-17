@@ -26,8 +26,8 @@
 
 This repository contains the Python SDK for the
 [Universal Commerce Protocol (UCP)](https://ucp.dev). It provides Pydantic
-models for UCP schemas, making it easy to build UCP-compliant applications
-in Python.
+models for UCP schemas, making it easy to build UCP-compliant applications in
+Python.
 
 ## Installation
 
@@ -69,7 +69,9 @@ The generated code is automatically formatted using `ruff`.
 
 ## Contributing
 
-We welcome community contributions. See our [Contribution Guide](https://github.com/Universal-Commerce-Protocol/.github/blob/main/CONTRIBUTING.md) for details.
+We welcome community contributions. See our
+[Contribution Guide](https://github.com/Universal-Commerce-Protocol/.github/blob/main/CONTRIBUTING.md)
+for details.
 
 ## License
 
