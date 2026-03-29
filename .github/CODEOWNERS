@@ -9,8 +9,8 @@
 /.pre-commit-config.yaml  @Universal-Commerce-Protocol/devops-maintainers @Universal-Commerce-Protocol/maintainers @Universal-Commerce-Protocol/tech-council @Universal-Commerce-Protocol/governance-council
 /pyproject.toml           @Universal-Commerce-Protocol/devops-maintainers @Universal-Commerce-Protocol/maintainers @Universal-Commerce-Protocol/tech-council @Universal-Commerce-Protocol/governance-council
 /uv.lock                  @Universal-Commerce-Protocol/devops-maintainers @Universal-Commerce-Protocol/maintainers @Universal-Commerce-Protocol/tech-council @Universal-Commerce-Protocol/governance-council
+/.gemini/                 @Universal-Commerce-Protocol/devops-maintainers @Universal-Commerce-Protocol/maintainers @Universal-Commerce-Protocol/tech-council @Universal-Commerce-Protocol/governance-council
 
 # Governance
 /LICENSE                 @Universal-Commerce-Protocol/governance-council
 /.github/CODEOWNERS      @Universal-Commerce-Protocol/governance-council
-/.gemini/                 @Universal-Commerce-Protocol/devops-maintainers
