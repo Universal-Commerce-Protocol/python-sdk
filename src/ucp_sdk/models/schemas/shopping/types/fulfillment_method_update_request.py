@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from . import (
@@ -37,6 +39,10 @@ class FulfillmentMethodUpdateRequest(BaseModel):
     id: str
     """
     Unique fulfillment method identifier.
+    """
+    type: Literal["shipping", "pickup"]
+    """
+    Fulfillment method type.
     """
     line_item_ids: list[str]
     """

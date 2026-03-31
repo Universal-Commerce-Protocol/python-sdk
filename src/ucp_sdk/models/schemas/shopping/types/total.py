@@ -18,32 +18,25 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from . import amount as amount_1
 
 
 class Total(BaseModel):
+    """
+    A cost breakdown entry with a category, amount, and optional display text.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
-    type: Literal[
-        "items_discount",
-        "subtotal",
-        "discount",
-        "fulfillment",
-        "tax",
-        "fee",
-        "total",
-    ]
+    type: str
     """
-    Type of total categorization.
+    Cost category. Well-known values: subtotal, items_discount, discount, fulfillment, tax, fee, total. Businesses MAY use additional values.
     """
     display_text: str | None = None
     """
     Text to display against the amount. Should reflect appropriate method (e.g., 'Shipping', 'Delivery').
     """
-    amount: int = Field(..., ge=0)
-    """
-    If type == total, sums subtotal - discount + fulfillment + tax + fee. Should be >= 0. Amount in minor (cents) currency units.
-    """
+    amount: amount_1.Amount

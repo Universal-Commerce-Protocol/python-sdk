@@ -25,6 +25,7 @@ from .types import (
     buyer_update_request,
     context_update_request,
     line_item_update_request,
+    signals_update_request,
 )
 
 
@@ -49,4 +50,5 @@ class CheckoutUpdateRequest(BaseModel):
     Representation of the buyer.
     """
     context: context_update_request.ContextUpdateRequest | None = None
+    signals: signals_update_request.SignalsUpdateRequest | None = None
     payment: payment_update_request.PaymentUpdateRequest | None = None

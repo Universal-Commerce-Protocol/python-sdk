@@ -21,13 +21,8 @@ from __future__ import annotations
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
-from .types import (
-    adjustment,
-    expectation,
-    fulfillment_event,
-    order_line_item,
-    total,
-)
+from .types import adjustment, expectation, fulfillment_event, order_line_item
+from .types import totals as totals_1
 
 
 class PlatformSchema(BaseModel):
@@ -95,7 +90,11 @@ class Order(BaseModel):
     """
     Append-only event log of money movements (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
     """
-    totals: list[total.Total]
+    currency: str | None = None
+    """
+    ISO 4217 currency code. MUST match the currency from the originating checkout session.
+    """
+    totals: totals_1.Totals
     """
     Different totals for the order.
     """

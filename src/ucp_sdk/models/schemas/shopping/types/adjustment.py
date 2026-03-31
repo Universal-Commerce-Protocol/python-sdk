@@ -22,6 +22,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from . import amount as amount_1
+
 
 class LineItem(BaseModel):
     model_config = ConfigDict(
@@ -65,9 +67,9 @@ class Adjustment(BaseModel):
     """
     Which line items and quantities are affected (optional).
     """
-    amount: int | None = None
+    amount: amount_1.Amount | None = None
     """
-    Amount in minor units (cents) for refunds, credits, price adjustments (optional).
+    Amount in ISO 4217 minor units for refunds, credits, or price adjustments.
     """
     description: str | None = None
     """

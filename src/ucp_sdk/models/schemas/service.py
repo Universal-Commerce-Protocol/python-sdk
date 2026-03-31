@@ -45,6 +45,10 @@ class Config(BaseModel):
     """
     Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
     """
+    color_scheme: list[Literal["light", "dark"]] | None = None
+    """
+    Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list.
+    """
 
 
 class Version(RootModel[Any]):
@@ -126,7 +130,7 @@ class PlatformSchema(BaseModel):
     """
 
 
-class PlatformSchema5(BaseModel):
+class PlatformSchema6(BaseModel):
     """
     Full service declaration for platform-level discovery. Different transports require different fields.
     """
@@ -164,7 +168,7 @@ class PlatformSchema5(BaseModel):
     """
 
 
-class PlatformSchema6(BaseModel):
+class PlatformSchema7(BaseModel):
     """
     Full service declaration for platform-level discovery. Different transports require different fields.
     """
@@ -202,7 +206,7 @@ class PlatformSchema6(BaseModel):
     """
 
 
-class PlatformSchema7(BaseModel):
+class PlatformSchema8(BaseModel):
     """
     Full service declaration for platform-level discovery. Different transports require different fields.
     """
@@ -240,16 +244,16 @@ class PlatformSchema7(BaseModel):
     """
 
 
-class PlatformSchema3(
+class PlatformSchema4(
     RootModel[
-        PlatformSchema | PlatformSchema5 | PlatformSchema6 | PlatformSchema7
+        PlatformSchema | PlatformSchema6 | PlatformSchema7 | PlatformSchema8
     ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
     root: (
-        PlatformSchema | PlatformSchema5 | PlatformSchema6 | PlatformSchema7
+        PlatformSchema | PlatformSchema6 | PlatformSchema7 | PlatformSchema8
     ) = Field(..., title="Service (Platform Schema)")
     """
     Full service declaration for platform-level discovery. Different transports require different fields.
@@ -294,7 +298,7 @@ class BusinessSchema(BaseModel):
     """
 
 
-class BusinessSchema4(BaseModel):
+class BusinessSchema5(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -332,7 +336,7 @@ class BusinessSchema4(BaseModel):
     """
 
 
-class BusinessSchema5(BaseModel):
+class BusinessSchema6(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -370,7 +374,7 @@ class BusinessSchema5(BaseModel):
     """
 
 
-class BusinessSchema6(BaseModel):
+class BusinessSchema7(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -408,16 +412,16 @@ class BusinessSchema6(BaseModel):
     """
 
 
-class BusinessSchema2(
+class BusinessSchema3(
     RootModel[
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
+        BusinessSchema | BusinessSchema5 | BusinessSchema6 | BusinessSchema7
     ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
     root: (
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
+        BusinessSchema | BusinessSchema5 | BusinessSchema6 | BusinessSchema7
     ) = Field(..., title="Service (Business Schema)")
     """
     Service binding for business/merchant configuration. May override platform endpoints.

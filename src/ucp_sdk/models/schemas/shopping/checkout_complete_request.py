@@ -18,9 +18,12 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import payment_complete_request
+from .types import signals_complete_request
 
 
 class CheckoutCompleteRequest(BaseModel):
@@ -31,4 +34,9 @@ class CheckoutCompleteRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
+    signals: signals_complete_request.SignalsCompleteRequest | None = None
+    risk_signals: dict[str, Any] | None = Field(None, deprecated=True)
+    """
+    Deprecated. Use signals instead. Will be removed in the next version.
+    """
     payment: payment_complete_request.PaymentCompleteRequest
