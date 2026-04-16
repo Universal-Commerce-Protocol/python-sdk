@@ -56,8 +56,6 @@ UCP schemas. Import models from `ucp_sdk.models.schemas`:
 
 ```python
 from ucp_sdk.models.schemas.shopping.checkout import Checkout
-from ucp_sdk.models.schemas.shopping.types.line_item import LineItem
-from ucp_sdk.models.schemas.shopping.types.total import Total
 
 # Parse a UCP checkout response
 checkout = Checkout.model_validate(checkout_data)
@@ -84,15 +82,15 @@ All models support Pydantic validation and serialization:
 
 ```python
 from pydantic import ValidationError
+from ucp_sdk.models.schemas.shopping.checkout import Checkout
 
 # Validate data against UCP schemas
 try:
     checkout = Checkout.model_validate(data)
+    # Serialize to JSON-compatible dict
+    checkout_dict = checkout.model_dump(exclude_none=True)
 except ValidationError as e:
     print(e.errors())
-
-# Serialize to JSON-compatible dict
-checkout_dict = checkout.model_dump(exclude_none=True)
 ```
 
 ## Development
