@@ -33,6 +33,10 @@ class OrderConfirmation(BaseModel):
     """
     Unique order identifier.
     """
+    label: str | None = None
+    """
+    Human-readable label for identifying the order. MUST only be provided by the business.
+    """
     permalink_url: AnyUrl
     """
     Permalink to access the order on merchant site.

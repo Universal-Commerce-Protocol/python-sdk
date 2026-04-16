@@ -20,8 +20,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
+from .available_payment_instrument import AvailablePaymentInstrument
 from .payment_instrument import PaymentInstrument
 
 
@@ -57,6 +58,28 @@ class Display(BaseModel):
     """
     An optional URI to a rich image representing the card (e.g., card art provided by the issuer).
     """
+
+
+class Constraints(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    brands: list[str] | None = Field(None, min_length=1)
+    """
+    Limit to specific card brands (e.g., ['visa', 'mastercard', 'amex']).
+    """
+
+
+class AvailableCardPaymentInstrument(AvailablePaymentInstrument):
+    """
+    Declares card instrument availability with card-specific constraints.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["card"] = "card"
+    constraints: Constraints | None = None
 
 
 class CardPaymentInstrument(PaymentInstrument):

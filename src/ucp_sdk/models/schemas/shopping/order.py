@@ -25,9 +25,10 @@ from .types import (
     adjustment,
     expectation,
     fulfillment_event,
+    message,
     order_line_item,
-    total,
 )
+from .types import totals as totals_1
 
 
 class PlatformSchema(BaseModel):
@@ -64,7 +65,7 @@ class Fulfillment(BaseModel):
 
 class Order(BaseModel):
     """
-    Order schema with immutable line items, buyer-facing fulfillment expectations, and append-only event logs.
+    Order schema with line items, buyer-facing fulfillment expectations, and event logs.
     """
 
     model_config = ConfigDict(
@@ -74,6 +75,10 @@ class Order(BaseModel):
     id: str
     """
     Unique order identifier.
+    """
+    label: str | None = None
+    """
+    Human-readable label for identifying the order. MUST only be provided by the business.
     """
     checkout_id: str
     """
@@ -85,7 +90,7 @@ class Order(BaseModel):
     """
     line_items: list[order_line_item.OrderLineItem]
     """
-    Immutable line items — source of truth for what was ordered.
+    Line items representing what was purchased — can change post-order via edits or exchanges.
     """
     fulfillment: Fulfillment
     """
@@ -93,9 +98,17 @@ class Order(BaseModel):
     """
     adjustments: list[adjustment.Adjustment] | None = None
     """
-    Append-only event log of money movements (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
+    Post-order events (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
     """
-    totals: list[total.Total]
+    currency: str
+    """
+    ISO 4217 currency code. MUST match the currency from the originating checkout session.
+    """
+    totals: totals_1.Totals
     """
     Different totals for the order.
+    """
+    messages: list[message.Message] | None = None
+    """
+    Business outcome messages (errors, warnings, informational). Present when the business needs to communicate status or issues to the platform.
     """
