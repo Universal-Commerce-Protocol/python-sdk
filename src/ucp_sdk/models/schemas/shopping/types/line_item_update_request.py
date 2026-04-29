@@ -31,7 +31,7 @@ class LineItemUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
+    id: str | None = None
     item: item_update_request.ItemUpdateRequest
     quantity: int = Field(..., ge=1)
     """
