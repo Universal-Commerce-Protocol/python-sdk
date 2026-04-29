@@ -37,13 +37,13 @@ Python.
 
 ## Installation
 
-Install from PyPI:
+To use this SDK in your own project, install it from PyPI:
 
 ```bash
 pip install ucp-sdk
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
+Or, if you are managing your project with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv add ucp-sdk
@@ -51,8 +51,8 @@ uv add ucp-sdk
 
 ## Usage
 
-The SDK provides typed [Pydantic v2](https://docs.pydantic.dev/) models for all
-UCP schemas. Import models from `ucp_sdk.models.schemas`:
+The SDK provides typed Pydantic v2 models for all UCP schemas. Import models
+from `ucp_sdk.models.schemas`:
 
 ```python
 from ucp_sdk.models.schemas.shopping.checkout import Checkout
@@ -69,12 +69,12 @@ for item in checkout.line_items:
 
 ### Available model packages
 
-| Package | Description |
-|---------|-------------|
-| `ucp_sdk.models.schemas.shopping` | Checkout, cart, order, payment models |
-| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, etc. |
-| `ucp_sdk.models.schemas.transports` | REST, MCP, and embedded protocol bindings |
-| `ucp_sdk.models.schemas` | Service definitions, capabilities, payment handlers |
+| Package                                 | Description                                         |
+| --------------------------------------- | --------------------------------------------------- |
+| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, order, payment models               |
+| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, etc.        |
+| `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings           |
+| `ucp_sdk.models.schemas`                | Service definitions, capabilities, payment handlers |
 
 ### Validation
 
@@ -86,7 +86,7 @@ from ucp_sdk.models.schemas.shopping.checkout import Checkout
 
 # Validate data against UCP schemas
 try:
-    checkout = Checkout.model_validate(data)
+    checkout = Checkout.model_validate(checkout_data)
     # Serialize to JSON-compatible dict
     checkout_dict = checkout.model_dump(exclude_none=True)
 except ValidationError as e:
