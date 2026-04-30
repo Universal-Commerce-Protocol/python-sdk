@@ -23,14 +23,18 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import message_error, message_info, message_warning
+from . import (
+    message_error_create_request,
+    message_info_create_request,
+    message_warning_create_request,
+)
 
 MessageCreateRequest = TypeAliasType(
     "MessageCreateRequest",
     Annotated[
-        message_error.MessageError
-        | message_warning.MessageWarning
-        | message_info.MessageInfo,
+        message_error_create_request.MessageErrorCreateRequest
+        | message_warning_create_request.MessageWarningCreateRequest
+        | message_info_create_request.MessageInfoCreateRequest,
         Field(..., title="Message Create Request"),
     ],
 )

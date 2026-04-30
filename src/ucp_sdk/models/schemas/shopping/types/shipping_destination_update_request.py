@@ -20,10 +20,10 @@ from __future__ import annotations
 
 from pydantic import ConfigDict
 
-from .postal_address import PostalAddress
+from .postal_address_update_request import PostalAddressUpdateRequest
 
 
-class ShippingDestinationUpdateRequest(PostalAddress):
+class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
     """
     Shipping destination.
     """

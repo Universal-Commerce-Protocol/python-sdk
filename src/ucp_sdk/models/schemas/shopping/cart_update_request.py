@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from .checkout import Checkout as Checkout_1
+from .checkout_update_request import CheckoutUpdateRequest
 from .types import (
     attribution_update_request,
     buyer_update_request,
@@ -60,7 +60,7 @@ class CartUpdateRequest(BaseModel):
     """
 
 
-class Checkout(Checkout_1):
+class Checkout(CheckoutUpdateRequest):
     """
     Checkout extended with cart capability. Adds cart_id to create_checkout for cart-to-checkout conversion.
     """
