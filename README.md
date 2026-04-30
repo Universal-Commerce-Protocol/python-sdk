@@ -51,7 +51,7 @@ uv add ucp-sdk
 
 ## Usage
 
-Import models from `ucp_sdk.models.schemas`:
+The example below parses a UCP checkout response and reads typed fields:
 
 ```python
 from ucp_sdk.models.schemas.shopping.checkout import Checkout
