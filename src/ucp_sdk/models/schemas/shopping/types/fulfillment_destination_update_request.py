@@ -20,21 +20,24 @@ from __future__ import annotations
 
 from pydantic import ConfigDict, Field, RootModel
 
-from . import retail_location, shipping_destination
+from . import (
+    retail_location_update_request,
+    shipping_destination_update_request,
+)
 
 
 class FulfillmentDestinationUpdateRequest(
     RootModel[
-        shipping_destination.ShippingDestination
-        | retail_location.RetailLocation
+        shipping_destination_update_request.ShippingDestinationUpdateRequest
+        | retail_location_update_request.RetailLocationUpdateRequest
     ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
     root: (
-        shipping_destination.ShippingDestination
-        | retail_location.RetailLocation
+        shipping_destination_update_request.ShippingDestinationUpdateRequest
+        | retail_location_update_request.RetailLocationUpdateRequest
     ) = Field(..., title="Fulfillment Destination Update Request")
     """
     A destination for fulfillment.

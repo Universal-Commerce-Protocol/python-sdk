@@ -381,6 +381,15 @@ def _create_single_variant(
 
     variant["properties"] = new_props
     variant["required"] = new_required
+
+    # Rewrite $refs in top-level oneOf/anyOf branches (e.g. fulfillment_destination
+    # has no properties, only oneOf with external $refs that need variant rewriting).
+    for poly_key in ["oneOf", "anyOf"]:
+        if poly_key in variant:
+            rewrite_refs_to_variants(
+                variant[poly_key], op, file_path, global_variant_requirements
+            )
+
     return variant
 
 
