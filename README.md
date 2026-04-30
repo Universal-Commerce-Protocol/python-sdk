@@ -51,8 +51,7 @@ uv add ucp-sdk
 
 ## Usage
 
-The SDK provides typed Pydantic v2 models for all UCP schemas. Import models
-from `ucp_sdk.models.schemas`:
+Import models from `ucp_sdk.models.schemas`:
 
 ```python
 from ucp_sdk.models.schemas.shopping.checkout import Checkout
