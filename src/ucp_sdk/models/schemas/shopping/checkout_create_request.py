@@ -25,6 +25,7 @@ from .types import (
     buyer_create_request,
     context_create_request,
     line_item_create_request,
+    signals_create_request,
 )
 
 
@@ -45,4 +46,5 @@ class CheckoutCreateRequest(BaseModel):
     Representation of the buyer.
     """
     context: context_create_request.ContextCreateRequest | None = None
+    signals: signals_create_request.SignalsCreateRequest | None = None
     payment: payment_create_request.PaymentCreateRequest | None = None

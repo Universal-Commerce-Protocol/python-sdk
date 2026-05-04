@@ -22,6 +22,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from . import error_code
+
 
 class MessageError(BaseModel):
     model_config = ConfigDict(
@@ -31,10 +33,7 @@ class MessageError(BaseModel):
     """
     Message type discriminator.
     """
-    code: str
-    """
-    Error code. Possible values include: missing, invalid, out_of_stock, payment_declined, requires_sign_in, requires_3ds, requires_identity_linking. Freeform codes also allowed.
-    """
+    code: error_code.ErrorCode
     path: str | None = None
     """
     RFC 9535 JSONPath to the component the message refers to (e.g., $.items[1]).
@@ -48,8 +47,11 @@ class MessageError(BaseModel):
     Human-readable message.
     """
     severity: Literal[
-        "recoverable", "requires_buyer_input", "requires_buyer_review"
+        "recoverable",
+        "requires_buyer_input",
+        "requires_buyer_review",
+        "unrecoverable",
     ]
     """
-    Declares who resolves this error. 'recoverable': agent can fix via API. 'requires_buyer_input': merchant requires information their API doesn't support collecting programmatically (checkout incomplete). 'requires_buyer_review': buyer must authorize before order placement due to policy, regulatory, or entitlement rules (checkout complete). Errors with 'requires_*' severity contribute to 'status: requires_escalation'.
+    Reflects the resource state and recommended action. 'recoverable': platform can resolve by modifying inputs and retrying via API. 'requires_buyer_input': merchant requires information their API doesn't support collecting programmatically (checkout incomplete). 'requires_buyer_review': buyer must authorize before order placement due to policy, regulatory, or entitlement rules. 'unrecoverable': no valid resource exists to act on, retry with new resource or inputs. Errors with 'requires_*' severity contribute to 'status: requires_escalation'.
     """

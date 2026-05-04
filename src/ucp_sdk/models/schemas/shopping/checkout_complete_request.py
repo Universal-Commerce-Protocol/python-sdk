@@ -21,6 +21,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from . import payment_complete_request
+from .types import signals_complete_request
 
 
 class CheckoutCompleteRequest(BaseModel):
@@ -31,4 +32,5 @@ class CheckoutCompleteRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
+    signals: signals_complete_request.SignalsCompleteRequest | None = None
     payment: payment_complete_request.PaymentCompleteRequest

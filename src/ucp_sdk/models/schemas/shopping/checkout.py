@@ -26,7 +26,9 @@ from .. import ucp as ucp_1
 from . import payment as payment_1
 from .types import buyer as buyer_1
 from .types import context as context_1
-from .types import line_item, link, message, order_confirmation, total
+from .types import line_item, link, message, order_confirmation
+from .types import signals as signals_1
+from .types import totals as totals_1
 
 
 class Checkout(BaseModel):
@@ -51,6 +53,7 @@ class Checkout(BaseModel):
     Representation of the buyer.
     """
     context: context_1.Context | None = None
+    signals: signals_1.Signals | None = None
     status: Literal[
         "incomplete",
         "requires_escalation",
@@ -66,7 +69,7 @@ class Checkout(BaseModel):
     """
     ISO 4217 currency code reflecting the merchant's market determination. Derived from address, context, and geo IP—buyers provide signals, merchants determine currency.
     """
-    totals: list[total.Total]
+    totals: totals_1.Totals
     """
     Different cart totals.
     """
