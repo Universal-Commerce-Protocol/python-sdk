@@ -306,12 +306,18 @@ def eval_prop_inclusion(name, data, op, base_required):
         include = False
     elif marker == "required":
         is_required = True
+    elif marker == "optional":
+        # A simple string "optional" marker overrides the base schema's required list for all operations.
+        is_required = False
     elif isinstance(marker, dict):
         val = marker.get(op)
         if val == "omit" or val is None:
             include = False
         elif val == "required":
             is_required = True
+        elif val == "optional":
+            # Override base schema's required list when a field is explicitly marked optional for a specific operation.
+            is_required = False
 
     return include, is_required
 

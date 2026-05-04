@@ -40,7 +40,7 @@ class FulfillmentMethodCreateRequest(BaseModel):
     """
     Fulfillment method type.
     """
-    line_item_ids: list[str]
+    line_item_ids: list[str] | None = None
     """
     Line item IDs fulfilled via this method.
     """
