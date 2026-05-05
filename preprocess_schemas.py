@@ -267,6 +267,69 @@ def preprocess_full_schema(schema, entity_def=None):
         distribute_properties_to_branches(node)
 
 
+# --- Dotted $defs Flattening ---
+
+
+def _rewrite_local_defs_refs(node, rename_map):
+    """Walks a schema tree and rewrites local $defs refs whose target was renamed."""
+    prefix = "#/$defs/"
+    for n in iter_nodes(node):
+        if not isinstance(n, dict):
+            continue
+        ref = n.get("$ref")
+        if not isinstance(ref, str) or not ref.startswith(prefix):
+            continue
+        rest = ref[len(prefix) :]
+        name, sep, tail = rest.partition("/")
+        if name in rename_map:
+            n["$ref"] = prefix + rename_map[name] + (sep + tail if sep else "")
+
+
+def flatten_dotted_defs(schema):
+    """
+    Renames $defs keys containing '.' so codegen does not emit nested directories.
+
+    RATIONALE: datamodel-codegen treats dots in $def names as path separators,
+    so a definition like 'dev.ucp.shopping.checkout' produces
+    'dev/ucp/shopping/checkout.py' rather than a class in the parent module.
+    UCP uses reverse-DNS def names as extension mount points (e.g. an extension
+    schema's contribution to the base Checkout type), so those classes belong
+    inline with the rest of the schema's output.
+
+    Strategy: prefer the last dotted component as the new key (giving a clean
+    class name like 'Checkout'); fall back to dot-replaced-with-underscore
+    (e.g. 'DevUcpShoppingFulfillment') if the bare tail would collide with
+    an existing def in the same file.
+    """
+    defs = schema.get("$defs")
+    if not isinstance(defs, dict):
+        return
+
+    existing = set(defs.keys())
+    rename_map = {}
+    for old in list(defs.keys()):
+        if "." not in old:
+            continue
+        tail = old.rsplit(".", 1)[-1]
+        if tail and tail not in existing:
+            new = tail
+        else:
+            new = old.replace(".", "_")
+            if new in existing:
+                # Both candidates collide; leave as-is rather than risk corruption
+                continue
+        rename_map[old] = new
+        existing.discard(old)
+        existing.add(new)
+
+    if not rename_map:
+        return
+
+    for old, new in rename_map.items():
+        defs[new] = defs.pop(old)
+    _rewrite_local_defs_refs(schema, rename_map)
+
+
 # --- Variant Generation (Create/Update/Complete) ---
 
 
@@ -530,6 +593,7 @@ def main():
     for p_abs, s in schemas.items():
         if "ucp.json" in p_abs or "_request.json" in p_abs:
             continue
+        flatten_dotted_defs(s)
         preprocess_full_schema(s, entity_def)
         # Write back the flattened core schema
         save_json(s, Path(p_abs))
