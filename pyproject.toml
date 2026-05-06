@@ -28,7 +28,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "datamodel-code-generator[http,ruff]>=0.50.0",
+    "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["hatchling"]

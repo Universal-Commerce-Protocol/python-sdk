@@ -416,6 +416,7 @@ def normalize_metadata_schemas(schemas, target_dir):
                 "response_checkout_schema",
                 "response_order_schema",
                 "response_cart_schema",
+                "response_catalog_schema",
             ]
         ]
 
