@@ -22,6 +22,8 @@ from typing import Any
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
+from .shopping.types import available_payment_instrument
+
 
 class PaymentHandler(RootModel[Any]):
     model_config = ConfigDict(
@@ -64,6 +66,12 @@ class Base(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
+    available_instruments: (
+        list[available_payment_instrument.AvailablePaymentInstrument] | None
+    ) = Field(None, min_length=1)
+    """
+    Instrument types this handler supports, with optional constraints. When absent, every instrument should be considered available.
+    """
 
 
 class PlatformSchema(BaseModel):
@@ -93,6 +101,12 @@ class PlatformSchema(BaseModel):
     config: dict[str, Any] | None = None
     """
     Entity-specific configuration. Structure defined by each entity's schema.
+    """
+    available_instruments: (
+        list[available_payment_instrument.AvailablePaymentInstrument] | None
+    ) = Field(None, min_length=1)
+    """
+    Instrument types this handler supports, with optional constraints. When absent, every instrument should be considered available.
     """
 
 
@@ -124,6 +138,12 @@ class BusinessSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
+    available_instruments: (
+        list[available_payment_instrument.AvailablePaymentInstrument] | None
+    ) = Field(None, min_length=1)
+    """
+    Instrument types this handler supports, with optional constraints. When absent, every instrument should be considered available.
+    """
 
 
 class ResponseSchema(BaseModel):
@@ -153,4 +173,10 @@ class ResponseSchema(BaseModel):
     config: dict[str, Any] | None = None
     """
     Entity-specific configuration. Structure defined by each entity's schema.
+    """
+    available_instruments: (
+        list[available_payment_instrument.AvailablePaymentInstrument] | None
+    ) = Field(None, min_length=1)
+    """
+    Instrument types this handler supports, with optional constraints. When absent, every instrument should be considered available.
     """

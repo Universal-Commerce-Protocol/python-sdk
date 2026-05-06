@@ -28,19 +28,23 @@ from . import total as total_1
 
 class Quantity(BaseModel):
     """
-    Quantity tracking. Both total and fulfilled are derived from events.
+    Quantity tracking for the line item.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
+    original: int | None = Field(None, ge=0)
+    """
+    Quantity from the original checkout.
+    """
     total: int = Field(..., ge=0)
     """
-    Current total quantity.
+    Current total active quantity. May differ from original due to post-order modifications (e.g., returns or cancellations).
     """
     fulfilled: int = Field(..., ge=0)
     """
-    Quantity fulfilled (sum from fulfillment events).
+    Quantity fulfilled so far.
     """
 
 
@@ -58,15 +62,15 @@ class OrderLineItem(BaseModel):
     """
     quantity: Quantity
     """
-    Quantity tracking. Both total and fulfilled are derived from events.
+    Quantity tracking for the line item.
     """
     totals: list[total_1.Total]
     """
     Line item totals breakdown.
     """
-    status: Literal["processing", "partial", "fulfilled"]
+    status: Literal["processing", "partial", "fulfilled", "removed"]
     """
-    Derived status: fulfilled if quantity.fulfilled == quantity.total, partial if quantity.fulfilled > 0, otherwise processing.
+    Derived status: removed if quantity.total == 0, fulfilled if quantity.total > 0 and quantity.fulfilled == quantity.total, partial if quantity.total > 0 and quantity.fulfilled > 0, otherwise processing.
     """
     parent_id: str | None = None
     """
