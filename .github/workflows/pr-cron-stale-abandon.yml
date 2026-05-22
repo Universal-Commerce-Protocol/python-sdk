@@ -1,0 +1,28 @@
+---
+name: PR Stale and Abandon Tracker
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Daily at 2:00 AM UTC
+  workflow_dispatch: # Allows manual trigger for testing
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  stale_tracker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trace and Mark Stale PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const path =
+              './.github/workflows/scripts/pr-cron-stale-abandon.js';
+            const script = require(path);
+            await script({ github, context });
