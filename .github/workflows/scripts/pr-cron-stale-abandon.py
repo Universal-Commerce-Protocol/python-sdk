@@ -52,6 +52,9 @@ def main():
     for pr in pulls:
         total_scanned += 1
         try:
+            if pr.draft:
+                continue
+
             # pr.updated_at is already timezone-aware in PyGithub (utc)
             updated_at = pr.updated_at
             if updated_at.tzinfo is None:
