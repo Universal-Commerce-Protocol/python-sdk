@@ -3,7 +3,7 @@ name: PR Stale and Abandon Tracker
 
 on:
   schedule:
-    - cron: '0 2 * * *' # Daily at 2:00 AM UTC
+    - cron: '17 2 * * *' # Daily at 2:17 AM UTC to avoid peak scheduler hours
   workflow_dispatch: # Allows manual trigger for testing
 
 permissions:
@@ -14,6 +14,7 @@ permissions:
 jobs:
   stale_tracker:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
