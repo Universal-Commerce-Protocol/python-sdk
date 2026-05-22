@@ -7,7 +7,7 @@
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from github import Github
+from github import Github, Auth
 
 def main():
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -15,7 +15,8 @@ def main():
         print("[ERROR] GH_TOKEN or GITHUB_TOKEN is not set.")
         sys.exit(1)
 
-    g = Github(token)
+    auth = Auth.Token(token)
+    g = Github(auth=auth)
     repo_name = os.environ.get("GITHUB_REPOSITORY")
     repo = g.get_repo(repo_name)
     
