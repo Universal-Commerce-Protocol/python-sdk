@@ -23,6 +23,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Trace and Mark Stale PRs
-        run: uv run .github/workflows/scripts/pr-cron-stale-abandon.py
+        run: uv run .github/workflows/scripts/routing/pr-cron-stale-abandon.py
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

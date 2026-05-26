@@ -1,0 +1,66 @@
+# UCP PR Review Routing Configuration
+# This file acts as the configuration map for pr-triage-automation script.
+# It defines glob patterns for changed files and associates them with required reviewer sets and label states.
+
+routing_rules:
+  - name: "Governance Files"
+    patterns:
+      - "LICENSE"
+      - "GOVERNANCE.md"
+      - "CONTRIBUTING.md"
+      - ".github/CODEOWNERS"
+    review_requirements:
+      "@Universal-Commerce-Protocol/governance-council":
+        threshold: 1
+        needs_review_label: "gov:needs-gc-review"
+        approved_label: "gov:gc-approved"
+
+  - name: "Core Protocol & Spec"
+    patterns:
+      - "schemas/**/*.json"
+      - "spec/**/*.md"
+    review_requirements:
+      "@Universal-Commerce-Protocol/tech-council":
+        threshold: "majority"
+        needs_review_label: "gov:needs-tc-review"
+        approved_label: "gov:tc-approved"
+      "@Universal-Commerce-Protocol/maintainers":
+        threshold: 1
+        needs_review_label: "status:review-needed-maintainers"
+        approved_label: "gov:maintainer-approved"
+
+  - name: "Infrastructure & Tooling"
+    patterns:
+      - ".github/workflows/**"
+      - ".gitignore"
+      - ".pre-commit-config.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+    review_requirements:
+      "@Universal-Commerce-Protocol/devops-maintainers":
+        threshold: 1
+        needs_review_label: "status:needs-triage"
+        approved_label: "status:under-review"
+
+  - name: "SDK Code & Maintenance"
+    patterns:
+      - "src/**"
+      - "templates/**"
+    review_requirements:
+      "@Universal-Commerce-Protocol/maintainers":
+        threshold: 1
+        needs_review_label: "status:needs-triage"
+        approved_label: "status:under-review"
+
+  - name: "Payments Custom Review Rules"
+    patterns:
+      - "src/components/payments/**"
+    review_requirements:
+      "@Universal-Commerce-Protocol/maintainers":
+        threshold: 1
+        needs_review_label: "status:review-needed-payments-maintainers"
+        approved_label: "status:payments-approved"
+      "@Universal-Commerce-Protocol/tech-council":
+        threshold: 1
+        needs_review_label: "gov:needs-tc-review"
+        approved_label: "gov:tc-approved"
