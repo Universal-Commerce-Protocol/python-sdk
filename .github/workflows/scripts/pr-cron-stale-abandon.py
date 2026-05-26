@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# PEP 723 - Inline script metadata (allows runners like 'uv' or 'pipx' to auto-run with dependencies)
 # /// script
 # dependencies = [
 #   "pygithub",
@@ -20,9 +21,9 @@ def main():
     repo_name = os.environ.get("GITHUB_REPOSITORY")
     repo = g.get_repo(repo_name)
     
-    # Threshold Config (abandon is an additional 30 days on top of stale)
+    # Threshold Config (abandon is an additional X days on top of stale)
     STALE_THRESHOLD_DAYS = 30
-    ADDITIONAL_ABANDON_DAYS = 30
+    ADDITIONAL_ABANDON_DAYS = 7
     ABANDON_THRESHOLD_DAYS = STALE_THRESHOLD_DAYS + ADDITIONAL_ABANDON_DAYS
 
     # Label Constants
