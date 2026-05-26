@@ -1,0 +1,41 @@
+- name: status:needs-triage
+  color: 'FBCA04'
+  description: Signal that the PR is ready for human triage
+
+- name: status:under-review
+  color: '1D76DB'
+
+- name: status:stale-review
+  color: '6F7A8A'
+  description: Applied if a PR is waiting on a reviewer for too long
+
+- name: status:blocked
+  color: 'D93F0B'
+
+- name: status:ready-to-merge
+  color: '0E8A16'
+  description: Signaling to the DevOps team that it can be safely merged
+
+- name: status:stale
+  color: '6F7A8A'
+  description: Automatically applied if a PR is blocked waiting for the author's response for 30 days
+
+- name: status:merged
+  color: '6F42C1'
+  description: Signify the completion of its lifecycle and provide clear visibility for reporting
+
+- name: area:payments
+  color: '0052CC'
+
+- name: devops
+  color: 'FFD1DC'
+
+- name: gov:needs-tc-review
+  color: 'D93F0B'
+
+- name: gov:needs-gc-review
+  color: 'FDE5BE'
+
+- name: gov:approved
+  color: 'C2E0C6'
+  description: Triggers the final code ownership checks
