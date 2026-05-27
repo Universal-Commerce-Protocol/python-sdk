@@ -97,15 +97,36 @@ def main():
 
     has_errors = False
 
-    # 1.1 Verify current repository is in the allowed repositories list
-    if allowed_repos:
-        allowed_lower = {repo.lower() for repo in allowed_repos}
-        if repo_name.lower() not in allowed_lower:
-            print(f"[FAIL] Current repository '{repo_name}' is NOT in the allowed repositories list configuration!")
-            print(f"Allowed repositories: {allowed_repos}")
-            has_errors = True
-        else:
-            print(f"[INFO] Current repository '{repo_name}' successfully validated in allowed list.")
+    # 1.1 Verify global allowed_repositories list is configured and non-empty
+    if not allowed_repos:
+        print("\n======================================================================")
+        print("                  VALIDATION FAILURE: MISSING SCOPES")
+        print("======================================================================")
+        print("[FAIL] Missing or empty 'allowed_repositories' list at root level!")
+        print("To fix this, you must configure allowed repositories at the root of UCP_PR_REVIEW_ROUTING.yml:")
+        print("  ------------------------------------------------------------------")
+        print("  # Global Allowed Repositories list (Root level)")
+        print("  allowed_repositories:")
+        print("    - \"your-org/your-repository\"")
+        print("    - \"your-org/sandbox-repository-fork\"")
+        print("  ------------------------------------------------------------------")
+        print("You can also optionally restrict individual rules using 'allowed_repositories':")
+        print("  routing_rules:")
+        print("    - name: \"Core Spec Rule\"")
+        print("      allowed_repositories:")
+        print("        - \"your-org/core-repository\"")
+        print("  ------------------------------------------------------------------")
+        print("======================================================================\n")
+        sys.exit(1)
+
+    # 1.2 Verify current repository is in the allowed repositories list
+    allowed_lower = {repo.lower() for repo in allowed_repos}
+    if repo_name.lower() not in allowed_lower:
+        print(f"[FAIL] Current repository '{repo_name}' is NOT in the allowed repositories list configuration!")
+        print(f"Allowed repositories: {allowed_repos}")
+        has_errors = True
+    else:
+        print(f"[INFO] Current repository '{repo_name}' successfully validated in allowed list.")
 
     auth = Auth.Token(token)
     g = Github(auth=auth)

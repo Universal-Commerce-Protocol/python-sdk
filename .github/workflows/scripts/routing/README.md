@@ -31,6 +31,9 @@ All folder-to-reviewer-mappings and label states are decoupled completely from t
 
 ### Configuration Rule Structure:
 ```yaml
+allowed_repositories:
+  - "your-org/your-repository"
+
 routing_rules:
   - name: "Core Protocol & Spec"
     patterns:
@@ -38,11 +41,11 @@ routing_rules:
       - "spec/**/*.md"
     review_requirements:
       # Maps fully qualified GitHub team handles to approval thresholds and status labels:
-      "@Universal-Commerce-Protocol/tech-council":
+      "@your-org/tech-council":
         threshold: "majority" # Require TC majority approval or status:tc-majority-approved
         needs_review_label: "gov:needs-tc-review"
         approved_label: "gov:tc-approved"
-      "@Universal-Commerce-Protocol/maintainers":
+      "@your-org/maintainers":
         threshold: 1
         needs_review_label: "status:review-needed-maintainers"
         approved_label: "gov:maintainer-approved"

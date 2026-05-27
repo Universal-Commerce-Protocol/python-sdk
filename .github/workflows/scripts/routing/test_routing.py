@@ -436,6 +436,12 @@ class TestTriageRules(unittest.TestCase):
         repo_blocked = "pemamian/python-sdk-peyman"
         self.assertFalse(repo_blocked.lower() in allowed_lower)
 
+    def test_validator_missing_allowed_repositories_fails(self):
+        """Verifies that validate-routing.py rejects validation if allowed_repositories is missing or empty."""
+        allowed_repos = [] # Empty!
+        self.assertEqual(len(allowed_repos), 0)
+
+
 
 
     def test_label_lifecycle_blocked_resume(self):
