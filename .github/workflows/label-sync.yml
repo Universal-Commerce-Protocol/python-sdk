@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '.github/labels.yml'
+      - '.github/triage-labels.yml'
   workflow_dispatch:
 
 jobs:
@@ -17,8 +17,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Sync labels
+      - name: Sync Triage labels
         uses: EndBug/label-sync@v2
         with:
-          config-file: .github/labels.yml
+          config-file: .github/triage-labels.yml
           delete-other-labels: false

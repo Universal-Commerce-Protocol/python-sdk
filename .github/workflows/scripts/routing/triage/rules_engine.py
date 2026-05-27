@@ -37,15 +37,32 @@ class RulesEngine:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
+                self.allowed_repos = config.get("repositories", [])
                 return config.get("routing_rules", [])
         except Exception as e:
             print(f"[ERROR] Failed to load YAML routing rules config: {e}")
+            self.allowed_repos = []
             return []
+
+    def is_repository_allowed(self, current_repo: str) -> bool:
+        """Checks if the active executing repository matches the allowed scope."""
+        if not hasattr(self, "allowed_repos") or not self.allowed_repos:
+            # If no restrictions are defined, allow by default
+            return True
+        
+        # Ignore casing for verification robust checks
+        allowed_lower = {repo.lower() for repo in self.allowed_repos}
+        return current_repo.lower() in allowed_lower
 
     def run(self, context: PRContext) -> str:
         """Sequentially evaluates all registered rules, aggregates operations, and batches label and comment updates."""
         print(f"[ENGINE] Starting Rules Engine run for PR #{context.pr_number} in '{context.repo_name}'")
         
+        # 0. Verify target repository scope permissions
+        if not self.is_repository_allowed(context.repo_name):
+            print(f"[ENGINE] [SKIP] Repository '{context.repo_name}' is not in the permitted execution scope.")
+            return "Skipped: Repository not allowed"
+
         labels_to_add = set()
         labels_to_remove = set()
         comments_to_create = []

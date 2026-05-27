@@ -49,9 +49,18 @@ class FileRoutingRule(BaseRule):
         # Determine which routing files matched
         matched_any = False
         for rule in self.config:
+            rule_name = rule.get("name", f"Rule")
             patterns = rule.get("patterns", [])
             review_reqs = rule.get("review_requirements", {})
-            
+            allowed_repos = rule.get("repositories", [])
+
+            # Check if this specific rule is allowed to execute on the current repository
+            if allowed_repos:
+                allowed_lower = {repo.lower() for repo in allowed_repos}
+                if context.repo_name.lower() not in allowed_lower:
+                    print(f"[RULE] [SKIP] Rule '{rule_name}' is restricted and cannot execute on '{context.repo_name}'.")
+                    continue
+
             rule_matches = False
             for filepath in context.modified_files:
                 for pattern in patterns:
@@ -219,9 +228,18 @@ class ReviewerApprovalRule(BaseRule):
         rules_evaluated = 0
 
         for rule in self.config:
+            rule_name = rule.get("name", f"Rule")
             patterns = rule.get("patterns", [])
             review_reqs = rule.get("review_requirements", {})
-            
+            allowed_repos = rule.get("repositories", [])
+
+            # Check if this specific rule is allowed to execute on the current repository
+            if allowed_repos:
+                allowed_lower = {repo.lower() for repo in allowed_repos}
+                if context.repo_name.lower() not in allowed_lower:
+                    print(f"[RULE] [SKIP] Rule '{rule_name}' is restricted and cannot execute approvals verification on '{context.repo_name}'.")
+                    continue
+
             # Check if this rule matches PR's files
             matches = False
             for filepath in context.modified_files:

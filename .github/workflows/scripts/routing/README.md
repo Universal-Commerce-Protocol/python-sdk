@@ -25,6 +25,10 @@ scripts/routing/
 
 All folder-to-reviewer-mappings and label states are decoupled completely from the execution codebase and stored in [**`UCP_PR_REVIEW_ROUTING.yml`**](./UCP_PR_REVIEW_ROUTING.yml). This allows developers to flexibly configure or update rules without editing Python modules.
 
+### Repository Scope Restriction Gates:
+* **Global Limits**: Configured via the root-level `repositories` property slug list. If current PR repo is not in the list, the engine exits immediately.
+* **Per-Rule Limits**: Configured via the rule-level `repositories` property slug list (e.g. under Core Protocol & Spec rule). If current PR repo is not in the list, that specific rule's file patterns and approvals are ignored, defaulting back to standard ingestion checks.
+
 ### Configuration Rule Structure:
 ```yaml
 routing_rules:
@@ -80,7 +84,7 @@ uv run .github/workflows/scripts/routing/validate-routing.py
 ```
 This utility checks:
 1. **YAML Syntax**: Verifies structure correctness.
-2. **Taxonomy Matcher**: Cross-references labels with `.github/labels.yml` to prevent styling typos.
+2. **Taxonomy Matcher**: Cross-references labels with [`.github/triage-labels.yml`](file:///usr/local/google/home/pemamian/ucp-dev/python-sdk-peyman/.github/triage-labels.yml) to prevent styling typos.
 3. **Dynamic Org Team Check**: Dynamically calls the API to verify that all configured dynamic handles actually exist in the active organization (gracefully skipped with a warning on local forks).
 
 ### Triage dry-runs:

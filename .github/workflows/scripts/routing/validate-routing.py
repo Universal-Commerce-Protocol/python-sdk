@@ -83,9 +83,17 @@ def main():
         sys.exit(1)
 
     routing_rules = config.get("routing_rules")
+    allowed_repos = config.get("repositories", [])
+
     if not routing_rules or not isinstance(routing_rules, list):
         print("[FAIL] Missing or invalid 'routing_rules' root list in configuration.")
         sys.exit(1)
+
+    if allowed_repos and not isinstance(allowed_repos, list):
+        print("[FAIL] Root 'repositories' property must be a list of string slugs.")
+        sys.exit(1)
+
+    print(f"[INFO] Parsed {len(allowed_repos)} repository scope restrictions.")
 
     auth = Auth.Token(token)
     g = Github(auth=auth)
@@ -130,8 +138,8 @@ def main():
                 print(f"[FAIL] Rule '{rule_name}' invalid team handle: {ve}")
                 has_errors = True
 
-    # 1.5 Validate Label Taxonomy existence against labels.yml
-    labels_yml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../labels.yml"))
+    # 1.5 Validate Label Taxonomy existence against triage-labels.yml
+    labels_yml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../triage-labels.yml"))
     if os.path.exists(labels_yml_path):
         try:
             with open(labels_yml_path, "r", encoding="utf-8") as lf:
@@ -139,7 +147,7 @@ def main():
                 # Extract defined labels from the standard list structure
                 defined_labels = {item.get("name") for item in labels_def if isinstance(item, dict) and item.get("name")}
                 
-                print(f"[INFO] Parsed {len(defined_labels)} defined labels from labels.yml taxonomy.")
+                print(f"[INFO] Parsed {len(defined_labels)} defined labels from triage-labels.yml.")
                 
                 # Verify that every referenced label is in the taxonomy
                 for idx, rule in enumerate(routing_rules):
@@ -149,15 +157,15 @@ def main():
                         approved_lbl = details.get("approved_label")
 
                         if needs_lbl and needs_lbl not in defined_labels:
-                            print(f"[FAIL] Rule '{rule_name}' needs_review_label '{needs_lbl}' is missing from labels.yml taxonomy!")
+                            print(f"[FAIL] Rule '{rule_name}' needs_review_label '{needs_lbl}' is missing from triage-labels.yml!")
                             has_errors = True
                         if approved_lbl and approved_lbl not in defined_labels:
-                            print(f"[FAIL] Rule '{rule_name}' approved_label '{approved_lbl}' is missing from labels.yml taxonomy!")
+                            print(f"[FAIL] Rule '{rule_name}' approved_label '{approved_lbl}' is missing from triage-labels.yml!")
                             has_errors = True
         except Exception as le:
-            print(f"[WARNING] Failed to parse labels.yml taxonomy checking: {le}")
+            print(f"[WARNING] Failed to parse triage-labels.yml: {le}")
     else:
-        print(f"[WARNING] labels.yml taxonomy file not found at: {labels_yml_path}. Skipping taxonomy check.")
+        print(f"[WARNING] triage-labels.yml file not found at: {labels_yml_path}. Skipping taxonomy check.")
 
     if has_errors:
         print("\n======================================================================")
@@ -202,6 +210,7 @@ def main():
     print("======================================================================")
     print(f"YAML Syntax:          PASSED")
     print(f"Taxonomy Check:       PASSED ({len(defined_labels)} labels defined)")
+    print(f"Allowed Repos:        PASSED ({len(allowed_repos)} configured)")
     print(f"Dynamic Review Teams: PASSED ({verified_teams} teams verified)")
     print("======================================================================\n")
 
