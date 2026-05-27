@@ -297,6 +297,40 @@ class TestTriageRules(unittest.TestCase):
         self.assertEqual(len(result.comments_to_create), 1)
         self.assertTrue("Warning: @unauthorized_tester, you do not have permission to remove `gov:needs-tc-review`." in result.comments_to_create[0])
 
+    def test_unauthorized_approved_label_removal_guardrail(self):
+        """Verifies ReviewerApprovalRule blocks unauthorized removal of active satisfied approved labels."""
+        # Scenario: Changed schemas file, TC approvals met (amit approved), but user 'unauthorized_tester' manually removed gov:tc-approved
+        self.mock_client.check_team_membership.return_value = False # User is not a member of TC or DevOps
+
+        context_unlabel_approved = PRContext(
+            pr_number=112,
+            repo_name="Universal-Commerce-Protocol/ucp",
+            title="feat: corespec updates",
+            author="developer2",
+            is_draft=False,
+            labels={Label.LABEL_TC_APPROVED}, # Target is currently marked approved
+            modified_files=["schemas/v1/transaction.json"],
+            reviews=[
+                ReviewInfo(user="amithanda", state="APPROVED") # TC reviews fully satisfied (amit override)
+            ],
+            event_name="pull_request",
+            event_payload={
+                "action": "unlabeled",
+                "sender": {"login": "unauthorized_tester"},
+                "label": {"name": "gov:tc-approved"} # Removed approved label name
+            }
+        )
+
+        rule = ReviewerApprovalRule(self.mock_config)
+        result = rule.evaluate(context_unlabel_approved, self.mock_client)
+
+        # Assert that the approved label is dynamically re-applied
+        self.assertTrue("gov:tc-approved" in result.labels_to_add)
+        # Assert warning comment is prepared
+        self.assertEqual(len(result.comments_to_create), 1)
+        self.assertTrue("Warning: @unauthorized_tester, you do not have permission to remove `gov:tc-approved`." in result.comments_to_create[0])
+
+
     def test_label_lifecycle_blocked_resume(self):
         """Verifies LabelLifecycleRule handles blocked and resumed triggers."""
         rule = LabelLifecycleRule()

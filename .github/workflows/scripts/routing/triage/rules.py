@@ -108,7 +108,86 @@ class ReviewerApprovalRule(BaseRule):
         labels_to_remove = set()
         comments = []
 
+        # ==============================================================================
+        # 0. Enforce Guardrail Logic FIRST (Always executes, prevents early return bypass)
+        # ==============================================================================
+        event_user = context.event_payload.get("sender", {}).get("login")
+        event_action = context.event_payload.get("action")
+        org_name = context.repo_name.split("/")[0]
+
+        # A. Guard against unauthorized addition of TC Majority Label
+        if Label.LABEL_TC_MAJORITY_APPROVED in context.labels:
+            if event_user and context.event_name == "pull_request" and event_action == "labeled":
+                label_added = context.event_payload.get("label", {}).get("name")
+                if label_added == Label.LABEL_TC_MAJORITY_APPROVED:
+                    is_tc = client.check_team_membership(org_name, "tech-council", event_user)
+                    is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
+                    if not is_tc and not is_devops:
+                        print(f"[GUARDRAIL] Unauthorized user {event_user} applied majority label. Revoking.")
+                        labels_to_remove.add(Label.LABEL_TC_MAJORITY_APPROVED)
+                        comments.append(
+                            f"Warning: @{event_user}, you do not have permission to apply "
+                            f"`{Label.LABEL_TC_MAJORITY_APPROVED}`. This action has been automatically reverted."
+                        )
+
+        # B. Guard against unauthorized removal of active needs-review or approved labels
+        if context.event_name == "pull_request" and event_action == "unlabeled":
+            label_removed = context.event_payload.get("label", {}).get("name")
+            
+            for rule in self.config:
+                for team_handle, req_details in rule.get("review_requirements", {}).items():
+                    needs_label = req_details.get("needs_review_label")
+                    approved_label = req_details.get("approved_label")
+                    
+                    # Check if the removed label is either the needs-review or the approved label of this team
+                    is_needs = needs_label and label_removed == needs_label
+                    is_approved = approved_label and label_removed == approved_label
+                    
+                    if is_needs or is_approved:
+                        # Verify if the user who removed it is a member of the team or DevOps
+                        clean_handle = team_handle.lstrip("@")
+                        team_org, team_slug = clean_handle.split("/", 1)
+                        
+                        is_team_member = client.check_team_membership(team_org, team_slug, event_user)
+                        is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
+                        
+                        if not is_team_member and not is_devops:
+                            satisfied, _ = verify_team_approvals(context, team_handle, req_details.get("threshold", 1), client)
+                            
+                            # Scenario A: Removed needs-review label while reviews are still pending
+                            if is_needs and not satisfied:
+                                print(f"[GUARDRAIL] Unauthorized user {event_user} removed required label {needs_label}. Re-applying.")
+                                labels_to_add.add(needs_label)
+                                comments.append(
+                                    f"Warning: @{event_user}, you do not have permission to remove "
+                                    f"`{needs_label}`. Reviews from `{team_handle}` are still pending. "
+                                    f"This action has been automatically reverted."
+                                )
+                            
+                            # Scenario B: Removed approved label while reviews are fully satisfied
+                            elif is_approved and satisfied:
+                                print(f"[GUARDRAIL] Unauthorized user {event_user} removed approved label {approved_label}. Re-applying.")
+                                labels_to_add.add(approved_label)
+                                comments.append(
+                                    f"Warning: @{event_user}, you do not have permission to remove "
+                                    f"`{approved_label}`. Reviews from `{team_handle}` are satisfied and approved. "
+                                    f"This action has been automatically reverted."
+                                )
+
+            # If guardrails re-applied labels, we exit early with results to prevent regular evaluation overrides
+            if labels_to_add or labels_to_remove:
+                return RuleResult(
+                    self.name,
+                    satisfied=False,
+                    labels_to_add=labels_to_add,
+                    labels_to_remove=labels_to_remove,
+                    comments_to_create=comments,
+                    action_taken="Guardrails override triggered to revert unauthorized label modifications."
+                )
+
+        # ==============================================================================
         # 1. Superpower Override (e.g., Amit's approval satisfies all rules)
+        # ==============================================================================
         SUPERPOWER_USERS = {"amithanda"}
         for review in context.reviews:
             if review.user in SUPERPOWER_USERS and review.state == "APPROVED":
@@ -131,7 +210,9 @@ class ReviewerApprovalRule(BaseRule):
                     action_taken="Superpower approval override triggered."
                 )
 
+        # ==============================================================================
         # 2. Review requirements matching core spec rules or relaxed SDK settings
+        # ==============================================================================
         is_sdk = any(sdk_repo in context.repo_name.lower() for sdk_repo in ["sdk", "meeting-minutes"])
         
         all_rules_satisfied = True
@@ -184,53 +265,6 @@ class ReviewerApprovalRule(BaseRule):
                         labels_to_remove.add(needs_label)
                     if approved_label:
                         labels_to_add.add(approved_label)
-
-        # Enforce guardrail logic for governance labels application & removal security
-        event_user = context.event_payload.get("sender", {}).get("login")
-        event_action = context.event_payload.get("action")
-        org_name = context.repo_name.split("/")[0]
-
-        # 1. Guard against unauthorized addition of TC Majority Label
-        if Label.LABEL_TC_MAJORITY_APPROVED in context.labels:
-            if event_user and context.event_name == "pull_request" and event_action == "labeled":
-                label_added = context.event_payload.get("label", {}).get("name")
-                if label_added == Label.LABEL_TC_MAJORITY_APPROVED:
-                    is_tc = client.check_team_membership(org_name, "tech-council", event_user)
-                    is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
-                    if not is_tc and not is_devops:
-                        print(f"[GUARDRAIL] Unauthorized user {event_user} applied majority label. Revoking.")
-                        labels_to_remove.add(Label.LABEL_TC_MAJORITY_APPROVED)
-                        comments.append(
-                            f"Warning: @{event_user}, you do not have permission to apply "
-                            f"`{Label.LABEL_TC_MAJORITY_APPROVED}`. This action has been automatically reverted."
-                        )
-
-        # 2. Guard against unauthorized removal of active needs-review labels
-        if context.event_name == "pull_request" and event_action == "unlabeled":
-            label_removed = context.event_payload.get("label", {}).get("name")
-            
-            for rule in self.config:
-                for team_handle, req_details in rule.get("review_requirements", {}).items():
-                    needs_label = req_details.get("needs_review_label")
-                    
-                    if needs_label and label_removed == needs_label:
-                        # Verify if the user who removed it is a member of the team or DevOps
-                        clean_handle = team_handle.lstrip("@")
-                        team_org, team_slug = clean_handle.split("/", 1)
-                        
-                        is_team_member = client.check_team_membership(team_org, team_slug, event_user)
-                        is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
-                        
-                        # If the requirements are not satisfied and the user is unauthorized, re-apply!
-                        satisfied, _ = verify_team_approvals(context, team_handle, req_details.get("threshold", 1), client)
-                        if not satisfied and not is_team_member and not is_devops:
-                            print(f"[GUARDRAIL] Unauthorized user {event_user} removed required label {needs_label}. Re-applying.")
-                            labels_to_add.add(needs_label)
-                            comments.append(
-                                f"Warning: @{event_user}, you do not have permission to remove "
-                                f"`{needs_label}`. Reviews from `{team_handle}` are still pending. "
-                                f"This action has been automatically reverted."
-                            )
 
         # If all rules passed, transition to ready-to-merge
         if all_rules_satisfied and rules_evaluated > 0:
@@ -374,13 +408,21 @@ def verify_team_approvals(context: PRContext, team_handle: str, threshold: any, 
     approvals = 0
     approved_users = set()
 
-    # Select active approvals
+    # Select active approvals (including superpower overrides check)
+    SUPERPOWER_USERS = {"amithanda"}
+    has_superpower_approval = False
+    
     for review in context.reviews:
         if review.state == "APPROVED":
+            if review.user in SUPERPOWER_USERS:
+                has_superpower_approval = True
             is_member = client.check_team_membership(org_name, team_slug, review.user)
             if is_member:
                 approvals += 1
                 approved_users.add(review.user)
+
+    if has_superpower_approval:
+        return True, approvals
 
     if threshold == "majority":
         # Programmatic majority overrides: TC triggers majority via manual majority label or meetings
