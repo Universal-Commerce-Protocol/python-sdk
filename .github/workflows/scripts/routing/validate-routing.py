@@ -83,22 +83,33 @@ def main():
         sys.exit(1)
 
     routing_rules = config.get("routing_rules")
-    allowed_repos = config.get("repositories", [])
+    allowed_repos = config.get("allowed_repositories", [])
 
     if not routing_rules or not isinstance(routing_rules, list):
         print("[FAIL] Missing or invalid 'routing_rules' root list in configuration.")
         sys.exit(1)
 
     if allowed_repos and not isinstance(allowed_repos, list):
-        print("[FAIL] Root 'repositories' property must be a list of string slugs.")
+        print("[FAIL] Root 'allowed_repositories' property must be a list of string slugs.")
         sys.exit(1)
 
     print(f"[INFO] Parsed {len(allowed_repos)} repository scope restrictions.")
 
+    has_errors = False
+
+    # 1.1 Verify current repository is in the allowed repositories list
+    if allowed_repos:
+        allowed_lower = {repo.lower() for repo in allowed_repos}
+        if repo_name.lower() not in allowed_lower:
+            print(f"[FAIL] Current repository '{repo_name}' is NOT in the allowed repositories list configuration!")
+            print(f"Allowed repositories: {allowed_repos}")
+            has_errors = True
+        else:
+            print(f"[INFO] Current repository '{repo_name}' successfully validated in allowed list.")
+
     auth = Auth.Token(token)
     g = Github(auth=auth)
 
-    has_errors = False
     referenced_teams = set()
 
     # 1. Syntax and Key Structure Checks

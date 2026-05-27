@@ -4,8 +4,7 @@
 
 # Target repositories restriction list: 
 # If configured, the rules engine will strictly execute checks ONLY if running on one of the specified repositories.
-repositories:
-  - "Universal-Commerce-Protocol/python-sdk"
+allowed_repositories:
   - "pemamian/python-sdk-peyman"
 
 routing_rules:
@@ -23,8 +22,7 @@ routing_rules:
 
   - name: "Core Protocol & Spec"
     # Optional dynamic scope limit: if configured, this specific rule only runs on the listed repositories.
-    repositories:
-      - "Universal-Commerce-Protocol/python-sdk"
+    allowed_repositories:
       - "pemamian/python-sdk-peyman"
     patterns:
       - "schemas/**/*.json"

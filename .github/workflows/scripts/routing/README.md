@@ -26,8 +26,8 @@ scripts/routing/
 All folder-to-reviewer-mappings and label states are decoupled completely from the execution codebase and stored in [**`UCP_PR_REVIEW_ROUTING.yml`**](./UCP_PR_REVIEW_ROUTING.yml). This allows developers to flexibly configure or update rules without editing Python modules.
 
 ### Repository Scope Restriction Gates:
-* **Global Limits**: Configured via the root-level `repositories` property slug list. If current PR repo is not in the list, the engine exits immediately.
-* **Per-Rule Limits**: Configured via the rule-level `repositories` property slug list (e.g. under Core Protocol & Spec rule). If current PR repo is not in the list, that specific rule's file patterns and approvals are ignored, defaulting back to standard ingestion checks.
+* **Global Limits**: Configured via the root-level `allowed_repositories` property slug list. If current PR repo is not in the list, the engine exits immediately.
+* **Per-Rule Limits**: Configured via the rule-level `allowed_repositories` property slug list (e.g. under Core Protocol & Spec rule). If current PR repo is not in the list, that specific rule's file patterns and approvals are ignored, defaulting back to standard ingestion checks.
 
 ### Configuration Rule Structure:
 ```yaml

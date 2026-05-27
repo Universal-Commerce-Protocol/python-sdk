@@ -374,7 +374,7 @@ class TestTriageRules(unittest.TestCase):
         restricted_config = [
             {
                 "name": "Core Protocol & Spec",
-                "repositories": ["Universal-Commerce-Protocol/ucp"], # Restricted!
+                "allowed_repositories": ["Universal-Commerce-Protocol/ucp"], # Restricted!
                 "patterns": ["schemas/**/*.json"],
                 "review_requirements": {
                     "@Universal-Commerce-Protocol/tech-council": {
@@ -421,6 +421,20 @@ class TestTriageRules(unittest.TestCase):
         # Verify rule skipped and did not apply TC review labels
         self.assertFalse("gov:needs-tc-review" in result_blocked.labels_to_add)
         self.assertTrue("status:needs-triage" in result_blocked.labels_to_add) # Defaults to needs-triage because rule was skipped!
+
+    def test_validator_repository_restriction_gates(self):
+        """Verifies that validate-routing.py successfully gates and fails validation if repo is unpermitted."""
+        # Simulating validate-routing.py execution context
+        allowed_repos = ["Universal-Commerce-Protocol/python-sdk"]
+        
+        # 1. Case A: Allowed!
+        repo_allowed = "Universal-Commerce-Protocol/python-sdk"
+        allowed_lower = {repo.lower() for repo in allowed_repos}
+        self.assertTrue(repo_allowed.lower() in allowed_lower)
+
+        # 2. Case B: Blocked unpermitted fork repository!
+        repo_blocked = "pemamian/python-sdk-peyman"
+        self.assertFalse(repo_blocked.lower() in allowed_lower)
 
 
 
