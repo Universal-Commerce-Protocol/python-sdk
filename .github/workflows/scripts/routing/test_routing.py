@@ -265,6 +265,38 @@ class TestTriageRules(unittest.TestCase):
         self.assertTrue(Label.LABEL_READY_TO_MERGE in result.labels_to_add)
         self.assertTrue(result.satisfied)
 
+    def test_unauthorized_needs_review_label_removal_guardrail(self):
+        """Verifies ReviewerApprovalRule blocks unauthorized removal of active needs-review labels."""
+        # Scenario: Changed schemas file (Core Spec), user 'unauthorized_tester' manually removed needs_review label
+        # Target org/team handles: @Universal-Commerce-Protocol/tech-council
+        self.mock_client.check_team_membership.return_value = False # User is not a member of TC or DevOps
+
+        context_unlabel = PRContext(
+            pr_number=111,
+            repo_name="Universal-Commerce-Protocol/ucp",
+            title="feat: corespec modifications",
+            author="developer2",
+            is_draft=False,
+            labels=set(), # Set is empty because the user removed the label
+            modified_files=["schemas/v1/transaction.json"],
+            reviews=[],
+            event_name="pull_request",
+            event_payload={
+                "action": "unlabeled",
+                "sender": {"login": "unauthorized_tester"},
+                "label": {"name": "gov:needs-tc-review"} # Removed label name
+            }
+        )
+
+        rule = ReviewerApprovalRule(self.mock_config)
+        result = rule.evaluate(context_unlabel, self.mock_client)
+
+        # Assert that the needs_review label is dynamically re-applied
+        self.assertTrue("gov:needs-tc-review" in result.labels_to_add)
+        # Assert warning comment is prepared
+        self.assertEqual(len(result.comments_to_create), 1)
+        self.assertTrue("Warning: @unauthorized_tester, you do not have permission to remove `gov:needs-tc-review`." in result.comments_to_create[0])
+
     def test_label_lifecycle_blocked_resume(self):
         """Verifies LabelLifecycleRule handles blocked and resumed triggers."""
         rule = LabelLifecycleRule()

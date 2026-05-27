@@ -185,14 +185,16 @@ class ReviewerApprovalRule(BaseRule):
                     if approved_label:
                         labels_to_add.add(approved_label)
 
-        # Enforce guardrail logic for governance labels
+        # Enforce guardrail logic for governance labels application & removal security
+        event_user = context.event_payload.get("sender", {}).get("login")
+        event_action = context.event_payload.get("action")
+        org_name = context.repo_name.split("/")[0]
+
+        # 1. Guard against unauthorized addition of TC Majority Label
         if Label.LABEL_TC_MAJORITY_APPROVED in context.labels:
-            # Ensure applier was actually TC or DevOps
-            event_user = context.event_payload.get("sender", {}).get("login")
-            if event_user and context.event_name == "pull_request" and context.event_payload.get("action") == "labeled":
+            if event_user and context.event_name == "pull_request" and event_action == "labeled":
                 label_added = context.event_payload.get("label", {}).get("name")
                 if label_added == Label.LABEL_TC_MAJORITY_APPROVED:
-                    org_name = context.repo_name.split("/")[0]
                     is_tc = client.check_team_membership(org_name, "tech-council", event_user)
                     is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
                     if not is_tc and not is_devops:
@@ -202,6 +204,33 @@ class ReviewerApprovalRule(BaseRule):
                             f"Warning: @{event_user}, you do not have permission to apply "
                             f"`{Label.LABEL_TC_MAJORITY_APPROVED}`. This action has been automatically reverted."
                         )
+
+        # 2. Guard against unauthorized removal of active needs-review labels
+        if context.event_name == "pull_request" and event_action == "unlabeled":
+            label_removed = context.event_payload.get("label", {}).get("name")
+            
+            for rule in self.config:
+                for team_handle, req_details in rule.get("review_requirements", {}).items():
+                    needs_label = req_details.get("needs_review_label")
+                    
+                    if needs_label and label_removed == needs_label:
+                        # Verify if the user who removed it is a member of the team or DevOps
+                        clean_handle = team_handle.lstrip("@")
+                        team_org, team_slug = clean_handle.split("/", 1)
+                        
+                        is_team_member = client.check_team_membership(team_org, team_slug, event_user)
+                        is_devops = client.check_team_membership(org_name, "devops-maintainers", event_user)
+                        
+                        # If the requirements are not satisfied and the user is unauthorized, re-apply!
+                        satisfied, _ = verify_team_approvals(context, team_handle, req_details.get("threshold", 1), client)
+                        if not satisfied and not is_team_member and not is_devops:
+                            print(f"[GUARDRAIL] Unauthorized user {event_user} removed required label {needs_label}. Re-applying.")
+                            labels_to_add.add(needs_label)
+                            comments.append(
+                                f"Warning: @{event_user}, you do not have permission to remove "
+                                f"`{needs_label}`. Reviews from `{team_handle}` are still pending. "
+                                f"This action has been automatically reverted."
+                            )
 
         # If all rules passed, transition to ready-to-merge
         if all_rules_satisfied and rules_evaluated > 0:
