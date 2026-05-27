@@ -2,6 +2,11 @@
 # This file acts as the configuration map for pr-triage-automation script.
 # It defines glob patterns for changed files and associates them with required reviewer sets and label states.
 
+# Target repositories restriction list: 
+# If configured, the rules engine will strictly execute checks ONLY if running on one of the specified repositories.
+allowed_repositories:
+  - "pemamian/python-sdk-peyman"
+
 routing_rules:
   - name: "Governance Files"
     patterns:
@@ -16,6 +21,9 @@ routing_rules:
         approved_label: "gov:gc-approved"
 
   - name: "Core Protocol & Spec"
+    # Optional dynamic scope limit: if configured, this specific rule only runs on the listed repositories.
+    allowed_repositories:
+      - "pemamian/python-sdk-peyman"
     patterns:
       - "schemas/**/*.json"
       - "spec/**/*.md"

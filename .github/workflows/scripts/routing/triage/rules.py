@@ -49,27 +49,43 @@ class FileRoutingRule(BaseRule):
         # Determine which routing files matched
         matched_any = False
         for rule in self.config:
+            rule_name = rule.get("name", f"Rule")
             patterns = rule.get("patterns", [])
             review_reqs = rule.get("review_requirements", {})
-            
+            allowed_repos = rule.get("allowed_repositories", [])
+
+            # Check if this specific rule is allowed to execute on the current repository
+            if allowed_repos:
+                allowed_lower = {repo.lower() for repo in allowed_repos}
+                if context.repo_name.lower() not in allowed_lower:
+                    print(f"  - [RULE] [SKIP] Rule '{rule_name}' is restricted and cannot execute on '{context.repo_name}'.")
+                    continue
+
             rule_matches = False
+            matched_file = None
+            matched_pattern = None
             for filepath in context.modified_files:
                 for pattern in patterns:
                     if fnmatch.fnmatch(filepath, pattern) or filepath.startswith(pattern.replace("**/", "")):
                         rule_matches = True
+                        matched_file = filepath
+                        matched_pattern = pattern
                         break
                 if rule_matches:
                     break
 
             if rule_matches:
                 matched_any = True
+                print(f"  - [RULE] PR matched rule '{rule_name}' (File: '{matched_file}' matched pattern: '{matched_pattern}')")
+                
                 # Inspect if each required group's reviews are met
                 for team_handle, req_details in review_reqs.items():
                     threshold = req_details.get("threshold", 1)
                     needs_label = req_details.get("needs_review_label")
                     approved_label = req_details.get("approved_label")
 
-                    satisfied, _ = verify_team_approvals(context, team_handle, threshold, client)
+                    satisfied, approvals_count = verify_team_approvals(context, team_handle, threshold, client)
+                    print(f"    - [CHECK] Reviews from team '{team_handle}': {approvals_count}/{threshold} approvals met (Satisfied: {satisfied})")
                     
                     if not satisfied:
                         if needs_label:
@@ -84,6 +100,7 @@ class FileRoutingRule(BaseRule):
 
         # Ingest: if no specific protocol/rules match, or standard triage applies, flag needs-triage
         if not matched_any and Label.LABEL_UNDER_REVIEW not in context.labels:
+            print(f"  - [RULE] PR does not match any custom spec rules. Routing to standard Ingestion (needs-triage).")
             labels_to_add.add(Label.LABEL_NEEDS_TRIAGE)
 
         return RuleResult(
@@ -219,9 +236,18 @@ class ReviewerApprovalRule(BaseRule):
         rules_evaluated = 0
 
         for rule in self.config:
+            rule_name = rule.get("name", f"Rule")
             patterns = rule.get("patterns", [])
             review_reqs = rule.get("review_requirements", {})
-            
+            allowed_repos = rule.get("allowed_repositories", [])
+
+            # Check if this specific rule is allowed to execute on the current repository
+            if allowed_repos:
+                allowed_lower = {repo.lower() for repo in allowed_repos}
+                if context.repo_name.lower() not in allowed_lower:
+                    print(f"[RULE] [SKIP] Rule '{rule_name}' is restricted and cannot execute approvals verification on '{context.repo_name}'.")
+                    continue
+
             # Check if this rule matches PR's files
             matches = False
             for filepath in context.modified_files:

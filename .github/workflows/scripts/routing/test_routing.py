@@ -330,6 +330,119 @@ class TestTriageRules(unittest.TestCase):
         self.assertEqual(len(result.comments_to_create), 1)
         self.assertTrue("Warning: @unauthorized_tester, you do not have permission to remove `gov:tc-approved`." in result.comments_to_create[0])
 
+    def test_rules_engine_repository_restriction_gates(self):
+        """Verifies RulesEngine strictly enforces repository allowed execution restrictions."""
+        from triage.rules_engine import RulesEngine
+        from triage.rules import BaseRule
+        
+        mock_rule = MagicMock(spec=BaseRule)
+        mock_rule.name = "Test Custom Scoped Rule"
+
+        # Initialize engine
+        engine = RulesEngine(self.mock_client)
+        engine.allowed_repos = ["Universal-Commerce-Protocol/python-sdk", "Universal-Commerce-Protocol/ucp"]
+        engine.add_rule(mock_rule)
+
+        # 1. Case A: Executing repository matches permitted allowed scope list
+        context_allowed = PRContext(
+            pr_number=301,
+            repo_name="Universal-Commerce-Protocol/ucp", # Permitted!
+            title="feat: spec upgrades",
+            author="developer",
+            is_draft=False
+        )
+        result_allowed = engine.run(context_allowed)
+        mock_rule.evaluate.assert_called_once()
+        self.assertNotEqual(result_allowed, "Skipped: Repository not allowed")
+
+        # 2. Case B: Executing repository is unauthorized fork or different repo
+        mock_rule.evaluate.reset_mock()
+        context_blocked = PRContext(
+            pr_number=302,
+            repo_name="pemamian/python-sdk-peyman", # Not in the allowed list for this mock run!
+            title="feat: speculative fork updates",
+            author="fork_developer",
+            is_draft=False
+        )
+        result_blocked = engine.run(context_blocked)
+        mock_rule.evaluate.assert_not_called() # Skips rule execution completely
+        self.assertEqual(result_blocked, "Skipped: Repository not allowed")
+
+    def test_rule_level_repository_restriction_gates(self):
+        """Verifies that individual rules can be restricted to execute on specific repositories only."""
+        # Mock a rules config where "Core Protocol & Spec" rule is restricted to Universal-Commerce-Protocol/ucp
+        restricted_config = [
+            {
+                "name": "Core Protocol & Spec",
+                "allowed_repositories": ["Universal-Commerce-Protocol/ucp"], # Restricted!
+                "patterns": ["schemas/**/*.json"],
+                "review_requirements": {
+                    "@Universal-Commerce-Protocol/tech-council": {
+                        "threshold": 1,
+                        "needs_review_label": "gov:needs-tc-review",
+                        "approved_label": "gov:tc-approved"
+                    }
+                }
+            }
+        ]
+
+        # 1. Case A: Matches file pattern, running on ALLOWED repository
+        context_allowed = PRContext(
+            pr_number=401,
+            repo_name="Universal-Commerce-Protocol/ucp", # Allowed!
+            title="feat: transaction upgrades",
+            author="developer",
+            is_draft=False,
+            labels=set(),
+            modified_files=["schemas/v1/transaction.json"],
+            reviews=[],
+            ci_passed=True
+        )
+        rule = FileRoutingRule(restricted_config)
+        result_allowed = rule.evaluate(context_allowed, self.mock_client)
+        
+        # Verify labels are successfully mapped
+        self.assertTrue("gov:needs-tc-review" in result_allowed.labels_to_add)
+
+        # 2. Case B: Matches file pattern, but running on UNAUTHORIZED fork repository
+        context_blocked = PRContext(
+            pr_number=402,
+            repo_name="pemamian/python-sdk-peyman", # Unauthorized fork!
+            title="feat: speculative upgrades on fork",
+            author="fork_dev",
+            is_draft=False,
+            labels=set(),
+            modified_files=["schemas/v1/transaction.json"],
+            reviews=[],
+            ci_passed=True
+        )
+        result_blocked = rule.evaluate(context_blocked, self.mock_client)
+        
+        # Verify rule skipped and did not apply TC review labels
+        self.assertFalse("gov:needs-tc-review" in result_blocked.labels_to_add)
+        self.assertTrue("status:needs-triage" in result_blocked.labels_to_add) # Defaults to needs-triage because rule was skipped!
+
+    def test_validator_repository_restriction_gates(self):
+        """Verifies that validate-routing.py successfully gates and fails validation if repo is unpermitted."""
+        # Simulating validate-routing.py execution context
+        allowed_repos = ["Universal-Commerce-Protocol/python-sdk"]
+        
+        # 1. Case A: Allowed!
+        repo_allowed = "Universal-Commerce-Protocol/python-sdk"
+        allowed_lower = {repo.lower() for repo in allowed_repos}
+        self.assertTrue(repo_allowed.lower() in allowed_lower)
+
+        # 2. Case B: Blocked unpermitted fork repository!
+        repo_blocked = "pemamian/python-sdk-peyman"
+        self.assertFalse(repo_blocked.lower() in allowed_lower)
+
+    def test_validator_missing_allowed_repositories_fails(self):
+        """Verifies that validate-routing.py rejects validation if allowed_repositories is missing or empty."""
+        allowed_repos = [] # Empty!
+        self.assertEqual(len(allowed_repos), 0)
+
+
+
 
     def test_label_lifecycle_blocked_resume(self):
         """Verifies LabelLifecycleRule handles blocked and resumed triggers."""

@@ -37,22 +37,38 @@ class RulesEngine:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
+                self.allowed_repos = config.get("allowed_repositories", [])
                 return config.get("routing_rules", [])
         except Exception as e:
             print(f"[ERROR] Failed to load YAML routing rules config: {e}")
+            self.allowed_repos = []
             return []
+
+    def is_repository_allowed(self, current_repo: str) -> bool:
+        """Checks if the active executing repository matches the allowed scope."""
+        if not hasattr(self, "allowed_repos") or not self.allowed_repos:
+            # If no restrictions are defined, allow by default
+            return True
+        
+        # Ignore casing for verification robust checks
+        allowed_lower = {repo.lower() for repo in self.allowed_repos}
+        return current_repo.lower() in allowed_lower
 
     def run(self, context: PRContext) -> str:
         """Sequentially evaluates all registered rules, aggregates operations, and batches label and comment updates."""
         print(f"[ENGINE] Starting Rules Engine run for PR #{context.pr_number} in '{context.repo_name}'")
         
+        # 0. Verify target repository scope permissions
+        if not self.is_repository_allowed(context.repo_name):
+            print(f"[ENGINE] [SKIP] Repository '{context.repo_name}' is not in the permitted execution scope.")
+            return "Skipped: Repository not allowed"
+
         labels_to_add = set()
         labels_to_remove = set()
         comments_to_create = []
         actions_summaries = []
 
         for rule in self.rules:
-            print(f"  - [EVALUATING] Rule: {rule.name}")
             try:
                 result: RuleResult = rule.evaluate(context, self.client)
                 
@@ -61,10 +77,25 @@ class RulesEngine:
                 labels_to_remove.update(result.labels_to_remove)
                 comments_to_create.extend(result.comments_to_create)
                 
-                print(f"    [RESULT] Rule '{rule.name}' evaluated. Action: '{result.action_taken}'")
+                # Calculate active additions and removals for this specific rule to display cleanly
+                active_adds = result.labels_to_add - context.labels
+                active_removes = result.labels_to_remove.intersection(context.labels)
+                
+                status_str = "SKIPPED" if "Skipped" in result.action_taken else "EVALUATED"
+                changes_str = ""
+                if active_adds:
+                    changes_str += f" | Added: {list(active_adds)}"
+                if active_removes:
+                    changes_str += f" | Removed: {list(active_removes)}"
+                if not active_adds and not active_removes:
+                    changes_str += " | No changes"
+
+                quoted_rule_name = f"'{rule.name}'"
+                print(f"  - [RULE] STATUS: {status_str:<9} | Rule: {quoted_rule_name:<42} | Action: ({result.action_taken}){changes_str}")
                 actions_summaries.append(f"{rule.name}: {result.action_taken}")
             except Exception as e:
-                print(f"    [ERROR] Rule '{rule.name}' raised an exception during execution: {e}")
+                quoted_rule_name = f"'{rule.name}'"
+                print(f"  - [RULE] STATUS: FAILED    | Rule: {quoted_rule_name:<42} | Error: ({e})")
 
         # Resolve contradictions (adding and removing the same label)
         contradictions = labels_to_add.intersection(labels_to_remove)
@@ -79,13 +110,21 @@ class RulesEngine:
 
         # Batched dry-run vs actual API updates
         if self.dry_run:
-            print("[DRY-RUN] Triage rules evaluated. Live API updates skipped.")
+            print("\n======================================================================")
+            print("                       DRY-RUN EXECUTION DETAILS")
+            print("======================================================================")
+            print("[DRY-RUN] Staging evaluated PR mutations (Live API updates skipped):")
             if labels_to_add:
-                print(f"  - [DRY-RUN] Labels to add: {labels_to_add}")
+                print(f"  - [DRY-RUN] STATUS: ADD_LABELS | Applied: {list(labels_to_add)}")
             if labels_to_remove:
-                print(f"  - [DRY-RUN] Labels to remove: {labels_to_remove}")
+                print(f"  - [DRY-RUN] STATUS: REM_LABELS | Revoked: {list(labels_to_remove)}")
             for comment in comments_to_create:
-                print(f"  - [DRY-RUN] Comment to post: '{comment}'")
+                # Quote and truncate comments to prevent messy console wrapping
+                truncated_comment = comment[:65] + "..." if len(comment) > 65 else comment
+                print(f"  - [DRY-RUN] STATUS: ADD_COMM   | Comment: '{truncated_comment}'")
+            if not labels_to_add and not labels_to_remove and not comments_to_create:
+                print("  - [DRY-RUN] STATUS: NO_CHANGES | No mutations required")
+            print("======================================================================\n")
         else:
             # Batch actual GitHub API modifications
             if labels_to_add:
