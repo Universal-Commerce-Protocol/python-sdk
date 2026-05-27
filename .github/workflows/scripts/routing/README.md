@@ -59,7 +59,9 @@ Triage logic is organized into specialized rule subclasses inheriting from `Base
 1. **`FileRoutingRule`**: Compiles modified files against the configuration and dynamically applies the corresponding `needs_review_label` and removes the `approved_label`.
 2. **`ReviewerApprovalRule`**: Tracks active `pygithub` approvals against the resolved organization team members list:
    * **Superpower Override**: If a designated superpower user (like Amit `amithanda`) approves, all TC and GC rules are satisfied instantly, transitioning the PR to `gov:approved` / `status:ready-to-merge`.
-   * **Label Security Guardrail**: Restricts `gov:tc-approved` and `status:tc-majority-approved` application. If applied by an unauthorized user outside Tech Council or DevOps, the script revokes the label with an automated warning comment.
+   * **Label Application & Removal Guardrails**: 
+     * Restricts `gov:tc-approved` and `status:tc-majority-approved` application. If applied by an unauthorized user outside Tech Council or DevOps, the script revokes the label.
+     * If an active `needs_review_label` is manually **unlabeled (removed)** by an unauthorized user while approvals are still pending, the engine **automatically re-applies the label** dynamically and posts a warning comment on the PR.
    * **SDK Relaxed Mode**: Repositories matching `sdk` or `meeting-minutes` automatically default team thresholds to `1` to expedite SDK review cycles.
 3. **`LabelLifecycleRule`**: Resolves blocked feedback loops. Clears `Label.LABEL_BLOCKED` and restores `Label.LABEL_UNDER_REVIEW` when the author pushes a new commit or comments on the PR.
 4. **`StalePRRule`**: Scans active timestamps:
