@@ -84,7 +84,7 @@ uv run .github/workflows/scripts/routing/validate-routing.py
 ```
 This utility checks:
 1. **YAML Syntax**: Verifies structure correctness.
-2. **Taxonomy Matcher**: Cross-references labels with [`.github/triage-labels.yml`](file:///usr/local/google/home/pemamian/ucp-dev/python-sdk-peyman/.github/triage-labels.yml) to prevent styling typos.
+2. **Taxonomy Matcher**: Cross-references labels with [`triage-labels.yml`](/.github/triage-labels.yml) to prevent styling typos.
 3. **Dynamic Org Team Check**: Dynamically calls the API to verify that all configured dynamic handles actually exist in the active organization (gracefully skipped with a warning on local forks).
 
 ### Triage dry-runs:
