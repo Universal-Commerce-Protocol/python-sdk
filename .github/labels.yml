@@ -39,3 +39,32 @@
 - name: gov:approved
   color: 'C2E0C6'
   description: Triggers the final code ownership checks
+
+# ==============================================================================
+# PROPOSED DYNAMIC & DOMAIN TRIAGE LABELS (For Team Review)
+# ==============================================================================
+- name: gov:gc-approved
+  color: 'B5D9F2'
+  description: Signifies Governance Council approved
+
+- name: gov:tc-approved
+  color: 'C2E0C6'
+  description: Signifies Technical Council approved
+
+- name: gov:maintainer-approved
+  color: 'D4C5F9'
+  description: Signifies Domain Expert / Maintainer approved
+
+- name: status:review-needed-maintainers
+  color: 'FBCA04'
+  description: Missing standard maintainer reviews
+
+- name: status:review-needed-payments-maintainers
+  color: 'FBCA04'
+  description: Missing Payments domain maintainer reviews
+
+- name: status:payments-approved
+  color: 'D4E5FF'
+  description: Payments domain approvals met
+
+
