@@ -1,0 +1,24 @@
+name: Sync Labels
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/triage-labels.yml'
+  workflow_dispatch:
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync Triage labels
+        uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/triage-labels.yml
+          delete-other-labels: false

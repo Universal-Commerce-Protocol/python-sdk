@@ -1,0 +1,38 @@
+---
+name: PR Triage Automation
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize, labeled]
+  issue_comment:
+    types: [created]
+  check_suite:
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  triage_realtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Validate Routing Configurations
+        run: uv run .github/workflows/scripts/routing/validate-routing.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check and Update PR Labels
+        run: uv run .github/workflows/scripts/routing/pr-triage-automation.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
