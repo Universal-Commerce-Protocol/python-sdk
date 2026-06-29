@@ -22,7 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from .checkout import Checkout as Checkout_1
+from ..types import amount as amount_1
+from ..types import reverse_domain_name
 
 
 class DiscountExtension(RootModel[Any]):
@@ -31,7 +32,7 @@ class DiscountExtension(RootModel[Any]):
     )
     root: Any = Field(..., title="Discount Extension")
     """
-    Extends Checkout with discount code support, enabling agents to apply promotional, loyalty, referral, and other discount codes.
+    Extends Cart and Checkout with discount support, including discount codes, automatic discounts, and eligibility-triggered provisional discounts.
     """
 
 
@@ -47,9 +48,9 @@ class Allocation(BaseModel):
     """
     JSONPath to the allocation target (e.g., '$.line_items[0]', '$.totals.shipping').
     """
-    amount: int = Field(..., ge=0)
+    amount: amount_1.Amount
     """
-    Amount allocated to this target in minor (cents) currency units.
+    Amount allocated to this target in ISO 4217 minor units.
     """
 
 
@@ -69,9 +70,9 @@ class AppliedDiscount(BaseModel):
     """
     Human-readable discount name (e.g., 'Summer Sale 20% Off').
     """
-    amount: int = Field(..., ge=0)
+    amount: amount_1.Amount
     """
-    Total discount amount in minor (cents) currency units.
+    Total discount amount in ISO 4217 minor units.
     """
     automatic: bool | None = False
     """
@@ -84,6 +85,14 @@ class AppliedDiscount(BaseModel):
     priority: int | None = Field(None, ge=1)
     """
     Stacking order for discount calculation. Lower numbers applied first (1 = first).
+    """
+    provisional: bool | None = False
+    """
+    True if this discount requires additional verification.
+    """
+    eligibility: reverse_domain_name.ReverseDomainName | None = None
+    """
+    The eligibility claim accepted by the Business for this discount. Corresponds to a value from context.eligibility. Omitted for code-based and non-eligibility automatic discounts.
     """
     allocations: list[Allocation] | None = None
     """
@@ -107,14 +116,3 @@ class DiscountsObject(BaseModel):
     """
     Discounts successfully applied (code-based and automatic).
     """
-
-
-class Checkout(Checkout_1):
-    """
-    Checkout extended with discount capability.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    discounts: DiscountsObject | None = None

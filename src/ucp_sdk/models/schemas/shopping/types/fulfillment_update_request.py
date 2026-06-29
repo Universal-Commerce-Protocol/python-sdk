@@ -32,8 +32,7 @@ class FulfillmentUpdateRequest(BaseModel):
         extra="allow",
     )
     methods: (
-        list[fulfillment_method_update_request.FulfillmentMethodUpdateRequest]
-        | None
+        list[fulfillment_method_update_request.FulfillmentMethodUpdateRequest] | None
     ) = None
     """
     Fulfillment methods for cart items.

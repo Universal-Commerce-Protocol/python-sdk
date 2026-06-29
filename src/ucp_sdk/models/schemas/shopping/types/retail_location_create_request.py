@@ -35,9 +35,7 @@ class RetailLocationCreateRequest(BaseModel):
     """
     Location name (e.g., store name).
     """
-    address: postal_address_create_request.PostalAddressCreateRequest | None = (
-        None
-    )
+    address: postal_address_create_request.PostalAddressCreateRequest | None = None
     """
     Physical address of the location.
     """

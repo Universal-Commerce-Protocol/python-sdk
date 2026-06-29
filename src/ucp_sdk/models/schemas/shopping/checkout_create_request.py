@@ -22,9 +22,11 @@ from pydantic import BaseModel, ConfigDict
 
 from . import payment_create_request
 from .types import (
+    attribution_create_request,
     buyer_create_request,
     context_create_request,
     line_item_create_request,
+    signals_create_request,
 )
 
 
@@ -45,4 +47,6 @@ class CheckoutCreateRequest(BaseModel):
     Representation of the buyer.
     """
     context: context_create_request.ContextCreateRequest | None = None
+    signals: signals_create_request.SignalsCreateRequest | None = None
+    attribution: attribution_create_request.AttributionCreateRequest | None = None
     payment: payment_create_request.PaymentCreateRequest | None = None

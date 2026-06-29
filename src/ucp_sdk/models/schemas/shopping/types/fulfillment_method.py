@@ -45,9 +45,7 @@ class FulfillmentMethod(BaseModel):
     """
     Line item IDs fulfilled via this method.
     """
-    destinations: (
-        list[fulfillment_destination.FulfillmentDestination] | None
-    ) = None
+    destinations: list[fulfillment_destination.FulfillmentDestination] | None = None
     """
     Available destinations. For shipping: addresses. For pickup: retail locations.
     """

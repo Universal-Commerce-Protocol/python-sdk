@@ -32,8 +32,7 @@ class FulfillmentCreateRequest(BaseModel):
         extra="allow",
     )
     methods: (
-        list[fulfillment_method_create_request.FulfillmentMethodCreateRequest]
-        | None
+        list[fulfillment_method_create_request.FulfillmentMethodCreateRequest] | None
     ) = None
     """
     Fulfillment methods for cart items.

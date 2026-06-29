@@ -20,7 +20,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict
+
+from . import total
 
 
 class LineItem(BaseModel):
@@ -31,15 +33,15 @@ class LineItem(BaseModel):
     """
     Line item ID reference.
     """
-    quantity: int = Field(..., ge=1)
+    quantity: int
     """
-    Quantity affected by this adjustment.
+    Signed quantity affected by this adjustment. Negative values represent reductions (e.g. returns); positive values represent additions (e.g. exchanges).
     """
 
 
 class Adjustment(BaseModel):
     """
-    Append-only event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items.
+    Post-order event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items.
     """
 
     model_config = ConfigDict(
@@ -65,9 +67,9 @@ class Adjustment(BaseModel):
     """
     Which line items and quantities are affected (optional).
     """
-    amount: int | None = None
+    totals: list[total.Total] | None = None
     """
-    Amount in minor units (cents) for refunds, credits, price adjustments (optional).
+    Adjustment totals breakdown. Signed values - negative for money returned to buyer (refunds, credits), positive for additional charges (exchanges).
     """
     description: str | None = None
     """

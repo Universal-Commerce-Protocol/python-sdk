@@ -22,9 +22,11 @@ from pydantic import BaseModel, ConfigDict
 
 from . import payment_update_request
 from .types import (
+    attribution_update_request,
     buyer_update_request,
     context_update_request,
     line_item_update_request,
+    signals_update_request,
 )
 
 
@@ -36,10 +38,6 @@ class CheckoutUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
-    """
-    Unique identifier of the checkout session.
-    """
     line_items: list[line_item_update_request.LineItemUpdateRequest]
     """
     List of line items being checked out.
@@ -49,4 +47,6 @@ class CheckoutUpdateRequest(BaseModel):
     Representation of the buyer.
     """
     context: context_update_request.ContextUpdateRequest | None = None
+    signals: signals_update_request.SignalsUpdateRequest | None = None
+    attribution: attribution_update_request.AttributionUpdateRequest | None = None
     payment: payment_update_request.PaymentUpdateRequest | None = None

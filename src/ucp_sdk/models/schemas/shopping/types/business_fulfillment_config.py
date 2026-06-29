@@ -53,9 +53,7 @@ class BusinessFulfillmentConfig(BaseModel):
     """
     Permits multiple destinations per method type.
     """
-    allows_method_combinations: (
-        list[list[Literal["shipping", "pickup"]]] | None
-    ) = None
+    allows_method_combinations: list[list[Literal["shipping", "pickup"]]] | None = None
     """
     Allowed method type combinations.
     """
