@@ -70,8 +70,8 @@ for item in checkout.line_items:
 
 | Package                                 | Description                                         |
 | --------------------------------------- | --------------------------------------------------- |
-| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, order, payment models               |
-| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, etc.        |
+| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, payment models      |
+| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, signals     |
 | `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings           |
 | `ucp_sdk.models.schemas`                | Service definitions, capabilities, payment handlers |
 
@@ -122,7 +122,7 @@ uv sync
 ```
 
 Where `<version>` is the version of the UCP specification to use (for example,
-"2026-01-23").
+"2026-04-08").
 
 If no version is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.
