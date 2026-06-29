@@ -33,5 +33,7 @@ class CheckoutCompleteRequest(BaseModel):
         extra="allow",
     )
     signals: signals_complete_request.SignalsCompleteRequest | None = None
-    attribution: attribution_complete_request.AttributionCompleteRequest | None = None
+    attribution: (
+        attribution_complete_request.AttributionCompleteRequest | None
+    ) = None
     payment: payment_complete_request.PaymentCompleteRequest

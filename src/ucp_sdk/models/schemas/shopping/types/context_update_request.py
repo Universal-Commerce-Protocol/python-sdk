@@ -56,7 +56,8 @@ class ContextUpdateRequest(BaseModel):
     Preferred currency (ISO 4217, e.g., 'EUR', 'USD'). Businesses determine presentment currency from context and authoritative signals; this hint MAY inform selection in multi-currency markets. Also serves as the denomination for price filter values — platforms SHOULD include this field when sending price filters. Response prices include explicit currency confirming the resolution.
     """
     eligibility: (
-        list[reverse_domain_name_update_request.ReverseDomainNameUpdateRequest] | None
+        list[reverse_domain_name_update_request.ReverseDomainNameUpdateRequest]
+        | None
     ) = None
     """
     Buyer claims about eligible benefits such as loyalty membership, payment instrument perks, and similar. Recognized claims MAY inform the Business response (e.g., member-only product availability, adjusted pricing in catalog, provisional discounts at cart or checkout). Businesses MUST ignore unrecognized values without error. Values MUST use reverse-domain naming (e.g., 'com.example.loyalty_gold', 'org.school.student') and MUST be non-identifying.

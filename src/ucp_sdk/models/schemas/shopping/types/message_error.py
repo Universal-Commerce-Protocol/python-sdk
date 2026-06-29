@@ -47,7 +47,10 @@ class MessageError(BaseModel):
     Human-readable message.
     """
     severity: Literal[
-        "recoverable", "requires_buyer_input", "requires_buyer_review", "unrecoverable"
+        "recoverable",
+        "requires_buyer_input",
+        "requires_buyer_review",
+        "unrecoverable",
     ]
     """
     Reflects the resource state and recommended action. 'recoverable': platform can resolve by modifying inputs and retrying via API. 'requires_buyer_input': merchant requires information their API doesn't support collecting programmatically (checkout incomplete). 'requires_buyer_review': buyer must authorize before order placement due to policy, regulatory, or entitlement rules. 'unrecoverable': no valid resource exists to act on, retry with new resource or inputs. Errors with 'requires_*' severity contribute to 'status: requires_escalation'.

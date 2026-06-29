@@ -27,7 +27,12 @@ class WarningCode(RootModel[str]):
     )
     root: str = Field(
         ...,
-        examples=["final_sale", "prop65", "fulfillment_changed", "age_restricted"],
+        examples=[
+            "final_sale",
+            "prop65",
+            "fulfillment_changed",
+            "age_restricted",
+        ],
         title="Warning Code",
     )
     """

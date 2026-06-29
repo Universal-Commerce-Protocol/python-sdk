@@ -48,5 +48,7 @@ class CheckoutUpdateRequest(BaseModel):
     """
     context: context_update_request.ContextUpdateRequest | None = None
     signals: signals_update_request.SignalsUpdateRequest | None = None
-    attribution: attribution_update_request.AttributionUpdateRequest | None = None
+    attribution: attribution_update_request.AttributionUpdateRequest | None = (
+        None
+    )
     payment: payment_update_request.PaymentUpdateRequest | None = None

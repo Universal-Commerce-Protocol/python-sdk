@@ -51,7 +51,9 @@ class CartUpdateRequest(BaseModel):
     Buyer signals for localization (country, region, postal_code). Merchant uses for pricing, availability, currency. Falls back to geo-IP if omitted.
     """
     signals: signals_update_request.SignalsUpdateRequest | None = None
-    attribution: attribution_update_request.AttributionUpdateRequest | None = None
+    attribution: attribution_update_request.AttributionUpdateRequest | None = (
+        None
+    )
     buyer: buyer_update_request.BuyerUpdateRequest | None = None
     """
     Optional buyer information for personalized estimates.

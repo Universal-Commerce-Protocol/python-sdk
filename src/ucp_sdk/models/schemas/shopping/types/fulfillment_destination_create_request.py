@@ -24,14 +24,18 @@ from . import retail_location, shipping_destination
 
 
 class FulfillmentDestinationCreateRequest(
-    RootModel[shipping_destination.ShippingDestination | retail_location.RetailLocation]
+    RootModel[
+        shipping_destination.ShippingDestination
+        | retail_location.RetailLocation
+    ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
-    root: shipping_destination.ShippingDestination | retail_location.RetailLocation = (
-        Field(..., title="Fulfillment Destination Create Request")
-    )
+    root: (
+        shipping_destination.ShippingDestination
+        | retail_location.RetailLocation
+    ) = Field(..., title="Fulfillment Destination Create Request")
     """
     A destination for fulfillment.
     """

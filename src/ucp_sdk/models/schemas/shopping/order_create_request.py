@@ -53,14 +53,15 @@ class Fulfillment(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    expectations: list[expectation_create_request.ExpectationCreateRequest] | None = (
-        None
-    )
+    expectations: (
+        list[expectation_create_request.ExpectationCreateRequest] | None
+    ) = None
     """
     Buyer-facing groups representing when/how items will be delivered. Can be split, merged, or adjusted post-order.
     """
     events: (
-        list[fulfillment_event_create_request.FulfillmentEventCreateRequest] | None
+        list[fulfillment_event_create_request.FulfillmentEventCreateRequest]
+        | None
     ) = None
     """
     Append-only event log of actual shipments. Each event references line items by ID.
@@ -100,7 +101,9 @@ class OrderCreateRequest(BaseModel):
     """
     Fulfillment data: buyer expectations and what actually happened.
     """
-    adjustments: list[adjustment_create_request.AdjustmentCreateRequest] | None = None
+    adjustments: (
+        list[adjustment_create_request.AdjustmentCreateRequest] | None
+    ) = None
     """
     Post-order events (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
     """

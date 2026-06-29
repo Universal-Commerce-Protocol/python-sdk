@@ -245,14 +245,16 @@ class PlatformSchema9(BaseModel):
 
 
 class PlatformSchema5(
-    RootModel[PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9]
+    RootModel[
+        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
+    ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
-    root: PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9 = Field(
-        ..., title="Service (Platform Schema)"
-    )
+    root: (
+        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
+    ) = Field(..., title="Service (Platform Schema)")
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -411,14 +413,16 @@ class BusinessSchema6(BaseModel):
 
 
 class BusinessSchema2(
-    RootModel[BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6]
+    RootModel[
+        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
+    ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
-    root: BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6 = Field(
-        ..., title="Service (Business Schema)"
-    )
+    root: (
+        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
+    ) = Field(..., title="Service (Business Schema)")
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -577,14 +581,16 @@ class ResponseSchema6(BaseModel):
 
 
 class ResponseSchema2(
-    RootModel[ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6]
+    RootModel[
+        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6
+    ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
-    root: ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6 = Field(
-        ..., title="Service (Response Schema)"
-    )
+    root: (
+        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6
+    ) = Field(..., title="Service (Response Schema)")
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """

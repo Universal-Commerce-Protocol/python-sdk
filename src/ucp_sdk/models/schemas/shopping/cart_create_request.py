@@ -47,7 +47,9 @@ class CartCreateRequest(BaseModel):
     Buyer signals for localization (country, region, postal_code). Merchant uses for pricing, availability, currency. Falls back to geo-IP if omitted.
     """
     signals: signals_create_request.SignalsCreateRequest | None = None
-    attribution: attribution_create_request.AttributionCreateRequest | None = None
+    attribution: attribution_create_request.AttributionCreateRequest | None = (
+        None
+    )
     buyer: buyer_create_request.BuyerCreateRequest | None = None
     """
     Optional buyer information for personalized estimates.

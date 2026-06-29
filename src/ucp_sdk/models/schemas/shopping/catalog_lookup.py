@@ -121,7 +121,9 @@ class Option(BaseModel):
         extra="allow",
     )
     name: str
-    values: list[detail_option_value.DetailOptionValue] = Field(..., min_length=1)
+    values: list[detail_option_value.DetailOptionValue] = Field(
+        ..., min_length=1
+    )
 
 
 class DetailProduct(Product_1):

@@ -37,7 +37,7 @@ class BuyerConsentExtension(RootModel[Any]):
 
 class Consent(BaseModel):
     """
-    User consent states for data processing.
+    User consent states for data processing
     """
 
     model_config = ConfigDict(

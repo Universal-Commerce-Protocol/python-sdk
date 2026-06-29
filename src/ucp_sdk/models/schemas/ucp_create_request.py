@@ -117,20 +117,22 @@ class Base(BaseModel):
     """
     Application-level status of the UCP operation.
     """
-    services: dict[reverse_domain_name.ReverseDomainName, list[service.Base]] | None = (
-        None
-    )
+    services: (
+        dict[reverse_domain_name.ReverseDomainName, list[service.Base]] | None
+    ) = None
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.Base]] | None
+        dict[reverse_domain_name.ReverseDomainName, list[capability.Base]]
+        | None
     ) = None
     """
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: (
-        dict[reverse_domain_name.ReverseDomainName, list[payment_handler.Base]] | None
+        dict[reverse_domain_name.ReverseDomainName, list[payment_handler.Base]]
+        | None
     ) = None
     """
     Payment handler registry keyed by reverse-domain name.
@@ -173,19 +175,25 @@ class PlatformSchema(Base):
     model_config = ConfigDict(
         extra="allow",
     )
-    services: dict[reverse_domain_name.ReverseDomainName, list[service.PlatformSchema5]]
+    services: dict[
+        reverse_domain_name.ReverseDomainName, list[service.PlatformSchema5]
+    ]
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.PlatformSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.PlatformSchema],
+        ]
         | None
     ) = None
     """
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName, list[payment_handler.PlatformSchema]
+        reverse_domain_name.ReverseDomainName,
+        list[payment_handler.PlatformSchema],
     ]
     """
     Payment handler registry keyed by reverse-domain name.
@@ -204,19 +212,25 @@ class BusinessSchema(Base):
     """
     Previous protocol versions this business supports, mapped to profile URIs. Businesses that support older protocol versions SHOULD advertise each version and link to its profile. Each URI points to a complete, self-contained profile for that version. When omitted, only `version` is supported.
     """
-    services: dict[reverse_domain_name.ReverseDomainName, list[service.BusinessSchema2]]
+    services: dict[
+        reverse_domain_name.ReverseDomainName, list[service.BusinessSchema2]
+    ]
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.BusinessSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.BusinessSchema],
+        ]
         | None
     ) = None
     """
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName, list[payment_handler.BusinessSchema]
+        reverse_domain_name.ReverseDomainName,
+        list[payment_handler.BusinessSchema],
     ]
     """
     Payment handler registry keyed by reverse-domain name.
@@ -232,21 +246,27 @@ class ResponseCheckoutSchema(Base):
         extra="allow",
     )
     services: (
-        dict[reverse_domain_name.ReverseDomainName, list[service.ResponseSchema2]]
+        dict[
+            reverse_domain_name.ReverseDomainName, list[service.ResponseSchema2]
+        ]
         | None
     ) = None
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.ResponseSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.ResponseSchema],
+        ]
         | None
     ) = None
     """
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName, list[payment_handler.ResponseSchema]
+        reverse_domain_name.ReverseDomainName,
+        list[payment_handler.ResponseSchema],
     ]
     """
     Payment handler registry keyed by reverse-domain name.
@@ -262,7 +282,10 @@ class ResponseOrderSchema(Base):
         extra="allow",
     )
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.ResponseSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.ResponseSchema],
+        ]
         | None
     ) = None
     """
@@ -279,7 +302,10 @@ class ResponseCartSchema(Base):
         extra="allow",
     )
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.ResponseSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.ResponseSchema],
+        ]
         | None
     ) = None
     """
@@ -296,7 +322,10 @@ class ResponseCatalogSchema(Base):
         extra="allow",
     )
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.ResponseSchema]]
+        dict[
+            reverse_domain_name.ReverseDomainName,
+            list[capability.ResponseSchema],
+        ]
         | None
     ) = None
     """

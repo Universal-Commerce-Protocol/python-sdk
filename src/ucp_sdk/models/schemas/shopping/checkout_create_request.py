@@ -48,5 +48,7 @@ class CheckoutCreateRequest(BaseModel):
     """
     context: context_create_request.ContextCreateRequest | None = None
     signals: signals_create_request.SignalsCreateRequest | None = None
-    attribution: attribution_create_request.AttributionCreateRequest | None = None
+    attribution: attribution_create_request.AttributionCreateRequest | None = (
+        None
+    )
     payment: payment_create_request.PaymentCreateRequest | None = None
