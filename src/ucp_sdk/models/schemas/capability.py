@@ -33,6 +33,114 @@ class UcpCapability(RootModel[Any]):
     """
 
 
+class Extends(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends1Item(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+
+
+class Extends1(RootModel[list[Extends1Item]]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: list[Extends1Item] = Field(..., min_length=1)
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends2(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends3Item(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+
+
+class Extends3(RootModel[list[Extends3Item]]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: list[Extends3Item] = Field(..., min_length=1)
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends4(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends5Item(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+
+
+class Extends5(RootModel[list[Extends5Item]]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: list[Extends5Item] = Field(..., min_length=1)
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends6(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
+class Extends7Item(RootModel[str]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+
+
+class Extends7(RootModel[list[Extends7Item]]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: list[Extends7Item] = Field(..., min_length=1)
+    """
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+    """
+
+
 class Version(RootModel[Any]):
     model_config = ConfigDict(
         frozen=True,
@@ -64,11 +172,9 @@ class Base(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: str | None = Field(
-        None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
-    )
+    extends: Extends | Extends1 | None = None
     """
-    Parent capability this extends. Present for extensions, absent for root capabilities.
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
 
 
@@ -100,11 +206,9 @@ class PlatformSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: str | None = Field(
-        None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
-    )
+    extends: Extends2 | Extends3 | None = None
     """
-    Parent capability this extends. Present for extensions, absent for root capabilities.
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
 
 
@@ -136,11 +240,9 @@ class BusinessSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: str | None = Field(
-        None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
-    )
+    extends: Extends4 | Extends5 | None = None
     """
-    Parent capability this extends. Present for extensions, absent for root capabilities.
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
 
 
@@ -172,9 +274,7 @@ class ResponseSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: str | None = Field(
-        None, pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
-    )
+    extends: Extends6 | Extends7 | None = None
     """
-    Parent capability this extends. Present for extensions, absent for root capabilities.
+    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """

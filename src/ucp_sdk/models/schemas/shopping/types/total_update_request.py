@@ -22,6 +22,10 @@ from pydantic import BaseModel, ConfigDict
 
 
 class TotalUpdateRequest(BaseModel):
+    """
+    A cost breakdown entry with a category, amount, and optional display text.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )

@@ -343,7 +343,7 @@ def update_variant_identity(variant_schema, op, stem):
 def rewrite_refs_to_variants(root, op, file_path, variant_needs):
     """
     Walks a schema tree and updates external links to point to variant files.
-    Example: product.json -> product_create_request.json
+    Example: product.json -> product_create_request.json.
     """
     for node in iter_nodes(root):
         if isinstance(node, dict) and "$ref" in node:
@@ -500,7 +500,7 @@ def main():
     1. Pass 1: Local flattening (allOf) and discovery of needed variants
     2. metadata normalization: unifies ucp properties
     3. Pass 2: Transitive propagation (ensuring matched variants for linked schemas)
-    4. Pass 3: Variant file generation (*_request.json)
+    4. Pass 3: Variant file generation (*_request.json).
     """
     target_dir = Path(
         sys.argv[1] if len(sys.argv) > 1 else "ucp/source/schemas"
