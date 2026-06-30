@@ -35,6 +35,17 @@ This repository contains the Python SDK for the
 models for UCP schemas, making it easy to build UCP-compliant applications in
 Python.
 
+### UCP Version Compatibility
+
+Each version of the Python SDK is generated against a specific version of the
+UCP schema:
+
+| SDK Version       | UCP Schema Version |
+| ----------------- | ------------------ |
+| **`0.4.x`**       | **`2026-04-08`**   |
+| `0.3.x`           | `2026-01-23`       |
+| `0.2.x` / `0.1.x` | `2026-01-11`       |
+
 ## Installation
 
 To use this SDK in your own project, install it from PyPI:
