@@ -13,8 +13,9 @@ on:
       assigned, 
       unassigned
     ]
-  pull_request_review:
-    types: [submitted, dismissed]
+  workflow_run:
+    workflows: ["PR Review Listener"]
+    types: [completed]
 
 jobs:
   governance:
