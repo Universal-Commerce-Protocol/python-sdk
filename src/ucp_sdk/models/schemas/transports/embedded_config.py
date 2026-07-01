@@ -18,12 +18,14 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
 class EmbeddedTransportConfig(BaseModel):
     """
-    Per-checkout configuration for embedded transport binding. Allows businesses to vary ECP availability and delegations based on cart contents, agent authorization, or policy.
+    Per-session configuration for embedded transport binding. Allows businesses to vary EP availability and delegations based on cart contents, agent authorization, or policy.
     """
 
     model_config = ConfigDict(
@@ -31,5 +33,9 @@ class EmbeddedTransportConfig(BaseModel):
     )
     delegate: list[str] | None = None
     """
-    Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
+    Delegations the business allows. At service-level, declares available delegations. In UCP responses, confirms accepted delegations for this session.
+    """
+    color_scheme: list[Literal["light", "dark"]] | None = None
+    """
+    Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list.
     """

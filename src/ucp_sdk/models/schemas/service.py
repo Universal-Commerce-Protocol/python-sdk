@@ -43,7 +43,11 @@ class Config(BaseModel):
     )
     delegate: list[str] | None = None
     """
-    Delegations the business allows. At service-level, declares available delegations. In checkout responses, confirms accepted delegations for this session.
+    Delegations the business allows. At service-level, declares available delegations. In UCP responses, confirms accepted delegations for this session.
+    """
+    color_scheme: list[Literal["light", "dark"]] | None = None
+    """
+    Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list.
     """
 
 
@@ -90,7 +94,7 @@ class Base(BaseModel):
 
 class PlatformSchema(BaseModel):
     """
-    Full service declaration for platform-level discovery. Different transports require different fields.
+    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
 
     model_config = ConfigDict(
@@ -120,15 +124,15 @@ class PlatformSchema(BaseModel):
     """
     Transport protocol for this service binding.
     """
-    endpoint: AnyUrl
+    endpoint: AnyUrl | None = None
     """
     Endpoint URL for this transport binding.
     """
 
 
-class PlatformSchema5(BaseModel):
+class PlatformSchema7(BaseModel):
     """
-    Full service declaration for platform-level discovery. Different transports require different fields.
+    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
 
     model_config = ConfigDict(
@@ -158,15 +162,15 @@ class PlatformSchema5(BaseModel):
     """
     Transport protocol for this service binding.
     """
-    endpoint: AnyUrl
+    endpoint: AnyUrl | None = None
     """
     Endpoint URL for this transport binding.
     """
 
 
-class PlatformSchema6(BaseModel):
+class PlatformSchema8(BaseModel):
     """
-    Full service declaration for platform-level discovery. Different transports require different fields.
+    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
 
     model_config = ConfigDict(
@@ -196,15 +200,15 @@ class PlatformSchema6(BaseModel):
     """
     Transport protocol for this service binding.
     """
-    endpoint: AnyUrl
+    endpoint: AnyUrl | None = None
     """
     Endpoint URL for this transport binding.
     """
 
 
-class PlatformSchema7(BaseModel):
+class PlatformSchema9(BaseModel):
     """
-    Full service declaration for platform-level discovery. Different transports require different fields.
+    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
 
     model_config = ConfigDict(
@@ -240,19 +244,19 @@ class PlatformSchema7(BaseModel):
     """
 
 
-class PlatformSchema3(
+class PlatformSchema5(
     RootModel[
-        PlatformSchema | PlatformSchema5 | PlatformSchema6 | PlatformSchema7
+        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
     ]
 ):
     model_config = ConfigDict(
         frozen=True,
     )
     root: (
-        PlatformSchema | PlatformSchema5 | PlatformSchema6 | PlatformSchema7
+        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
     ) = Field(..., title="Service (Platform Schema)")
     """
-    Full service declaration for platform-level discovery. Different transports require different fields.
+    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
 
 

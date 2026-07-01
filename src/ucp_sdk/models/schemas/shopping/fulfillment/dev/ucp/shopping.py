@@ -22,9 +22,26 @@ from typing import Any
 
 from pydantic import ConfigDict, RootModel
 
+from ....checkout import Checkout as Checkout_1
+from ... import Fulfillment as Fulfillment_1
+
 
 class Fulfillment(RootModel[Any]):
     model_config = ConfigDict(
         frozen=True,
     )
     root: Any
+
+
+class Checkout(Checkout_1):
+    """
+    Checkout extended with hierarchical fulfillment.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    fulfillment: Fulfillment_1 | None = None
+    """
+    Fulfillment details.
+    """
