@@ -13,14 +13,13 @@ on:
       assigned, 
       unassigned
     ]
-  pull_request_review:
-    types: [submitted, dismissed]
+  workflow_run:
+    workflows: ["PR Review Listener"]
+    types: [completed]
 
 jobs:
   governance:
     name: Reviews
-    # skip for draft PRs
-    if: github.event.pull_request.draft == false
     permissions:
       statuses: write
       contents: read
@@ -28,6 +27,9 @@ jobs:
     # Use the reusable workflow defined in the central governance repository
     # zizmor: ignore[ref-confusion]
     uses: Universal-Commerce-Protocol/.github/.github/workflows/reusable-governance.yml@main
+    with:
+      pr-number: ${{ github.event.pull_request.number }}
+      commit-sha: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
     secrets:
       # Required: An org-level Read token to read team memberships
       ORG_READ_TOKEN: ${{ secrets.ORG_READ_TOKEN }}
