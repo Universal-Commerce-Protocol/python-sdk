@@ -91,24 +91,6 @@ class Ap2WithCheckoutMandate(BaseModel):
     """
 
 
-class Ap2(BaseModel):
-    """
-    AP2 extension data including merchant authorization.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    merchant_authorization: MerchantAuthorization | None = None
-    """
-    Merchant's signature proving checkout terms are authentic.
-    """
-    checkout_mandate: CheckoutMandate | None = None
-    """
-    SD-JWT+kb proving user authorized this checkout.
-    """
-
-
 class ErrorCode(
     RootModel[
         Literal[
@@ -136,6 +118,24 @@ class ErrorCode(
     ] = Field(..., title="AP2 Error Code")
     """
     Error codes specific to AP2 mandate verification.
+    """
+
+
+class Ap2(BaseModel):
+    """
+    AP2 extension data including merchant authorization.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    merchant_authorization: MerchantAuthorization | None = None
+    """
+    Merchant's signature proving checkout terms are authentic.
+    """
+    checkout_mandate: CheckoutMandate | None = None
+    """
+    SD-JWT+kb proving user authorized this checkout.
     """
 
 

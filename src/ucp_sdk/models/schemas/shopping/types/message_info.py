@@ -22,6 +22,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from . import info_code
+
 
 class MessageInfo(BaseModel):
     model_config = ConfigDict(
@@ -35,10 +37,7 @@ class MessageInfo(BaseModel):
     """
     RFC 9535 JSONPath to the component the message refers to.
     """
-    code: str | None = None
-    """
-    Info code for programmatic handling.
-    """
+    code: info_code.InfoCode | None = None
     content_type: Literal["plain", "markdown"] | None = "plain"
     """
     Content format, default = plain.

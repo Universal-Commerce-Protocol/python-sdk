@@ -20,7 +20,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict
+
+from . import warning_code
 
 
 class MessageWarning(BaseModel):
@@ -35,10 +37,7 @@ class MessageWarning(BaseModel):
     """
     JSONPath (RFC 9535) to related field (e.g., $.line_items[0]).
     """
-    code: str
-    """
-    Warning code. Machine-readable identifier for the warning type (e.g., final_sale, prop65, fulfillment_changed, age_restricted, etc.).
-    """
+    code: warning_code.WarningCode
     content: str
     """
     Human-readable warning message that MUST be displayed.
@@ -46,4 +45,16 @@ class MessageWarning(BaseModel):
     content_type: Literal["plain", "markdown"] | None = "plain"
     """
     Content format, default = plain.
+    """
+    presentation: str | None = "notice"
+    """
+    Rendering contract for this warning. 'notice' (default): platform MUST display, MAY dismiss. 'disclosure': platform MUST display in proximity to the path-referenced component, MUST NOT hide or auto-dismiss. See specification for full contract.
+    """
+    image_url: AnyUrl | None = None
+    """
+    URL to a required visual element (e.g., warning symbol, energy class label).
+    """
+    url: AnyUrl | None = None
+    """
+    Reference URL for more information (e.g., regulatory site, registry entry, policy page).
     """

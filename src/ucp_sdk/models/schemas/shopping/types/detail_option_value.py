@@ -18,13 +18,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pydantic import ConfigDict
 
-from pydantic import ConfigDict, RootModel
+from .option_value import OptionValue
 
 
-class Fulfillment(RootModel[Any]):
+class DetailOptionValue(OptionValue):
+    """
+    An option value with availability signals relative to the current selections. Used in get_product responses where selected context exists.
+    """
+
     model_config = ConfigDict(
-        frozen=True,
+        extra="allow",
     )
-    root: Any
+    available: bool | None = None
+    """
+    Whether a variant matching this value and the current option selections is purchasable.
+    """
+    exists: bool | None = None
+    """
+    Whether a variant matching this value and the current option selections exists in the catalog.
+    """

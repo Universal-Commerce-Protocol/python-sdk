@@ -18,7 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, BaseModel, ConfigDict
+
+from . import amount
 
 
 class Item(BaseModel):
@@ -27,15 +29,15 @@ class Item(BaseModel):
     )
     id: str
     """
-    Should be recognized by both the Platform, and the Business. For Google it should match the id provided in the "id" field in the product feed.
+    The product identifier, often the SKU, required to resolve the product details associated with this line item. Should be recognized by both the Platform, and the Business.
     """
     title: str
     """
     Product title.
     """
-    price: int = Field(..., ge=0)
+    price: amount.Amount
     """
-    Unit price in minor (cents) currency units.
+    Unit price in ISO 4217 minor units.
     """
     image_url: AnyUrl | None = None
     """
