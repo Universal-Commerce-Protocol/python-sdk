@@ -18,7 +18,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from . import signed_amount
 from .total import Total as Total_1
@@ -49,15 +52,9 @@ class Total(Total_1):
     """
 
 
-class Totals(RootModel[list[Total]]):
-    """
-    Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: list[Total] = Field(..., title="Totals")
-    """
-    Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
-    """
+Totals = TypeAliasType(
+    "Totals", Annotated[list[Total], Field(..., title="Totals")]
+)
+"""
+Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
+"""

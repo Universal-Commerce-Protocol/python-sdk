@@ -18,9 +18,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import ConfigDict, Field, RootModel
+from pydantic import ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from .checkout import Checkout as Checkout_1
 from .types import fulfillment as fulfillment_1
@@ -31,59 +32,40 @@ from .types import (
     fulfillment_option,
 )
 
-
-class FulfillmentExtension(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="Fulfillment Extension")
-    """
-    Extends Checkout with fulfillment support using methods, destinations, and groups.
-    """
+FulfillmentExtension = TypeAliasType(
+    "FulfillmentExtension",
+    Annotated[Any, Field(..., title="Fulfillment Extension")],
+)
+"""
+Extends Checkout with fulfillment support using methods, destinations, and groups.
+"""
 
 
-class DevUcpShoppingFulfillment(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any
+DevUcpShoppingFulfillment = TypeAliasType("DevUcpShoppingFulfillment", Any)
 
 
-class FulfillmentAvailableMethod(
-    RootModel[fulfillment_available_method.FulfillmentAvailableMethod]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: fulfillment_available_method.FulfillmentAvailableMethod
+FulfillmentAvailableMethod = TypeAliasType(
+    "FulfillmentAvailableMethod",
+    fulfillment_available_method.FulfillmentAvailableMethod,
+)
 
 
-class FulfillmentOption(RootModel[fulfillment_option.FulfillmentOption]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: fulfillment_option.FulfillmentOption
+FulfillmentOption = TypeAliasType(
+    "FulfillmentOption", fulfillment_option.FulfillmentOption
+)
 
 
-class FulfillmentGroup(RootModel[fulfillment_group.FulfillmentGroup]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: fulfillment_group.FulfillmentGroup
+FulfillmentGroup = TypeAliasType(
+    "FulfillmentGroup", fulfillment_group.FulfillmentGroup
+)
 
 
-class FulfillmentMethod(RootModel[fulfillment_method.FulfillmentMethod]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: fulfillment_method.FulfillmentMethod
+FulfillmentMethod = TypeAliasType(
+    "FulfillmentMethod", fulfillment_method.FulfillmentMethod
+)
 
 
-class Fulfillment(RootModel[fulfillment_1.Fulfillment]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: fulfillment_1.Fulfillment
+Fulfillment = TypeAliasType("Fulfillment", fulfillment_1.Fulfillment)
 
 
 class Checkout(Checkout_1):

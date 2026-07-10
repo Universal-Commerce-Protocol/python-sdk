@@ -18,22 +18,20 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from . import capability, payment_handler, service
 from .shopping.types import reverse_domain_name
 
-
-class Version(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
-    """
-    UCP version in YYYY-MM-DD format.
-    """
+Version = TypeAliasType(
+    "Version", Annotated[str, Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")]
+)
+"""
+UCP version in YYYY-MM-DD format.
+"""
 
 
 class VersionConstraint(BaseModel):
@@ -333,25 +331,17 @@ class ResponseCatalogSchema(Base):
     """
 
 
-class UcpMetadataUpdateRequest(
-    RootModel[
+UcpMetadataUpdateRequest = TypeAliasType(
+    "UcpMetadataUpdateRequest",
+    Annotated[
         PlatformSchema
         | BusinessSchema
         | ResponseCheckoutSchema
         | ResponseOrderSchema
-        | ResponseCartSchema
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        PlatformSchema
-        | BusinessSchema
-        | ResponseCheckoutSchema
-        | ResponseOrderSchema
-        | ResponseCartSchema
-    ) = Field(..., title="UCP Metadata Update Request")
-    """
-    Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
-    """
+        | ResponseCartSchema,
+        Field(..., title="UCP Metadata Update Request"),
+    ],
+)
+"""
+Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.
+"""

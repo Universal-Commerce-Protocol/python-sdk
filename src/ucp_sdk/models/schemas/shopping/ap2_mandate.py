@@ -18,49 +18,52 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from .checkout import Checkout as Checkout_1
 
-
-class Ap2MandateExtension(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="AP2 Mandate Extension")
-    """
-    Extends Checkout with cryptographic mandate support for non-repudiable authorization per the AP2 protocol. Uses embedded signature model with ap2 namespace.
-    """
+Ap2MandateExtension = TypeAliasType(
+    "Ap2MandateExtension",
+    Annotated[Any, Field(..., title="AP2 Mandate Extension")],
+)
+"""
+Extends Checkout with cryptographic mandate support for non-repudiable authorization per the AP2 protocol. Uses embedded signature model with ap2 namespace.
+"""
 
 
-class MerchantAuthorization(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        pattern="^[A-Za-z0-9_-]+\\.\\.[A-Za-z0-9_-]+$",
-        title="Merchant Authorization",
-    )
-    """
-    JWS Detached Content signature (RFC 7515 Appendix F) over the checkout response body (excluding ap2 field). Format: `<base64url-header>..<base64url-signature>`. The header MUST contain 'alg' (ES256/ES384/ES512) and 'kid' claims. The signature covers both the header and JCS-canonicalized checkout payload.
-    """
+MerchantAuthorization = TypeAliasType(
+    "MerchantAuthorization",
+    Annotated[
+        str,
+        Field(
+            ...,
+            pattern="^[A-Za-z0-9_-]+\\.\\.[A-Za-z0-9_-]+$",
+            title="Merchant Authorization",
+        ),
+    ],
+)
+"""
+JWS Detached Content signature (RFC 7515 Appendix F) over the checkout response body (excluding ap2 field). Format: `<base64url-header>..<base64url-signature>`. The header MUST contain 'alg' (ES256/ES384/ES512) and 'kid' claims. The signature covers both the header and JCS-canonicalized checkout payload.
+"""
 
 
-class CheckoutMandate(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        pattern="^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$",
-        title="Checkout Mandate",
-    )
-    """
-    SD-JWT+kb credential in `ap2.checkout_mandate`. Proving user authorization for the checkout. Contains the full checkout including `ap2.merchant_authorization`.
-    """
+CheckoutMandate = TypeAliasType(
+    "CheckoutMandate",
+    Annotated[
+        str,
+        Field(
+            ...,
+            pattern="^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]+(~[A-Za-z0-9_-]+)*$",
+            title="Checkout Mandate",
+        ),
+    ],
+)
+"""
+SD-JWT+kb credential in `ap2.checkout_mandate`. Proving user authorization for the checkout. Contains the full checkout including `ap2.merchant_authorization`.
+"""
 
 
 class Ap2WithMerchantAuthorization(BaseModel):
@@ -91,8 +94,9 @@ class Ap2WithCheckoutMandate(BaseModel):
     """
 
 
-class ErrorCode(
-    RootModel[
+ErrorCode = TypeAliasType(
+    "ErrorCode",
+    Annotated[
         Literal[
             "mandate_required",
             "agent_missing_key",
@@ -101,24 +105,13 @@ class ErrorCode(
             "mandate_scope_mismatch",
             "merchant_authorization_invalid",
             "merchant_authorization_missing",
-        ]
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Literal[
-        "mandate_required",
-        "agent_missing_key",
-        "mandate_invalid_signature",
-        "mandate_expired",
-        "mandate_scope_mismatch",
-        "merchant_authorization_invalid",
-        "merchant_authorization_missing",
-    ] = Field(..., title="AP2 Error Code")
-    """
-    Error codes specific to AP2 mandate verification.
-    """
+        ],
+        Field(..., title="AP2 Error Code"),
+    ],
+)
+"""
+Error codes specific to AP2 mandate verification.
+"""
 
 
 class Ap2(BaseModel):

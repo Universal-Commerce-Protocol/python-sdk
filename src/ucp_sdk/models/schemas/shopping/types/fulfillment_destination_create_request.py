@@ -18,24 +18,21 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
+
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
 from . import retail_location, shipping_destination
 
-
-class FulfillmentDestinationCreateRequest(
-    RootModel[
+FulfillmentDestinationCreateRequest = TypeAliasType(
+    "FulfillmentDestinationCreateRequest",
+    Annotated[
         shipping_destination.ShippingDestination
-        | retail_location.RetailLocation
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        shipping_destination.ShippingDestination
-        | retail_location.RetailLocation
-    ) = Field(..., title="Fulfillment Destination Create Request")
-    """
-    A destination for fulfillment.
-    """
+        | retail_location.RetailLocation,
+        Field(..., title="Fulfillment Destination Create Request"),
+    ],
+)
+"""
+A destination for fulfillment.
+"""

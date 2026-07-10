@@ -18,19 +18,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
-
-class UcpService(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="UCP Service")
-    """
-    Service binding for a specific transport. Each transport binding is a separate entry in the service array.
-    """
+UcpService = TypeAliasType(
+    "UcpService", Annotated[Any, Field(..., title="UCP Service")]
+)
+"""
+Service binding for a specific transport. Each transport binding is a separate entry in the service array.
+"""
 
 
 class Config(BaseModel):
@@ -51,11 +49,7 @@ class Config(BaseModel):
     """
 
 
-class Version(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any
+Version = TypeAliasType("Version", Any)
 
 
 class Base(BaseModel):
@@ -244,20 +238,16 @@ class PlatformSchema9(BaseModel):
     """
 
 
-class PlatformSchema5(
-    RootModel[
-        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9
-    ) = Field(..., title="Service (Platform Schema)")
-    """
-    Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
-    """
+PlatformSchema5 = TypeAliasType(
+    "PlatformSchema5",
+    Annotated[
+        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9,
+        Field(..., title="Service (Platform Schema)"),
+    ],
+)
+"""
+Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
+"""
 
 
 class BusinessSchema(BaseModel):
@@ -412,20 +402,16 @@ class BusinessSchema6(BaseModel):
     """
 
 
-class BusinessSchema2(
-    RootModel[
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6
-    ) = Field(..., title="Service (Business Schema)")
-    """
-    Service binding for business/merchant configuration. May override platform endpoints.
-    """
+BusinessSchema2 = TypeAliasType(
+    "BusinessSchema2",
+    Annotated[
+        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6,
+        Field(..., title="Service (Business Schema)"),
+    ],
+)
+"""
+Service binding for business/merchant configuration. May override platform endpoints.
+"""
 
 
 class ResponseSchema(BaseModel):
@@ -580,17 +566,13 @@ class ResponseSchema6(BaseModel):
     """
 
 
-class ResponseSchema2(
-    RootModel[
-        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6
-    ) = Field(..., title="Service (Response Schema)")
-    """
-    Service binding in API responses. Includes per-resource transport configuration via typed config.
-    """
+ResponseSchema2 = TypeAliasType(
+    "ResponseSchema2",
+    Annotated[
+        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6,
+        Field(..., title="Service (Response Schema)"),
+    ],
+)
+"""
+Service binding in API responses. Includes per-resource transport configuration via typed config.
+"""

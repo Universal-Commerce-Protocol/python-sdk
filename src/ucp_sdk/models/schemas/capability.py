@@ -18,134 +18,128 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
-
-class UcpCapability(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="UCP Capability")
-    """
-    Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.
-    """
+UcpCapability = TypeAliasType(
+    "UcpCapability", Annotated[Any, Field(..., title="UCP Capability")]
+)
+"""
+Schema for UCP capabilities and extensions. Extensions are capabilities with an 'extends' field. Uses reverse-domain naming for governance.
+"""
 
 
-class Extends(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends = TypeAliasType(
+    "Extends",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends1Item(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+Extends1Item = TypeAliasType(
+    "Extends1Item",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
 
 
-class Extends1(RootModel[list[Extends1Item]]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: list[Extends1Item] = Field(..., min_length=1)
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends1 = TypeAliasType(
+    "Extends1", Annotated[list[Extends1Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends2(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends2 = TypeAliasType(
+    "Extends2",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends3Item(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+Extends3Item = TypeAliasType(
+    "Extends3Item",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
 
 
-class Extends3(RootModel[list[Extends3Item]]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: list[Extends3Item] = Field(..., min_length=1)
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends3 = TypeAliasType(
+    "Extends3", Annotated[list[Extends3Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends4(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends4 = TypeAliasType(
+    "Extends4",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends5Item(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+Extends5Item = TypeAliasType(
+    "Extends5Item",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
 
 
-class Extends5(RootModel[list[Extends5Item]]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: list[Extends5Item] = Field(..., min_length=1)
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends5 = TypeAliasType(
+    "Extends5", Annotated[list[Extends5Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends6(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends6 = TypeAliasType(
+    "Extends6",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Extends7Item(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+Extends7Item = TypeAliasType(
+    "Extends7Item",
+    Annotated[
+        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+    ],
+)
 
 
-class Extends7(RootModel[list[Extends7Item]]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: list[Extends7Item] = Field(..., min_length=1)
-    """
-    Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-    """
+Extends7 = TypeAliasType(
+    "Extends7", Annotated[list[Extends7Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
 
 
-class Version(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any
+Version = TypeAliasType("Version", Any)
 
 
 class Base(BaseModel):

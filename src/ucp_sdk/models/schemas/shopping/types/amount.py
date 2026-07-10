@@ -18,14 +18,14 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
 
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-class Amount(RootModel[int]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: int = Field(..., ge=0, title="Amount")
-    """
-    Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to the currency's exponent to determine minor-to-major ratio (e.g., 2 for USD, 0 for JPY, 3 for KWD).
-    """
+Amount = TypeAliasType(
+    "Amount", Annotated[int, Field(..., ge=0, title="Amount")]
+)
+"""
+Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to the currency's exponent to determine minor-to-major ratio (e.g., 2 for USD, 0 for JPY, 3 for KWD).
+"""

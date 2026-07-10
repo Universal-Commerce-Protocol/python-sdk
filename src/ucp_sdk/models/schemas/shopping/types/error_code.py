@@ -18,27 +18,31 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
 
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-class ErrorCode(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        examples=[
-            "not_found",
-            "out_of_stock",
-            "item_unavailable",
-            "address_undeliverable",
-            "payment_failed",
-            "eligibility_invalid",
-            "identity_required",
-            "insufficient_scope",
-        ],
-        title="Error Code",
-    )
-    """
-    Error code identifying the type of error. Standard errors are defined in specification (see examples), and have standardized semantics; freeform codes are permitted.
-    """
+ErrorCode = TypeAliasType(
+    "ErrorCode",
+    Annotated[
+        str,
+        Field(
+            ...,
+            examples=[
+                "not_found",
+                "out_of_stock",
+                "item_unavailable",
+                "address_undeliverable",
+                "payment_failed",
+                "eligibility_invalid",
+                "identity_required",
+                "insufficient_scope",
+            ],
+            title="Error Code",
+        ),
+    ],
+)
+"""
+Error code identifying the type of error. Standard errors are defined in specification (see examples), and have standardized semantics; freeform codes are permitted.
+"""

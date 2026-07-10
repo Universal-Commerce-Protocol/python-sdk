@@ -18,23 +18,27 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
 
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-class WarningCode(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        examples=[
-            "final_sale",
-            "prop65",
-            "fulfillment_changed",
-            "age_restricted",
-        ],
-        title="Warning Code",
-    )
-    """
-    Warning code identifying the type of warning. Standard codes are defined in capability specs (see examples), and have standardized semantics; freeform codes are permitted.
-    """
+WarningCode = TypeAliasType(
+    "WarningCode",
+    Annotated[
+        str,
+        Field(
+            ...,
+            examples=[
+                "final_sale",
+                "prop65",
+                "fulfillment_changed",
+                "age_restricted",
+            ],
+            title="Warning Code",
+        ),
+    ],
+)
+"""
+Warning code identifying the type of warning. Standard codes are defined in capability specs (see examples), and have standardized semantics; freeform codes are permitted.
+"""
