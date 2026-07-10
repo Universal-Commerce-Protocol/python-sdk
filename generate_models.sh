@@ -81,8 +81,8 @@ uv run \
     --enum-field-as-literal all \
     --disable-timestamp \
     --use-double-quotes \
-    --no-use-annotated \
     --allow-extra-fields \
+    --use-type-alias \
     --custom-template-dir templates \
     --additional-imports pydantic.ConfigDict
 

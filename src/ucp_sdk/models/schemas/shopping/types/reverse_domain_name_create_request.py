@@ -18,18 +18,22 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
 
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-class ReverseDomainNameCreateRequest(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$",
-        title="Reverse Domain Name Create Request",
-    )
-    """
-    Reverse-domain identifier used for collision-safe namespacing of capabilities, services, handlers, eligibility claims, and extension-contributed keys. Must contain at least two dot-separated segments (e.g., 'dev.ucp.shopping.checkout', 'com.example.loyalty_gold').
-    """
+ReverseDomainNameCreateRequest = TypeAliasType(
+    "ReverseDomainNameCreateRequest",
+    Annotated[
+        str,
+        Field(
+            ...,
+            pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$",
+            title="Reverse Domain Name Create Request",
+        ),
+    ],
+)
+"""
+Reverse-domain identifier used for collision-safe namespacing of capabilities, services, handlers, eligibility claims, and extension-contributed keys. Must contain at least two dot-separated segments (e.g., 'dev.ucp.shopping.checkout', 'com.example.loyalty_gold').
+"""

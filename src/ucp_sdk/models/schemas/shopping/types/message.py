@@ -18,26 +18,22 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
+
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
 from . import message_error, message_info, message_warning
 
-
-class Message(
-    RootModel[
+Message = TypeAliasType(
+    "Message",
+    Annotated[
         message_error.MessageError
         | message_warning.MessageWarning
-        | message_info.MessageInfo
-    ]
-):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: (
-        message_error.MessageError
-        | message_warning.MessageWarning
-        | message_info.MessageInfo
-    ) = Field(..., title="Message")
-    """
-    Container for error, warning, or info messages.
-    """
+        | message_info.MessageInfo,
+        Field(..., title="Message"),
+    ],
+)
+"""
+Container for error, warning, or info messages.
+"""

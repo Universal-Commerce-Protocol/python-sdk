@@ -18,18 +18,27 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, RootModel
+from typing import Annotated
 
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-class InfoCode(RootModel[str]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: str = Field(
-        ...,
-        examples=["identity_optional", "signal", "free_shipping", "not_found"],
-        title="Info Code",
-    )
-    """
-    Info code identifying the type of informational message. Standard codes are defined in capability specs (see examples), and have standardized semantics; freeform codes are permitted.
-    """
+InfoCode = TypeAliasType(
+    "InfoCode",
+    Annotated[
+        str,
+        Field(
+            ...,
+            examples=[
+                "identity_optional",
+                "signal",
+                "free_shipping",
+                "not_found",
+            ],
+            title="Info Code",
+        ),
+    ],
+)
+"""
+Info code identifying the type of informational message. Standard codes are defined in capability specs (see examples), and have standardized semantics; freeform codes are permitted.
+"""

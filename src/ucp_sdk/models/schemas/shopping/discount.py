@@ -18,24 +18,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from .cart import Cart as Cart_1
 from .checkout import Checkout as Checkout_1
 from .types import amount as amount_1
 from .types import reverse_domain_name
 
-
-class DiscountExtension(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="Discount Extension")
-    """
-    Extends Cart and Checkout with discount support, including discount codes, automatic discounts, and eligibility-triggered provisional discounts.
-    """
+DiscountExtension = TypeAliasType(
+    "DiscountExtension", Annotated[Any, Field(..., title="Discount Extension")]
+)
+"""
+Extends Cart and Checkout with discount support, including discount codes, automatic discounts, and eligibility-triggered provisional discounts.
+"""
 
 
 class Allocation(BaseModel):

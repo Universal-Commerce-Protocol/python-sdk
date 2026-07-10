@@ -18,22 +18,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from .checkout import Checkout as Checkout_1
 from .types.buyer import Buyer as Buyer_1
 
-
-class BuyerConsentExtension(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="Buyer Consent Extension")
-    """
-    Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.
-    """
+BuyerConsentExtension = TypeAliasType(
+    "BuyerConsentExtension",
+    Annotated[Any, Field(..., title="Buyer Consent Extension")],
+)
+"""
+Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.
+"""
 
 
 class Consent(BaseModel):

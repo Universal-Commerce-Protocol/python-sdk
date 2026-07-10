@@ -18,18 +18,11 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict, RootModel
+from typing_extensions import TypeAliasType
 
-
-class AttributionCreateRequest(RootModel[dict[str, str]]):
-    """
-    Platform-emitted referral and conversion-event context — campaign identifiers, click IDs, source/medium markers, etc. The same parameters platforms communicate via URL query parameters in browser-based flows.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: dict[str, str]
-    """
-    URL-style parameter value, encoded as a string. Numeric or boolean values MUST be string-encoded as they would be in a URL query string.
-    """
+AttributionCreateRequest = TypeAliasType(
+    "AttributionCreateRequest", dict[str, str]
+)
+"""
+Platform-emitted referral and conversion-event context — campaign identifiers, click IDs, source/medium markers, etc. The same parameters platforms communicate via URL query parameters in browser-based flows.
+"""

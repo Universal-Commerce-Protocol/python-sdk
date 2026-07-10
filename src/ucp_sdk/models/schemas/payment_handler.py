@@ -18,28 +18,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from typing_extensions import TypeAliasType
 
 from .shopping.types import available_payment_instrument
 
-
-class PaymentHandler(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any = Field(..., title="Payment Handler")
-    """
-    Schema for UCP payment handlers. Handlers define how payment instruments are processed.
-    """
+PaymentHandler = TypeAliasType(
+    "PaymentHandler", Annotated[Any, Field(..., title="Payment Handler")]
+)
+"""
+Schema for UCP payment handlers. Handlers define how payment instruments are processed.
+"""
 
 
-class Version(RootModel[Any]):
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    root: Any
+Version = TypeAliasType("Version", Any)
 
 
 class Base(BaseModel):
