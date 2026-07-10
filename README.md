@@ -22,6 +22,12 @@
   <b>Official Python library for the Universal Commerce Protocol (UCP).</b>
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/ucp-sdk/"><img src="https://img.shields.io/pypi/v/ucp-sdk" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/ucp-sdk/"><img src="https://img.shields.io/pypi/pyversions/ucp-sdk" alt="Python versions"></a>
+  <a href="https://github.com/Universal-Commerce-Protocol/python-sdk/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Universal-Commerce-Protocol/python-sdk" alt="License"></a>
+</p>
+
 ## Overview
 
 This repository contains the Python SDK for the
@@ -29,26 +35,90 @@ This repository contains the Python SDK for the
 models for UCP schemas, making it easy to build UCP-compliant applications in
 Python.
 
+### UCP Version Compatibility
+
+Each version of the Python SDK is generated against a specific version of the
+UCP schema:
+
+| SDK Version       | UCP Schema Version |
+| ----------------- | ------------------ |
+| **`0.4.x`**       | **`2026-04-08`**   |
+| `0.3.x`           | `2026-01-23`       |
+| `0.2.x` / `0.1.x` | `2026-01-11`       |
+
 ## Installation
 
-For now, you can install the SDK using the following commands:
+To use this SDK in your own project, install it from PyPI:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Universal-Commerce-Protocol/python-sdk.git
+pip install ucp-sdk
+```
 
-# Navigate to the directory
-cd python-sdk
+Or, if you are managing your project with [uv](https://docs.astral.sh/uv/):
 
-# Install dependencies
-uv sync
+```bash
+uv add ucp-sdk
+```
+
+## Usage
+
+The example below parses a UCP checkout response and reads typed fields:
+
+```python
+from ucp_sdk.models.schemas.shopping.checkout import Checkout
+
+# Parse a UCP checkout response
+checkout = Checkout.model_validate(checkout_data)
+
+# Access typed fields
+print(checkout.status)       # "incomplete" | "ready_for_complete" | ...
+print(checkout.currency)     # ISO 4217 currency code
+for item in checkout.line_items:
+    print(f"{item.item.title}: {item.quantity}")
+```
+
+### Available model packages
+
+| Package                                 | Description                                         |
+| --------------------------------------- | --------------------------------------------------- |
+| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, payment models      |
+| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, signals     |
+| `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings           |
+| `ucp_sdk.models.schemas`                | Service definitions, capabilities, payment handlers |
+
+### Validation
+
+All models support Pydantic validation and serialization:
+
+```python
+from pydantic import ValidationError
+from ucp_sdk.models.schemas.shopping.checkout import Checkout
+
+# Validate data against UCP schemas
+try:
+    checkout = Checkout.model_validate(checkout_data)
+    # Serialize to JSON-compatible dict
+    checkout_dict = checkout.model_dump(exclude_none=True)
+except ValidationError as e:
+    print(e.errors())
 ```
 
 ## Development
 
 ### Prerequisites
 
-This project uses `uv` for dependency management.
+This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/Universal-Commerce-Protocol/python-sdk.git
+cd python-sdk
+
+# Install dependencies
+uv sync
+```
 
 ### Generating Pydantic Models
 
@@ -63,7 +133,7 @@ uv sync
 ```
 
 Where `<version>` is the version of the UCP specification to use (for example,
-"2026-01-23").
+"2026-04-08").
 
 If no version is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.

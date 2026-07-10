@@ -31,7 +31,7 @@ class ShippingDestinationCreateRequest(PostalAddress):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
+    id: str | None = None
     """
     ID specific to this shipping destination.
     """
