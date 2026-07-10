@@ -22,8 +22,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from ..types import amount as amount_1
-from ..types import reverse_domain_name
+from .cart import Cart as Cart_1
+from .checkout import Checkout as Checkout_1
+from .types import amount as amount_1
+from .types import reverse_domain_name
 
 
 class DiscountExtension(RootModel[Any]):
@@ -116,3 +118,25 @@ class DiscountsObject(BaseModel):
     """
     Discounts successfully applied (code-based and automatic).
     """
+
+
+class Cart(Cart_1):
+    """
+    Cart extended with discount capability.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    discounts: DiscountsObject | None = None
+
+
+class Checkout(Checkout_1):
+    """
+    Checkout extended with discount capability.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    discounts: DiscountsObject | None = None

@@ -22,8 +22,9 @@ from typing import Any
 
 from pydantic import ConfigDict, Field, RootModel
 
-from ..types import (
-    fulfillment,
+from .checkout import Checkout as Checkout_1
+from .types import fulfillment as fulfillment_1
+from .types import (
     fulfillment_available_method,
     fulfillment_group,
     fulfillment_method,
@@ -39,6 +40,13 @@ class FulfillmentExtension(RootModel[Any]):
     """
     Extends Checkout with fulfillment support using methods, destinations, and groups.
     """
+
+
+class DevUcpShoppingFulfillment(RootModel[Any]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: Any
 
 
 class FulfillmentAvailableMethod(
@@ -71,8 +79,22 @@ class FulfillmentMethod(RootModel[fulfillment_method.FulfillmentMethod]):
     root: fulfillment_method.FulfillmentMethod
 
 
-class Fulfillment(RootModel[fulfillment.Fulfillment]):
+class Fulfillment(RootModel[fulfillment_1.Fulfillment]):
     model_config = ConfigDict(
         frozen=True,
     )
-    root: fulfillment.Fulfillment
+    root: fulfillment_1.Fulfillment
+
+
+class Checkout(Checkout_1):
+    """
+    Checkout extended with hierarchical fulfillment.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    fulfillment: Fulfillment | None = None
+    """
+    Fulfillment details.
+    """

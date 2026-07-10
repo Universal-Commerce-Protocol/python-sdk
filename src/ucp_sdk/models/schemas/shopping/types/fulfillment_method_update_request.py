@@ -36,11 +36,11 @@ class FulfillmentMethodUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
+    id: str | None = None
     """
     Unique fulfillment method identifier.
     """
-    type: Literal["shipping", "pickup"]
+    type: Literal["shipping", "pickup"] | None = None
     """
     Fulfillment method type.
     """

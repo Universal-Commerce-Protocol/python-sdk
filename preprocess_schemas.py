@@ -267,6 +267,107 @@ def preprocess_full_schema(schema, entity_def=None):
         distribute_properties_to_branches(node)
 
 
+# --- Dotted $defs Flattening ---
+
+
+def _rewrite_local_defs_refs(node, rename_map):
+    """Walks a schema tree and rewrites local $defs refs whose target was renamed."""
+    prefix = "#/$defs/"
+    for n in iter_nodes(node):
+        if not isinstance(n, dict):
+            continue
+        ref = n.get("$ref")
+        if not isinstance(ref, str) or not ref.startswith(prefix):
+            continue
+        rest = ref[len(prefix) :]
+        name, sep, tail = rest.partition("/")
+        if name in rename_map:
+            n["$ref"] = prefix + rename_map[name] + (sep + tail if sep else "")
+
+
+def _rewrite_external_defs_refs(schema_path, schema, global_rename_maps):
+    """Walks a schema tree and rewrites external $defs refs whose target was renamed."""
+    path = Path(schema_path)
+    for n in iter_nodes(schema):
+        if not isinstance(n, dict):
+            continue
+        ref = n.get("$ref")
+        if not isinstance(ref, str):
+            continue
+        if "#" not in ref:
+            continue
+
+        file_part, fragment_part = ref.split("#", 1)
+        if not file_part or not file_part.endswith(".json"):
+            continue
+
+        prefix = "/$defs/"
+        if not fragment_part.startswith(prefix):
+            continue
+
+        # Resolve target schema path
+        target_path = (path.parent / file_part).resolve()
+        target_path_str = str(target_path)
+
+        if target_path_str not in global_rename_maps:
+            continue
+
+        rename_map = global_rename_maps[target_path_str]
+
+        rest = fragment_part[len(prefix) :]
+        name, sep, tail = rest.partition("/")
+        if name in rename_map:
+            new_name = rename_map[name]
+            new_fragment = prefix + new_name + (sep + tail if sep else "")
+            n["$ref"] = file_part + "#" + new_fragment
+
+
+def flatten_dotted_defs(schema):
+    """
+    Renames $defs keys containing '.' so codegen does not emit nested directories.
+
+    RATIONALE: datamodel-codegen treats dots in $def names as path separators,
+    so a definition like 'dev.ucp.shopping.checkout' produces
+    'dev/ucp/shopping/checkout.py' rather than a class in the parent module.
+    UCP uses reverse-DNS def names as extension mount points (e.g. an extension
+    schema's contribution to the base Checkout type), so those classes belong
+    inline with the rest of the schema's output.
+
+    Strategy: prefer the last dotted component as the new key (giving a clean
+    class name like 'Checkout'); fall back to dot-replaced-with-underscore
+    (e.g. 'DevUcpShoppingFulfillment') if the bare tail would collide with
+    an existing def in the same file.
+    """
+    defs = schema.get("$defs")
+    if not isinstance(defs, dict):
+        return {}
+
+    existing = set(defs.keys())
+    rename_map = {}
+    for old in list(defs.keys()):
+        if "." not in old:
+            continue
+        tail = old.rsplit(".", 1)[-1]
+        if tail and tail not in existing:
+            new = tail
+        else:
+            new = old.replace(".", "_")
+            if new in existing:
+                # Both candidates collide; leave as-is rather than risk corruption
+                continue
+        rename_map[old] = new
+        existing.discard(old)
+        existing.add(new)
+
+    if not rename_map:
+        return {}
+
+    for old, new in rename_map.items():
+        defs[new] = defs.pop(old)
+    _rewrite_local_defs_refs(schema, rename_map)
+    return rename_map
+
+
 # --- Variant Generation (Create/Update/Complete) ---
 
 
@@ -532,14 +633,27 @@ def main():
             "Entity definition not found! 'ucp.json' must define '$defs.entity'"
         )
 
-    # Pass 1: Local flattening and find explicit variant markers
+    global_rename_maps = {}
+    # Pass 1a: Local flattening, find explicit variant markers, collect renames
     for p_abs, s in schemas.items():
         if "ucp.json" in p_abs or "_request.json" in p_abs:
             continue
+        rename_map = flatten_dotted_defs(s)
+        if rename_map:
+            global_rename_maps[p_abs] = rename_map
         preprocess_full_schema(s, entity_def)
-        # Write back the flattened core schema
-        save_json(s, Path(p_abs))
 
+    # Pass 1b: Rewrite external references to renamed defs
+    for p_abs, s in schemas.items():
+        if "ucp.json" in p_abs or "_request.json" in p_abs:
+            continue
+        _rewrite_external_defs_refs(p_abs, s, global_rename_maps)
+
+    # Pass 1c: Save and extract refs
+    for p_abs, s in schemas.items():
+        if "ucp.json" in p_abs or "_request.json" in p_abs:
+            continue
+        save_json(s, Path(p_abs))
         schema_refs[p_abs] = extract_external_refs(s, Path(p_abs))
 
         # Check if this schema explicitly asks for variants via 'ucp_request' markers

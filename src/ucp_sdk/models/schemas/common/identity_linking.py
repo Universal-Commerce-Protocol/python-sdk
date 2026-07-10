@@ -22,7 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from ...shopping.types import description as description_1
+from ..shopping.types import description as description_1
 
 
 class IdentityLinking(RootModel[Any]):
@@ -59,3 +59,10 @@ class ScopeToken(RootModel[str]):
     """
     OAuth scope string formed by joining a capability name and a scope name with a colon: '{capability}:{scope}', e.g. 'dev.ucp.shopping.order:read'. Capability names use reverse-DNS naming; scope names denote the permission granted, defined by each capability's spec (e.g. 'read', 'manage', 'create'). Platforms request these strings verbatim in OAuth 'scope' parameters; issued tokens carry them in the 'scope' claim.
     """
+
+
+class IdentityLinking1(RootModel[Any]):
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    root: Any
