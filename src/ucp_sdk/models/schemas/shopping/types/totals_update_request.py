@@ -20,54 +20,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import signed_amount
-from .total import Total
-
-
-class Line(BaseModel):
-    """
-    Sub-line entry. Additional metadata MAY be included.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    display_text: str
-    """
-    Human-readable label for this sub-line.
-    """
-    amount: signed_amount.SignedAmount
-
-
-class TotalsUpdateRequestItem(Total):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    lines: list[Line] | None = None
-    """
-    Optional itemized breakdown. The parent entry is always rendered; lines are supplementary. Sum of line amounts MUST equal the parent entry amount.
-    """
-
-
-class TotalsUpdateRequest1(BaseModel):
-    """
-    Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-
+from . import total
 
 TotalsUpdateRequest = TypeAliasType(
     "TotalsUpdateRequest",
-    Annotated[
-        list[TotalsUpdateRequestItem] | TotalsUpdateRequest1,
-        Field(..., title="Totals Update Request"),
-    ],
+    Annotated[list[total.Total], Field(..., title="Totals Update Request")],
 )
 """
 Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.

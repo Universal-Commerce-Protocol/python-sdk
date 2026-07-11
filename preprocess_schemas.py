@@ -461,6 +461,35 @@ def rewrite_refs_to_variants(root, op, file_path, variant_needs):
                     )
 
 
+def _apply_request_rules_to_object(
+    object_schema, op, file_path, global_variant_requirements
+):
+    """Filters an object schema's properties for a request operation."""
+    properties = object_schema.get("properties", {})
+    if not isinstance(properties, dict):
+        return
+
+    new_props = {}
+    new_required = []
+    base_required = object_schema.get("required", [])
+
+    for name, data in properties.items():
+        include, required = eval_prop_inclusion(name, data, op, base_required)
+        if include:
+            if isinstance(data, dict):
+                data.pop("ucp_request", None)
+                rewrite_refs_to_variants(
+                    data, op, file_path, global_variant_requirements
+                )
+
+            new_props[name] = data
+            if required:
+                new_required.append(name)
+
+    object_schema["properties"] = new_props
+    object_schema["required"] = new_required
+
+
 def _create_single_variant(
     schema, op, stem, file_path, global_variant_requirements
 ):
@@ -468,26 +497,23 @@ def _create_single_variant(
     variant = copy.deepcopy(schema)
     update_variant_identity(variant, op, stem)
 
-    new_props = {}
-    new_required = []
-    base_req = schema.get("required", [])
+    if variant.get("type") == "array" and isinstance(
+        variant.get("items"), dict
+    ):
+        object_nodes = [
+            node
+            for node in iter_nodes(variant["items"])
+            if isinstance(node, dict) and "properties" in node
+        ]
+        for node in object_nodes:
+            _apply_request_rules_to_object(
+                node, op, file_path, global_variant_requirements
+            )
+    elif "properties" in variant or variant.get("type") == "object":
+        _apply_request_rules_to_object(
+            variant, op, file_path, global_variant_requirements
+        )
 
-    for name, data in schema.get("properties", {}).items():
-        include, required = eval_prop_inclusion(name, data, op, base_req)
-        if include:
-            prop_data = copy.deepcopy(data)
-            if isinstance(prop_data, dict):
-                prop_data.pop("ucp_request", None)
-                rewrite_refs_to_variants(
-                    prop_data, op, file_path, global_variant_requirements
-                )
-
-            new_props[name] = prop_data
-            if required:
-                new_required.append(name)
-
-    variant["properties"] = new_props
-    variant["required"] = new_required
     return variant
 
 
