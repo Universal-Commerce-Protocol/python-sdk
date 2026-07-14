@@ -140,6 +140,14 @@ If no version is specified, the `main` branch of the
 
 The generated code is automatically formatted using `ruff`.
 
+### Running Tests
+
+Run the schema preprocessing test suite with:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
+
 ## Contributing
 
 We welcome community contributions. See our
