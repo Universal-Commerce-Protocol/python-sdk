@@ -58,23 +58,10 @@ Parent capability(s) this extends. Present for extensions, absent for root capab
 """
 
 
-Extends2 = TypeAliasType(
-    "Extends2",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
+Extends2 = TypeAliasType("Extends2", Extends)
 
 
-Extends3Item = TypeAliasType(
-    "Extends3Item",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
+Extends3Item = TypeAliasType("Extends3Item", Extends1Item)
 
 
 Extends3 = TypeAliasType(
@@ -85,23 +72,10 @@ Parent capability(s) this extends. Present for extensions, absent for root capab
 """
 
 
-Extends4 = TypeAliasType(
-    "Extends4",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
+Extends4 = TypeAliasType("Extends4", Extends)
 
 
-Extends5Item = TypeAliasType(
-    "Extends5Item",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
+Extends5Item = TypeAliasType("Extends5Item", Extends1Item)
 
 
 Extends5 = TypeAliasType(
@@ -112,23 +86,10 @@ Parent capability(s) this extends. Present for extensions, absent for root capab
 """
 
 
-Extends6 = TypeAliasType(
-    "Extends6",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
+Extends6 = TypeAliasType("Extends6", Extends)
 
 
-Extends7Item = TypeAliasType(
-    "Extends7Item",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
+Extends7Item = TypeAliasType("Extends7Item", Extends1Item)
 
 
 Extends7 = TypeAliasType(
