@@ -66,6 +66,7 @@ mkdir -p "$OUTPUT_DIR"
 # Run generation using uv
 # We use --use-schema-description to use descriptions from JSON schema as docstrings
 # We use --field-constraints to include validation constraints (regex, min/max, etc.)
+# We use --reuse-model to collapse structurally identical generated types.
 # Note: Formatting is done as a post-processing step.
 uv run \
     --link-mode=copy \
@@ -83,6 +84,7 @@ uv run \
     --use-double-quotes \
     --allow-extra-fields \
     --use-type-alias \
+    --reuse-model \
     --custom-template-dir templates \
     --additional-imports pydantic.ConfigDict
 
