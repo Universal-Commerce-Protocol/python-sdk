@@ -44,7 +44,8 @@ class Description(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_min_properties(self):
-        """JSON Schema minProperties: require at least 1 provided property."""
+        """JSON Schema minProperties: require at least 1
+        provided property."""
         provided = self.model_fields_set | set(self.model_extra or {})
         if len(provided) < 1:
             raise ValueError(

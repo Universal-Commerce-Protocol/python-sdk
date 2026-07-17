@@ -44,11 +44,11 @@ _VALIDATOR_TEMPLATE = '''
     @model_validator(mode="after")
     def {marker}(self):
         """JSON Schema minProperties: require at least {minimum}
-        provided propert{y_ies}."""
+        provided {properties_noun}."""
         provided = self.model_fields_set | set(self.model_extra or {{}})
         if len(provided) < {minimum}:
             raise ValueError(
-                "At least {minimum} propert{y_ies} must be provided "
+                "At least {minimum} {properties_noun} must be provided "
                 "(schema minProperties={minimum})"
             )
         return self
@@ -107,7 +107,7 @@ def inject_min_properties(source, class_name, minimum):
     method = _VALIDATOR_TEMPLATE.format(
         marker=_MARKER,
         minimum=minimum,
-        y_ies="y" if minimum == 1 else "ies",
+        properties_noun="property" if minimum == 1 else "properties",
     )
     body = source[:end].rstrip("\n")
     rest = source[end:]
