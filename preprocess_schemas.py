@@ -514,6 +514,12 @@ def _create_single_variant(
             variant, op, file_path, global_variant_requirements
         )
 
+    # Rewrite all external $refs in the variant schema to point to their
+    # corresponding request variants where applicable. This covers top-level
+    # oneOf/anyOf/allOf branches as well as array items.
+    rewrite_refs_to_variants(
+        variant, op, file_path, global_variant_requirements
+    )
     return variant
 
 
@@ -570,19 +576,28 @@ def normalize_metadata_schemas(schemas, target_dir):
 
 
 def extract_external_refs(schema, path):
-    """Finds all relative external file references in the schema properties."""
+    """Finds all relative external file references in the schema."""
     refs = []
-    props = schema.get("properties", {})
-    if not isinstance(props, dict):
-        return refs
 
-    for name, data in props.items():
+    def _scan(name, data):
         for node in iter_nodes(data):
             if isinstance(node, dict) and "$ref" in node:
                 ref = node["$ref"]
                 if "#" not in ref:
                     abs_path = str((path.parent / ref).resolve())
                     refs.append((name, abs_path))
+
+    props = schema.get("properties", {})
+    if isinstance(props, dict):
+        for name, data in props.items():
+            _scan(name, data)
+
+    # Also scan top-level composition keywords (oneOf, anyOf, allOf, items)
+    for key in ["oneOf", "anyOf", "allOf"]:
+        if key in schema:
+            _scan(key, schema[key])
+    if "items" in schema:
+        _scan("items", schema["items"])
     return refs
 
 
@@ -599,23 +614,28 @@ def propagate_needs_transitive(variant_needs, schema_refs, schemas):
                 continue
 
             for op in list(variant_needs[path]):
-                for prop_name, child_path in refs:
+                for ref_name, child_path in refs:
                     if child_path not in schemas:
                         continue
 
-                    # Only propagate if the property isn't 'omit'ted for this op
-                    data = (
-                        schemas[path].get("properties", {}).get(prop_name, {})
-                    )
-                    include, _ = eval_prop_inclusion(
-                        prop_name, data, op, schemas[path].get("required", [])
-                    )
+                    # For property refs, check if the property is included for this op.
+                    # For non-property refs (oneOf, anyOf, allOf, items), always propagate.
+                    props = schemas[path].get("properties", {})
+                    if ref_name in props:
+                        data = props[ref_name]
+                        include, _ = eval_prop_inclusion(
+                            ref_name,
+                            data,
+                            op,
+                            schemas[path].get("required", []),
+                        )
+                        if not include:
+                            continue
 
-                    if include:
-                        target_set = variant_needs.setdefault(child_path, set())
-                        if op not in target_set:
-                            target_set.add(op)
-                            changed = True
+                    target_set = variant_needs.setdefault(child_path, set())
+                    if op not in target_set:
+                        target_set.add(op)
+                        changed = True
 
 
 # --- Main Flow ---

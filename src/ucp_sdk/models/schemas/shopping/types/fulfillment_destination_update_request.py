@@ -23,13 +23,16 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import retail_location, shipping_destination
+from . import (
+    retail_location_update_request,
+    shipping_destination_update_request,
+)
 
 FulfillmentDestinationUpdateRequest = TypeAliasType(
     "FulfillmentDestinationUpdateRequest",
     Annotated[
-        shipping_destination.ShippingDestination
-        | retail_location.RetailLocation,
+        shipping_destination_update_request.ShippingDestinationUpdateRequest
+        | retail_location_update_request.RetailLocationUpdateRequest,
         Field(..., title="Fulfillment Destination Update Request"),
     ],
 )
