@@ -89,6 +89,9 @@ uv run \
     --additional-imports pydantic.ConfigDict
 
 
+echo "Post-processing generated models (constraints the generator ignores)..."
+uv run python postprocess_models.py || exit 1
+
 echo "Formatting generated models..."
 uv run ruff format
 uv run ruff check --fix "$OUTPUT_DIR"
