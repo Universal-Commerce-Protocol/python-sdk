@@ -43,7 +43,8 @@ _MARKER = "_enforce_min_properties"
 _VALIDATOR_TEMPLATE = '''
     @model_validator(mode="after")
     def {marker}(self):
-        """JSON Schema minProperties: require at least {minimum} provided propert{y_ies}."""
+        """JSON Schema minProperties: require at least {minimum}
+        provided propert{y_ies}."""
         provided = self.model_fields_set | set(self.model_extra or {{}})
         if len(provided) < {minimum}:
             raise ValueError(
@@ -69,8 +70,9 @@ def find_root_min_properties(schema_dir):
             continue
         title = schema.get("title")
         if not title:
-            print(
-                f"  ! {path}: root minProperties but no title; cannot map to a class"
+            sys.stderr.write(
+                f"  ! {path}: root minProperties but no title; "
+                "cannot map to a class\n"
             )
             continue
         found[title] = minimum
@@ -114,9 +116,12 @@ def inject_min_properties(source, class_name, minimum):
 
 
 def main():
+    """Main entry point to scan schemas and patch generated models."""
     constraints = find_root_min_properties(SCHEMA_DIR)
     if not constraints:
-        print("postprocess: no root-level minProperties constraints found")
+        sys.stdout.write(
+            "postprocess: no root-level minProperties constraints found\n"
+        )
         return 0
     patched = 0
     for title, minimum in sorted(constraints.items()):
@@ -131,13 +136,14 @@ def main():
                 patched += 1
             hits.append(path)
         label = ", ".join(str(h) for h in hits) or "NO GENERATED CLASS FOUND"
-        print(f"  minProperties={minimum} on '{title}' -> {label}")
+        sys.stdout.write(f"  minProperties={minimum} on '{title}' -> {label}\n")
         if not hits:
-            print(
-                f"  ! '{title}' has no generated class; constraint not enforced"
+            sys.stderr.write(
+                f"  ! '{title}' has no generated class; "
+                "constraint not enforced\n"
             )
             return 1
-    print(f"postprocess: {patched} module(s) patched")
+    sys.stdout.write(f"postprocess: {patched} module(s) patched\n")
     return 0
 
 
