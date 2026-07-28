@@ -46,6 +46,15 @@ OUTPUT_DIR="src/ucp_sdk/models/schemas"
 # Schema directory (relative to this script)
 SCHEMA_DIR="ucp/source/schemas"
 
+# Snapshot the pristine schemas before preprocessing. postprocess_models.py
+# reads array contains/minContains/maxContains from these originals because
+# preprocessing merges allOf branches and a JSON node holds only one contains,
+# so a second contains keyword (e.g. "exactly one total") would otherwise be
+# silently dropped before the post-processor could see it.
+RAW_SCHEMA_DIR="ucp/raw_schemas"
+rm -rf "$RAW_SCHEMA_DIR"
+cp -R "$SCHEMA_DIR" "$RAW_SCHEMA_DIR"
+
 echo "Preprocessing schemas..."
 uv run python preprocess_schemas.py
 
