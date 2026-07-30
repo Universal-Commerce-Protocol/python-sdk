@@ -401,7 +401,18 @@ class PipelineDependencyTest(unittest.TestCase):
             (target_dir / "checkout_create_request.json").resolve()
         )
         schemas = {
-            ucp_path: {"$defs": {}},
+            ucp_path: {
+                "$defs": {
+                    "version": {"type": "string"},
+                    "entity": {"type": "object"},
+                    "platform_schema": {"type": "object"},
+                    "business_schema": {"type": "object"},
+                    "response_checkout_schema": {"type": "object"},
+                    "response_order_schema": {"type": "object"},
+                    "response_cart_schema": {"type": "object"},
+                    "response_catalog_schema": {"type": "object"},
+                }
+            },
             checkout_path: {
                 "properties": {
                     "ucp": {"$ref": "ucp.json#/$defs/response_schema"}
@@ -424,6 +435,7 @@ class PipelineDependencyTest(unittest.TestCase):
                 {"$ref": "#/$defs/response_checkout_schema"},
                 {"$ref": "#/$defs/response_order_schema"},
                 {"$ref": "#/$defs/response_cart_schema"},
+                {"$ref": "#/$defs/response_catalog_schema"},
             ],
         )
         self.assertEqual(
@@ -544,6 +556,70 @@ class PipelineDependencyTest(unittest.TestCase):
         )
         self.assertEqual(set(parent_variant["required"]), {"id", "child"})
         self.assertEqual(child_variant["required"], ["value"])
+
+
+class MetadataUnionTest(unittest.TestCase):
+    """The UcpMetadata root union is derived from ucp.json $defs."""
+
+    def test_includes_profiles_and_all_response_schemas(self) -> None:
+        """Profiles and every response_*_schema belong to the union."""
+        ucp = {
+            "$defs": {
+                "version": {"type": "string"},
+                "version_constraint": {"type": "object"},
+                "requires": {"type": "object"},
+                "entity": {"type": "object"},
+                "base": {"type": "object"},
+                "success": {"type": "object"},
+                "error": {"type": "object"},
+                "platform_schema": {"type": "object"},
+                "business_schema": {"type": "object"},
+                "response_checkout_schema": {"type": "object"},
+                "response_order_schema": {"type": "object"},
+                "response_cart_schema": {"type": "object"},
+                "response_catalog_schema": {"type": "object"},
+            }
+        }
+        self.assertEqual(
+            preprocess_schemas.metadata_union_members(ucp),
+            [
+                "platform_schema",
+                "business_schema",
+                "response_checkout_schema",
+                "response_order_schema",
+                "response_cart_schema",
+                "response_catalog_schema",
+            ],
+        )
+
+    def test_picks_up_new_response_types_automatically(self) -> None:
+        """A response schema added upstream is included without code changes."""
+        ucp = {
+            "$defs": {
+                "platform_schema": {"type": "object"},
+                "business_schema": {"type": "object"},
+                "response_invoice_schema": {"type": "object"},
+            }
+        }
+        self.assertEqual(
+            preprocess_schemas.metadata_union_members(ucp),
+            ["platform_schema", "business_schema", "response_invoice_schema"],
+        )
+
+    def test_excludes_non_schema_defs(self) -> None:
+        """Helper and shared defs never leak into the metadata union."""
+        ucp = {
+            "$defs": {
+                "entity": {"type": "object"},
+                "request_schema": {"type": "object"},
+                "base": {"type": "object"},
+            }
+        }
+        self.assertEqual(preprocess_schemas.metadata_union_members(ucp), [])
+
+    def test_empty_defs_yields_empty_union(self) -> None:
+        """No $defs means no union members."""
+        self.assertEqual(preprocess_schemas.metadata_union_members({}), [])
 
 
 @unittest.skipUnless(

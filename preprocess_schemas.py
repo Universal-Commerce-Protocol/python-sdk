@@ -532,6 +532,25 @@ def generate_variants(path, schema, ops, global_variant_requirements):
 # --- Global Normalization ---
 
 
+def metadata_union_members(ucp_schema):
+    """Return the ``$defs`` names that form the UcpMetadata root union.
+
+    The union spans the discovery profiles (platform/business) and every
+    response schema declared in ``ucp.json``. Deriving the list from
+    ``$defs`` keeps the generated ``UcpMetadata`` complete as the protocol
+    adds response types — a previous hardcoded list silently omitted
+    ``response_catalog_schema``, dropping catalog responses from every
+    model's ``ucp`` field.
+    """
+    defs = ucp_schema.get("$defs", {})
+    return [
+        name
+        for name in defs
+        if name in ("platform_schema", "business_schema")
+        or (name.startswith("response_") and name.endswith("_schema"))
+    ]
+
+
 def normalize_metadata_schemas(schemas, target_dir):
     """
     Ensures ucp.json has a root union and other files point to it generically.
@@ -542,14 +561,7 @@ def normalize_metadata_schemas(schemas, target_dir):
     if ucp_path in schemas:
         ucp = schemas[ucp_path]
         ucp["oneOf"] = [
-            {"$ref": f"#/$defs/{d}"}
-            for d in [
-                "platform_schema",
-                "business_schema",
-                "response_checkout_schema",
-                "response_order_schema",
-                "response_cart_schema",
-            ]
+            {"$ref": f"#/$defs/{name}"} for name in metadata_union_members(ucp)
         ]
 
     for p_abs, s in schemas.items():
