@@ -338,7 +338,8 @@ UcpMetadata = TypeAliasType(
         | BusinessSchema
         | ResponseCheckoutSchema
         | ResponseOrderSchema
-        | ResponseCartSchema,
+        | ResponseCartSchema
+        | ResponseCatalogSchema,
         Field(..., title="UCP Metadata"),
     ],
 )
