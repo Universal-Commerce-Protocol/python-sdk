@@ -23,11 +23,14 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import total
+from . import total_update_request
 
 TotalsUpdateRequest = TypeAliasType(
     "TotalsUpdateRequest",
-    Annotated[list[total.Total], Field(..., title="Totals Update Request")],
+    Annotated[
+        list[total_update_request.TotalUpdateRequest],
+        Field(..., title="Totals Update Request"),
+    ],
 )
 """
 Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
