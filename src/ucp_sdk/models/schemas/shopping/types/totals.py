@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, AfterValidator
 from typing_extensions import TypeAliasType
 
 from . import signed_amount
@@ -52,8 +52,58 @@ class Total(Total_1):
     """
 
 
+def _enforce_contains_totals(value):
+    """JSON Schema contains/minContains/maxContains (see #49)."""
+    _matched_0 = sum(
+        1
+        for _item in value
+        if (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        == "subtotal"
+    )
+    if _matched_0 < 1:
+        raise ValueError(
+            "Array must contain at least 1 entry "
+            "matching type=='subtotal' (schema minContains=1)"
+        )
+    if _matched_0 > 1:
+        raise ValueError(
+            "Array must contain at most 1 entry "
+            "matching type=='subtotal' (schema maxContains=1)"
+        )
+    _matched_1 = sum(
+        1
+        for _item in value
+        if (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        == "total"
+    )
+    if _matched_1 < 1:
+        raise ValueError(
+            "Array must contain at least 1 entry "
+            "matching type=='total' (schema minContains=1)"
+        )
+    if _matched_1 > 1:
+        raise ValueError(
+            "Array must contain at most 1 entry "
+            "matching type=='total' (schema maxContains=1)"
+        )
+    return value
+
+
 Totals = TypeAliasType(
-    "Totals", Annotated[list[Total], Field(..., title="Totals")]
+    "Totals",
+    Annotated[
+        list[Total],
+        Field(..., title="Totals"),
+        AfterValidator(_enforce_contains_totals),
+    ],
 )
 """
 Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.

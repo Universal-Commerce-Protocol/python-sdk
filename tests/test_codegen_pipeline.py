@@ -28,9 +28,16 @@ import postprocess_models
 import preprocess_schemas
 
 try:
-    from pydantic import ValidationError
+    from pydantic import TypeAdapter, ValidationError
 
     from ucp_sdk.models.schemas.shopping.types.description import Description
+    from ucp_sdk.models.schemas.shopping.types.totals import Totals
+    from ucp_sdk.models.schemas.shopping.types.totals_create_request import (
+        TotalsCreateRequest,
+    )
+    from ucp_sdk.models.schemas.shopping.types.totals_update_request import (
+        TotalsUpdateRequest,
+    )
 
     HAVE_SDK = True
 except ImportError:  # pragma: no cover
@@ -711,6 +718,194 @@ class InjectorTest(unittest.TestCase):
             )
             found = postprocess_models.find_root_min_properties(Path(tmp))
         self.assertEqual(found, {"Sample": 2})
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class TotalsContainsTest(unittest.TestCase):
+    """totals.json requires exactly one ``subtotal`` AND one ``total`` entry.
+
+    Both rules live as two ``allOf`` ``contains`` branches; the generator drops
+    them, leaving ``Totals`` a bare ``list[Total]``. The post-generation injector
+    reads the pristine schema and restores BOTH bounds as an ``AfterValidator``
+    on the alias — the same check reaching the generated request variants too.
+    """
+
+    SUBTOTAL = {"type": "subtotal", "amount": 100, "display_text": "Subtotal"}
+    TOTAL = {"type": "total", "amount": 100, "display_text": "Total"}
+
+    #: (name, array, expected-valid?) exercised against every totals model.
+    def _cases(self):
+        return [
+            ("empty", [], False),
+            ("two_total_no_subtotal", [self.TOTAL, self.TOTAL], False),
+            ("two_subtotal_no_total", [self.SUBTOTAL, self.SUBTOTAL], False),
+            ("subtotal_only", [self.SUBTOTAL], False),
+            ("total_only", [self.TOTAL], False),
+            ("valid_subtotal_and_total", [self.SUBTOTAL, self.TOTAL], True),
+        ]
+
+    def _assert_matrix(self, alias):
+        adapter = TypeAdapter(alias)
+        for name, array, valid in self._cases():
+            with self.subTest(model=alias.__name__, case=name):
+                if valid:
+                    self.assertEqual(len(adapter.validate_python(array)), 2)
+                else:
+                    with self.assertRaises(ValidationError):
+                        adapter.validate_python(array)
+
+    def test_base_totals_enforces_both_bounds(self):
+        self._assert_matrix(Totals)
+
+    def test_create_request_variant_enforces_both_bounds(self):
+        self._assert_matrix(TotalsCreateRequest)
+
+    def test_update_request_variant_enforces_both_bounds(self):
+        self._assert_matrix(TotalsUpdateRequest)
+
+    def test_missing_total_names_the_total_rule(self):
+        # A subtotal-only array must fail specifically on the total rule.
+        with self.assertRaisesRegex(ValidationError, "total"):
+            TypeAdapter(Totals).validate_python([self.SUBTOTAL])
+
+
+class ArrayContainsInjectorTest(unittest.TestCase):
+    """The array-contains injector's own behavior."""
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from typing import Annotated\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict, Field\n"
+        "from typing_extensions import TypeAliasType\n"
+        "\n"
+        "\n"
+        "class Total(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    type: str\n"
+        "    amount: int\n"
+        "\n"
+        "\n"
+        "Totals = TypeAliasType(\n"
+        '    "Totals", Annotated[list[Total], Field(..., title="Totals")]\n'
+        ")\n"
+    )
+
+    #: subtotal AND total, mirroring the real totals.json.
+    GROUPS = [
+        {"pairs": [("type", "subtotal")], "min": 1, "max": 1},
+        {"pairs": [("type", "total")], "min": 1, "max": 1},
+    ]
+
+    def test_scan_reads_both_contains_from_allof_branches(self):
+        # The pristine totals.json shape: two allOf contains branches.
+        schema = {
+            "title": "Totals",
+            "type": "array",
+            "allOf": [
+                {
+                    "contains": {"properties": {"type": {"const": "subtotal"}}},
+                    "minContains": 1,
+                    "maxContains": 1,
+                },
+                {
+                    "contains": {"properties": {"type": {"const": "total"}}},
+                    "minContains": 1,
+                    "maxContains": 1,
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "totals.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_array_contains_constraints(
+                Path(tmp)
+            )
+        self.assertEqual(set(found), {"totals"})
+        self.assertEqual(found["totals"]["title"], "Totals")
+        self.assertEqual(
+            [g["pairs"] for g in found["totals"]["groups"]],
+            [[("type", "subtotal")], [("type", "total")]],
+        )
+
+    def test_scan_reads_root_level_single_contains(self):
+        # A root-level (non-allOf) contains still yields one group.
+        schema = {
+            "title": "Totals",
+            "type": "array",
+            "items": {"type": "object"},
+            "contains": {"properties": {"type": {"const": "subtotal"}}},
+            "minContains": 1,
+            "maxContains": 1,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "totals.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_array_contains_constraints(
+                Path(tmp)
+            )
+        self.assertEqual(
+            found["totals"]["groups"],
+            [{"pairs": [("type", "subtotal")], "min": 1, "max": 1}],
+        )
+
+    def test_scan_ignores_non_array_and_predicateless_contains(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # An object schema (not an array) is out of scope.
+            (Path(tmp) / "obj.json").write_text(
+                json.dumps({"title": "Obj", "type": "object"})
+            )
+            # A contains with no derivable const predicate is skipped.
+            (Path(tmp) / "arr.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Arr",
+                        "type": "array",
+                        "contains": {"required": ["type"]},
+                    }
+                )
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                found = postprocess_models.find_array_contains_constraints(
+                    Path(tmp)
+                )
+        self.assertEqual(found, {})
+
+    def test_injects_after_validator_and_import(self):
+        out = postprocess_models.inject_array_contains(
+            self.MODULE, "Totals", self.GROUPS
+        )
+        self.assertIn("AfterValidator(_enforce_contains_totals)", out)
+        self.assertRegex(out, r"from pydantic import .*AfterValidator")
+        # Both predicates are present in the injected function (pre-format
+        # output uses repr() single quotes; ruff restyles them later).
+        self.assertIn("== 'subtotal'", out)
+        self.assertIn("== 'total'", out)
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_array_contains(
+            self.MODULE, "Totals", self.GROUPS
+        )
+        twice = postprocess_models.inject_array_contains(
+            once, "Totals", self.GROUPS
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_both_bounds(self):
+        out = postprocess_models.inject_array_contains(
+            self.MODULE, "Totals", self.GROUPS
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        adapter = TypeAdapter(namespace["Totals"])
+        sub = {"type": "subtotal", "amount": 1}
+        tot = {"type": "total", "amount": 1}
+        for bad in ([], [sub], [tot], [sub, sub], [tot, tot]):
+            with self.assertRaises(ValidationError):
+                adapter.validate_python(bad)
+        adapter.validate_python([sub, tot])
 
 
 if __name__ == "__main__":
