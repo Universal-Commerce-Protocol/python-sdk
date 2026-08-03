@@ -71,8 +71,8 @@ from ucp_sdk.models.schemas.shopping.checkout import Checkout
 checkout = Checkout.model_validate(checkout_data)
 
 # Access typed fields
-print(checkout.status)       # "incomplete" | "ready_for_complete" | ...
-print(checkout.currency)     # ISO 4217 currency code
+print(checkout.status)  # "incomplete" | "ready_for_complete" | ...
+print(checkout.currency)  # ISO 4217 currency code
 for item in checkout.line_items:
     print(f"{item.item.title}: {item.quantity}")
 ```
