@@ -908,5 +908,142 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         adapter.validate_python([sub, tot])
 
 
+class UniqueItemsInjectorTest(unittest.TestCase):
+    """The uniqueItems post-generation injector's own behavior."""
+
+    SCHEMA_TREE = {
+        "properties": {
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "uniqueItems": True,
+            },
+            "label": {"type": "array", "items": {"type": "string"}},
+            "name": {"type": "string"},
+            "nested": {
+                "type": "object",
+                "properties": {
+                    "codes": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "uniqueItems": True,
+                    }
+                },
+            },
+        }
+    }
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class First(BaseModel):\n"
+        '    """First."""\n'
+        "\n"
+        "    model_config = ConfigDict(\n"
+        '        extra="allow",\n'
+        "    )\n"
+        "    tags: list[str] | None = None\n"
+        "    name: str | None = None\n"
+        "\n"
+        "\n"
+        "class Second(BaseModel):\n"
+        '    """Second."""\n'
+        "\n"
+        "    model_config = ConfigDict(\n"
+        '        extra="allow",\n'
+        "    )\n"
+        "    count: list[int] | None = None\n"
+    )
+
+    def test_find_unique_items_fields_walks_nested_properties(self) -> None:
+        """Root and nested array props with uniqueItems are collected."""
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "schema.json").write_text(json.dumps(self.SCHEMA_TREE))
+            fields = postprocess_models.find_unique_items_fields(Path(tmp))
+        self.assertEqual(fields, {"tags", "codes"})
+
+    def test_find_unique_items_fields_ignores_false_and_non_arrays(
+        self,
+    ) -> None:
+        """uniqueItems: false and non-array props do not qualify."""
+        schema = {
+            "properties": {
+                "a": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "uniqueItems": False,
+                },
+                "b": {"type": "string", "uniqueItems": True},
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "s.json").write_text(json.dumps(schema))
+            fields = postprocess_models.find_unique_items_fields(Path(tmp))
+        self.assertEqual(fields, set())
+
+    def test_inject_targets_matching_list_fields_only(self) -> None:
+        """Only list fields named in the set get a validator."""
+        out = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
+        self.assertIn("field_validator", out)
+        self.assertIn("_enforce_unique_items_tags", out)
+        self.assertNotIn("_enforce_unique_items_name", out)
+        self.assertNotIn("_enforce_unique_items_count", out)
+
+    def test_inject_no_match_leaves_source_unchanged(self) -> None:
+        """No matching list field means the module is untouched."""
+        self.assertEqual(
+            postprocess_models.inject_unique_items(self.MODULE, {"missing"}),
+            self.MODULE,
+        )
+
+    def test_injection_is_idempotent(self) -> None:
+        """Re-running the injector changes nothing."""
+        once = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
+        twice = postprocess_models.inject_unique_items(once, {"tags"})
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_rejects_duplicates(self) -> None:
+        """The injected field_validator enforces uniqueness at runtime."""
+        out = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        first = namespace["First"]
+        first(tags=["a", "b"])  # unique passes
+        first()  # None passes
+        with self.assertRaises(ValidationError):
+            first(tags=["a", "a"])  # duplicate rejected
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class UniqueItemsSemanticTest(unittest.TestCase):
+    """Committed models enforce uniqueItems on declared array fields."""
+
+    def test_brands_rejects_duplicates(self) -> None:
+        """card_payment_instrument brands rejects duplicate entries."""
+        from ucp_sdk.models.schemas.shopping.types.card_payment_instrument import (
+            Constraints,
+        )
+
+        with self.assertRaisesRegex(ValidationError, "[Uu]nique"):
+            Constraints(brands=["visa", "visa"])
+
+    def test_brands_accepts_unique_and_none(self) -> None:
+        """Unique lists and missing values are accepted."""
+        from ucp_sdk.models.schemas.shopping.types.card_payment_instrument import (
+            Constraints,
+        )
+
+        self.assertEqual(
+            Constraints(brands=["visa", "mc"]).brands, ["visa", "mc"]
+        )
+        self.assertIsNone(Constraints().brands)
+
+
 if __name__ == "__main__":
     unittest.main()

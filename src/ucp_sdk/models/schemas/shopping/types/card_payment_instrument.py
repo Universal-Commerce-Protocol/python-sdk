@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, field_validator
 
 from .available_payment_instrument import AvailablePaymentInstrument
 from .payment_instrument import PaymentInstrument
@@ -68,6 +68,20 @@ class Constraints(BaseModel):
     """
     Limit to specific card brands (e.g., ['visa', 'mastercard', 'amex']).
     """
+
+    @field_validator("brands", mode="after")
+    def _enforce_unique_items_brands(cls, value):  # noqa: N805
+        """JSON Schema uniqueItems: reject duplicate entries."""
+        if value is None:
+            return value
+        seen = []
+        for item in value:
+            if item in seen:
+                raise ValueError(
+                    "Items must be unique (schema uniqueItems=true)"
+                )
+            seen.append(item)
+        return value
 
 
 class AvailableCardPaymentInstrument(AvailablePaymentInstrument):
