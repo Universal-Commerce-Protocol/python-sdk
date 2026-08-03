@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from . import reverse_domain_name
 
@@ -59,3 +59,17 @@ class Context(BaseModel):
     """
     Buyer claims about eligible benefits such as loyalty membership, payment instrument perks, and similar. Recognized claims MAY inform the Business response (e.g., member-only product availability, adjusted pricing in catalog, provisional discounts at cart or checkout). Businesses MUST ignore unrecognized values without error. Values MUST use reverse-domain naming (e.g., 'com.example.loyalty_gold', 'org.school.student') and MUST be non-identifying.
     """
+
+    @field_validator("eligibility", mode="after")
+    def _enforce_unique_items_eligibility(cls, value):  # noqa: N805
+        """JSON Schema uniqueItems: reject duplicate entries."""
+        if value is None:
+            return value
+        seen = []
+        for item in value:
+            if item in seen:
+                raise ValueError(
+                    "Items must be unique (schema uniqueItems=true)"
+                )
+            seen.append(item)
+        return value

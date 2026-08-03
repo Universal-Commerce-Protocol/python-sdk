@@ -14,39 +14,46 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-``minProperties`` on an object schema WITH declared properties is dropped by
-the generator (issue #49): every field is optional, so an empty instance
-passes validation in violation of the schema. (``minProperties`` on a
-free-form object property is already handled natively — the generator maps it
-to ``Field(min_length=...)`` on the dict field.)
+Three constraint families are handled:
 
-This script scans the preprocessed schemas for root-level ``minProperties``
-constraints and injects a ``model_validator(mode="after")`` into the matching
-generated classes. JSON Schema counts the keys present on the object, so the
-validator counts provided fields (``model_fields_set``) unioned with extra
-keys (``model_extra``) — an explicit null is a present key, and unknown keys
-on ``extra="allow"`` models count too.
+* ``minProperties`` on an object schema WITH declared properties is dropped by
+  the generator (issue #49): every field is optional, so an empty instance
+  passes validation in violation of the schema. (``minProperties`` on a
+  free-form object property is already handled natively — the generator maps it
+  to ``Field(min_length=...)`` on the dict field.) The script scans the
+  preprocessed schemas for root-level ``minProperties`` constraints and injects
+  a ``model_validator(mode="after")`` into the matching generated classes.
+  JSON Schema counts the keys present on the object, so the validator counts
+  provided fields (``model_fields_set``) unioned with extra keys
+  (``model_extra``) — an explicit null is a present key, and unknown keys on
+  ``extra="allow"`` models count too.
 
-``contains`` / ``minContains`` / ``maxContains`` on an array schema is likewise
-dropped by the generator: ``totals.json`` requires *exactly one* ``subtotal``
-*and exactly one* ``total`` entry, but the generated ``Totals`` is a bare
-``list[Total]`` alias, so an empty array (or one missing either required entry,
-or with duplicates) validates in violation of the schema. An array root is
-emitted as a ``TypeAliasType`` wrapping ``Annotated[list[...], ...]`` rather
-than a ``BaseModel`` subclass, so ``model_validator`` cannot apply; this script
-instead injects a module-level counting function, threaded into the alias
-metadata as a ``pydantic.AfterValidator``. Every predicate is derived from
-``contains.properties.<field>.const`` — nothing is hard-coded — and one function
-enforces *all* of a schema's contains bounds.
+* ``contains`` / ``minContains`` / ``maxContains`` on an array schema is likewise
+  dropped by the generator: ``totals.json`` requires *exactly one* ``subtotal``
+  *and exactly one* ``total`` entry, but the generated ``Totals`` is a bare
+  ``list[Total]`` alias, so an empty array (or one missing either required entry,
+  or with duplicates) validates in violation of the schema. An array root is
+  emitted as a ``TypeAliasType`` wrapping ``Annotated[list[...], ...]`` rather
+  than a ``BaseModel`` subclass, so ``model_validator`` cannot apply; this script
+  instead injects a module-level counting function, threaded into the alias
+  metadata as a ``pydantic.AfterValidator``. Every predicate is derived from
+  ``contains.properties.<field>.const`` — nothing is hard-coded — and one function
+  enforces *all* of a schema's contains bounds.
 
-The pristine (pre-preprocessing) schemas are read for this: ``totals.json``
-carries its two containment rules as two ``allOf`` branches, and
-``preprocess_schemas.py`` merges ``allOf`` into the root, where a JSON node can
-hold only one ``contains`` — so the second (``total``) would be lost if the
-preprocessed output were scanned. generate_models.sh snapshots the originals to
-``ucp/raw_schemas`` before preprocessing for exactly this reason. The bound is
-applied to the base model and to its generated request variants (linked by file
-stem), and travels wherever the alias is reused as a field type.
+  The pristine (pre-preprocessing) schemas are read for this: ``totals.json``
+  carries its two containment rules as two ``allOf`` branches, and
+  ``preprocess_schemas.py`` merges ``allOf`` into the root, where a JSON node can
+  hold only one ``contains`` — so the second (``total``) would be lost if the
+  preprocessed output were scanned. generate_models.sh snapshots the originals to
+  ``ucp/raw_schemas`` before preprocessing for exactly this reason. The bound is
+  applied to the base model and to its generated request variants (linked by file
+  stem), and travels wherever the alias is reused as a field type.
+
+* ``uniqueItems`` on an array is dropped entirely by the generator, so a list
+  field accepts duplicate entries in violation of the schema. The script
+  collects the names of array properties declared with ``uniqueItems`` and
+  injects a ``field_validator(mode="after")`` into each generated class that
+  declares a matching list field.
 
 Runs from generate_models.sh between generation and formatting; idempotent.
 """
@@ -77,6 +84,24 @@ _VALIDATOR_TEMPLATE = '''
                 "(schema minProperties={minimum})"
             )
         return self
+'''
+
+_UNIQUE_MARKER = "_enforce_unique_items"
+
+_UNIQUE_VALIDATOR_TEMPLATE = '''
+    @field_validator("{field}", mode="after")
+    def {marker}_{field}(cls, value):  # noqa: N805
+        """JSON Schema uniqueItems: reject duplicate entries."""
+        if value is None:
+            return value
+        seen = []
+        for item in value:
+            if item in seen:
+                raise ValueError(
+                    "Items must be unique (schema uniqueItems=true)"
+                )
+            seen.append(item)
+        return value
 '''
 
 
@@ -321,6 +346,103 @@ def inject_array_contains(source, alias_name, groups):
     return _ensure_pydantic_import(out, "AfterValidator")
 
 
+def _iter_nodes(root):
+    """Yield every dict/list node in a JSON tree (cycle-safe)."""
+    stack = [root]
+    seen = {id(root)}
+    while stack:
+        cur = stack.pop()
+        yield cur
+        if isinstance(cur, dict):
+            children = cur.values()
+        elif isinstance(cur, list):
+            children = cur
+        else:
+            children = ()
+        for child in children:
+            if isinstance(child, (dict, list)) and id(child) not in seen:
+                seen.add(id(child))
+                stack.append(child)
+
+
+def find_unique_items_fields(schema_dir):
+    """Collect property names whose array value carries ``uniqueItems``.
+
+    Walks every schema (root and nested) for object properties declared as an
+    array with ``uniqueItems: true``. Returns the set of property names so the
+    injector can locate the matching generated list fields by name.
+    """
+    fields = set()
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        for node in _iter_nodes(schema):
+            if not isinstance(node, dict):
+                continue
+            props = node.get("properties")
+            if not isinstance(props, dict):
+                continue
+            for name, prop in props.items():
+                if (
+                    isinstance(prop, dict)
+                    and prop.get("uniqueItems") is True
+                    and (prop.get("type") == "array" or "items" in prop)
+                ):
+                    fields.add(name)
+    return fields
+
+
+def inject_unique_items(source, unique_fields):
+    """Inject uniqueness validators for list fields declared ``uniqueItems``.
+
+    Scans each generated class for list-typed fields whose name is in
+    ``unique_fields`` and appends a ``field_validator`` to the class body.
+    """
+    if not unique_fields:
+        return source
+    class_re = re.compile(r"^class \w+\(", re.M)
+    matches = list(class_re.finditer(source))
+    if not matches:
+        return source
+    new_source = source
+    patched = False
+    # Process from the last class to the first so earlier insert offsets
+    # (computed against the original source) stay valid as text is appended.
+    for match in reversed(matches):
+        body_start = match.end()
+        tail = re.compile(r"^\S", re.M)
+        end_match = tail.search(source, body_start)
+        body_end = end_match.start() if end_match else len(source)
+        body = source[body_start:body_end]
+        targets = []
+        for field_match in re.finditer(
+            r"^    (\w+): [^\n]*\blist\[", body, re.M
+        ):
+            field = field_match.group(1)
+            marker = f"def {_UNIQUE_MARKER}_{field}("
+            if field in unique_fields and marker not in body:
+                targets.append(field)
+        if not targets:
+            continue
+        methods = "".join(
+            _UNIQUE_VALIDATOR_TEMPLATE.format(
+                marker=_UNIQUE_MARKER, field=field
+            )
+            for field in targets
+        )
+        prefix = new_source[:body_end].rstrip("\n")
+        suffix = new_source[body_end:]
+        new_source = prefix + methods + ("\n" + suffix if suffix else "")
+        patched = True
+    if patched:
+        new_source = _ensure_pydantic_import(new_source, "field_validator")
+    return new_source
+
+
 def _patch_min_properties():
     """Inject minProperties validators; return (patched_count, exit_code)."""
     constraints = find_root_min_properties(SCHEMA_DIR)
@@ -425,13 +547,37 @@ def _patch_array_contains():
     return patched, 0
 
 
+def _patch_unique_items():
+    """Inject uniqueItems validators; return (patched_count, exit_code)."""
+    unique_fields = find_unique_items_fields(SCHEMA_DIR)
+    if not unique_fields:
+        sys.stdout.write("postprocess: no uniqueItems constraints found\n")
+        return 0, 0
+    unique_patched = 0
+    touched = []
+    for path in sorted(OUTPUT_DIR.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        updated = inject_unique_items(source, unique_fields)
+        if updated != source:
+            path.write_text(updated, encoding="utf-8")
+            unique_patched += 1
+            touched.append(path)
+    sys.stdout.write(
+        f"  uniqueItems fields {sorted(unique_fields)} -> "
+        f"{unique_patched} module(s) patched"
+        f" ({', '.join(str(t) for t in touched) or 'none'})\n"
+    )
+    return unique_patched, 0
+
+
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
     patched_ac, rc_ac = _patch_array_contains()
-    total = patched_mp + patched_ac
+    patched_ui, rc_ui = _patch_unique_items()
+    total = patched_mp + patched_ac + patched_ui
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_ac
+    return rc_mp or rc_ac or rc_ui
 
 
 if __name__ == "__main__":
