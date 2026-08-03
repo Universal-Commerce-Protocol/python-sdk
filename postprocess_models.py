@@ -366,13 +366,13 @@ def _iter_nodes(root):
 
 
 def find_unique_items_fields(schema_dir):
-    """Collect property names whose array value carries ``uniqueItems``.
+    """Map generated class names to fields carrying ``uniqueItems``.
 
-    Walks every schema (root and nested) for object properties declared as an
-    array with ``uniqueItems: true``. Returns the set of property names so the
-    injector can locate the matching generated list fields by name.
+    A schema node needs a title so its constraint can be associated with a
+    generated class. Untitled nodes are skipped instead of applying their
+    field names globally and potentially constraining unrelated classes.
     """
-    fields = set()
+    fields_by_class = {}
     for path in sorted(Path(schema_dir).rglob("*.json")):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
@@ -386,25 +386,36 @@ def find_unique_items_fields(schema_dir):
             props = node.get("properties")
             if not isinstance(props, dict):
                 continue
+            class_name = (
+                _alias_name(node["title"])
+                if isinstance(node.get("title"), str)
+                else None
+            )
             for name, prop in props.items():
                 if (
                     isinstance(prop, dict)
                     and prop.get("uniqueItems") is True
                     and (prop.get("type") == "array" or "items" in prop)
                 ):
-                    fields.add(name)
-    return fields
+                    if class_name is None:
+                        sys.stderr.write(
+                            f"  ! {path}: uniqueItems field '{name}' belongs "
+                            "to an untitled object; cannot map to a class\n"
+                        )
+                        continue
+                    fields_by_class.setdefault(class_name, set()).add(name)
+    return fields_by_class
 
 
-def inject_unique_items(source, unique_fields):
+def inject_unique_items(source, unique_fields_by_class):
     """Inject uniqueness validators for list fields declared ``uniqueItems``.
 
-    Scans each generated class for list-typed fields whose name is in
-    ``unique_fields`` and appends a ``field_validator`` to the class body.
+    A validator is added only when both the generated class name and list
+    field name match the scoped schema constraints.
     """
-    if not unique_fields:
+    if not unique_fields_by_class:
         return source
-    class_re = re.compile(r"^class \w+\(", re.M)
+    class_re = re.compile(r"^class (\w+)\(", re.M)
     matches = list(class_re.finditer(source))
     if not matches:
         return source
@@ -413,6 +424,9 @@ def inject_unique_items(source, unique_fields):
     # Process from the last class to the first so earlier insert offsets
     # (computed against the original source) stay valid as text is appended.
     for match in reversed(matches):
+        unique_fields = unique_fields_by_class.get(match.group(1), set())
+        if not unique_fields:
+            continue
         body_start = match.end()
         tail = re.compile(r"^\S", re.M)
         end_match = tail.search(source, body_start)
@@ -549,21 +563,26 @@ def _patch_array_contains():
 
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
-    unique_fields = find_unique_items_fields(SCHEMA_DIR)
-    if not unique_fields:
+    unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
+    if not unique_fields_by_class:
         sys.stdout.write("postprocess: no uniqueItems constraints found\n")
         return 0, 0
     unique_patched = 0
     touched = []
     for path in sorted(OUTPUT_DIR.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
-        updated = inject_unique_items(source, unique_fields)
+        updated = inject_unique_items(source, unique_fields_by_class)
         if updated != source:
             path.write_text(updated, encoding="utf-8")
             unique_patched += 1
             touched.append(path)
+    labels = sorted(
+        f"{class_name}.{field}"
+        for class_name, fields in unique_fields_by_class.items()
+        for field in fields
+    )
     sys.stdout.write(
-        f"  uniqueItems fields {sorted(unique_fields)} -> "
+        f"  uniqueItems fields {labels} -> "
         f"{unique_patched} module(s) patched"
         f" ({', '.join(str(t) for t in touched) or 'none'})\n"
     )
