@@ -912,6 +912,7 @@ class UniqueItemsInjectorTest(unittest.TestCase):
     """The uniqueItems post-generation injector's own behavior."""
 
     SCHEMA_TREE = {
+        "title": "First",
         "properties": {
             "tags": {
                 "type": "array",
@@ -930,7 +931,7 @@ class UniqueItemsInjectorTest(unittest.TestCase):
                     }
                 },
             },
-        }
+        },
     }
 
     MODULE = (
@@ -955,6 +956,7 @@ class UniqueItemsInjectorTest(unittest.TestCase):
         "    model_config = ConfigDict(\n"
         '        extra="allow",\n'
         "    )\n"
+        "    tags: list[str] | None = None\n"
         "    count: list[int] | None = None\n"
     )
 
@@ -963,7 +965,7 @@ class UniqueItemsInjectorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "schema.json").write_text(json.dumps(self.SCHEMA_TREE))
             fields = postprocess_models.find_unique_items_fields(Path(tmp))
-        self.assertEqual(fields, {"tags", "codes"})
+        self.assertEqual(fields, {"First": {"tags"}, "Nested": {"codes"}})
 
     def test_find_unique_items_fields_ignores_false_and_non_arrays(
         self,
@@ -982,33 +984,43 @@ class UniqueItemsInjectorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "s.json").write_text(json.dumps(schema))
             fields = postprocess_models.find_unique_items_fields(Path(tmp))
-        self.assertEqual(fields, set())
+        self.assertEqual(fields, {})
 
     def test_inject_targets_matching_list_fields_only(self) -> None:
-        """Only list fields named in the set get a validator."""
-        out = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
+        """Only the declaring class's matching list field gets a validator."""
+        out = postprocess_models.inject_unique_items(
+            self.MODULE, {"First": {"tags"}}
+        )
         self.assertIn("field_validator", out)
         self.assertIn("_enforce_unique_items_tags", out)
+        self.assertEqual(out.count("def _enforce_unique_items_tags("), 1)
         self.assertNotIn("_enforce_unique_items_name", out)
         self.assertNotIn("_enforce_unique_items_count", out)
 
     def test_inject_no_match_leaves_source_unchanged(self) -> None:
         """No matching list field means the module is untouched."""
         self.assertEqual(
-            postprocess_models.inject_unique_items(self.MODULE, {"missing"}),
+            postprocess_models.inject_unique_items(
+                self.MODULE, {"First": {"missing"}}
+            ),
             self.MODULE,
         )
 
     def test_injection_is_idempotent(self) -> None:
         """Re-running the injector changes nothing."""
-        once = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
-        twice = postprocess_models.inject_unique_items(once, {"tags"})
+        unique_fields = {"First": {"tags"}}
+        once = postprocess_models.inject_unique_items(
+            self.MODULE, unique_fields
+        )
+        twice = postprocess_models.inject_unique_items(once, unique_fields)
         self.assertEqual(once, twice)
 
     @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
     def test_injected_validator_rejects_duplicates(self) -> None:
         """The injected field_validator enforces uniqueness at runtime."""
-        out = postprocess_models.inject_unique_items(self.MODULE, {"tags"})
+        out = postprocess_models.inject_unique_items(
+            self.MODULE, {"First": {"tags"}}
+        )
         namespace: dict = {}
         exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
         first = namespace["First"]

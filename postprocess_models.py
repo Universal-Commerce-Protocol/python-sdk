@@ -248,6 +248,12 @@ def _alias_name(title):
     return "".join(title.split())
 
 
+def _to_camel_case(string):
+    """Convert a string (snake, kebab, space-separated) to CamelCase."""
+    parts = re.split(r"[^a-zA-Z0-9]", string)
+    return "".join(p.capitalize() for p in parts if p)
+
+
 def _snake_name(name):
     """CamelCase alias -> snake_case suffix for a unique function name."""
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
@@ -346,33 +352,58 @@ def inject_array_contains(source, alias_name, groups):
     return _ensure_pydantic_import(out, "AfterValidator")
 
 
-def _iter_nodes(root):
-    """Yield every dict/list node in a JSON tree (cycle-safe)."""
-    stack = [root]
-    seen = {id(root)}
-    while stack:
-        cur = stack.pop()
-        yield cur
-        if isinstance(cur, dict):
-            children = cur.values()
-        elif isinstance(cur, list):
-            children = cur
-        else:
-            children = ()
-        for child in children:
-            if isinstance(child, (dict, list)) and id(child) not in seen:
-                seen.add(id(child))
-                stack.append(child)
-
-
 def find_unique_items_fields(schema_dir):
-    """Collect property names whose array value carries ``uniqueItems``.
+    """Map generated class names to fields carrying ``uniqueItems``.
 
-    Walks every schema (root and nested) for object properties declared as an
-    array with ``uniqueItems: true``. Returns the set of property names so the
-    injector can locate the matching generated list fields by name.
+    A schema node needs a title so its constraint can be associated with a
+    generated class. Untitled nodes are resolved using their property path.
     """
-    fields = set()
+    fields_by_class = {}
+
+    def walk(node, current_class_name, path_str):
+        if not isinstance(node, dict):
+            return
+
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+
+        props = node.get("properties")
+        if isinstance(props, dict):
+            for name, prop in props.items():
+                if not isinstance(prop, dict):
+                    continue
+
+                if prop.get("uniqueItems") is True and (
+                    prop.get("type") == "array" or "items" in prop
+                ):
+                    if current_class_name is None:
+                        sys.stderr.write(
+                            f"  ! {path_str}: uniqueItems field '{name}' "
+                            "belongs to an untitled object; cannot map to a class\n"
+                        )
+                        continue
+                    fields_by_class.setdefault(current_class_name, set()).add(
+                        name
+                    )
+
+                # Recurse into properties
+                next_class_name = (
+                    _to_camel_case(name) if current_class_name else None
+                )
+                walk(prop, next_class_name, path_str)
+
+        # Recurse into $defs
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), path_str)
+
+        # Recurse into combinators (allOf, anyOf, oneOf)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name, path_str)
+
     for path in sorted(Path(schema_dir).rglob("*.json")):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
@@ -380,31 +411,25 @@ def find_unique_items_fields(schema_dir):
             continue
         if not isinstance(schema, dict):
             continue
-        for node in _iter_nodes(schema):
-            if not isinstance(node, dict):
-                continue
-            props = node.get("properties")
-            if not isinstance(props, dict):
-                continue
-            for name, prop in props.items():
-                if (
-                    isinstance(prop, dict)
-                    and prop.get("uniqueItems") is True
-                    and (prop.get("type") == "array" or "items" in prop)
-                ):
-                    fields.add(name)
-    return fields
+
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class, str(path))
+
+    return fields_by_class
 
 
-def inject_unique_items(source, unique_fields):
+def inject_unique_items(source, unique_fields_by_class):
     """Inject uniqueness validators for list fields declared ``uniqueItems``.
 
-    Scans each generated class for list-typed fields whose name is in
-    ``unique_fields`` and appends a ``field_validator`` to the class body.
+    A validator is added only when both the generated class name and list
+    field name match the scoped schema constraints.
     """
-    if not unique_fields:
+    if not unique_fields_by_class:
         return source
-    class_re = re.compile(r"^class \w+\(", re.M)
+    class_re = re.compile(r"^class (\w+)\(", re.M)
     matches = list(class_re.finditer(source))
     if not matches:
         return source
@@ -413,6 +438,9 @@ def inject_unique_items(source, unique_fields):
     # Process from the last class to the first so earlier insert offsets
     # (computed against the original source) stay valid as text is appended.
     for match in reversed(matches):
+        unique_fields = unique_fields_by_class.get(match.group(1), set())
+        if not unique_fields:
+            continue
         body_start = match.end()
         tail = re.compile(r"^\S", re.M)
         end_match = tail.search(source, body_start)
@@ -549,21 +577,26 @@ def _patch_array_contains():
 
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
-    unique_fields = find_unique_items_fields(SCHEMA_DIR)
-    if not unique_fields:
+    unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
+    if not unique_fields_by_class:
         sys.stdout.write("postprocess: no uniqueItems constraints found\n")
         return 0, 0
     unique_patched = 0
     touched = []
     for path in sorted(OUTPUT_DIR.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
-        updated = inject_unique_items(source, unique_fields)
+        updated = inject_unique_items(source, unique_fields_by_class)
         if updated != source:
             path.write_text(updated, encoding="utf-8")
             unique_patched += 1
             touched.append(path)
+    labels = sorted(
+        f"{class_name}.{field}"
+        for class_name, fields in unique_fields_by_class.items()
+        for field in fields
+    )
     sys.stdout.write(
-        f"  uniqueItems fields {sorted(unique_fields)} -> "
+        f"  uniqueItems fields {labels} -> "
         f"{unique_patched} module(s) patched"
         f" ({', '.join(str(t) for t in touched) or 'none'})\n"
     )
