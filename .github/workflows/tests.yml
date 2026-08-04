@@ -42,3 +42,39 @@ jobs:
         run: pip install -e .
       - name: Run preprocessing tests
         run: python -m unittest discover -s tests -p "test_*.py"
+
+  model-drift:
+    name: Generated models match the pinned UCP spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+      - name: Regenerate models from the pinned spec version
+        # SDK 0.4.x targets UCP 2026-04-08 (see the README compatibility
+        # table). Bump this pin together with the SDK version line.
+        run: ./generate_models.sh 2026-04-08
+      - name: Normalize file endings (as pre-commit's end-of-file-fixer does)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for path in Path("src/ucp_sdk/models/schemas").rglob("*.py"):
+              text = path.read_text(encoding="utf-8")
+              fixed = text.rstrip("\n") + "\n" if text.strip() else ""
+              if fixed != text:
+                  path.write_text(fixed, encoding="utf-8")
+          PY
+      - name: Fail if regeneration does not reproduce the committed models
+        run: |
+          git add -A -- src/ucp_sdk/models/schemas
+          if ! git diff --cached --quiet -- src/ucp_sdk/models/schemas; then
+            echo "::error::Committed models differ from regeneration against the pinned UCP spec. Either the generation pipeline is broken, or the models were edited without regenerating. Run ./generate_models.sh 2026-04-08 and commit the result."
+            git --no-pager diff --cached --stat -- src/ucp_sdk/models/schemas
+            git --no-pager diff --cached -- src/ucp_sdk/models/schemas
+            exit 1
+          fi
+          echo "Committed models match regeneration."
