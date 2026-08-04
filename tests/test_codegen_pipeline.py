@@ -922,7 +922,6 @@ class UniqueItemsInjectorTest(unittest.TestCase):
             "label": {"type": "array", "items": {"type": "string"}},
             "name": {"type": "string"},
             "nested": {
-                "title": "Nested",
                 "type": "object",
                 "properties": {
                     "codes": {

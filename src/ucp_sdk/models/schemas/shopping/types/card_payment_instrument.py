@@ -68,7 +68,6 @@ class Constraints(BaseModel):
     """
     Limit to specific card brands (e.g., ['visa', 'mastercard', 'amex']).
     """
-
     @field_validator("brands", mode="after")
     def _enforce_unique_items_brands(cls, value):  # noqa: N805
         """JSON Schema uniqueItems: reject duplicate entries."""
@@ -82,7 +81,6 @@ class Constraints(BaseModel):
                 )
             seen.append(item)
         return value
-
 
 class AvailableCardPaymentInstrument(AvailablePaymentInstrument):
     """

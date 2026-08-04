@@ -248,6 +248,12 @@ def _alias_name(title):
     return "".join(title.split())
 
 
+def _to_camel_case(string):
+    """Convert a string (snake, kebab, space-separated) to CamelCase."""
+    parts = re.split(r'[^a-zA-Z0-9]', string)
+    return "".join(p.capitalize() for p in parts if p)
+
+
 def _snake_name(name):
     """CamelCase alias -> snake_case suffix for a unique function name."""
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
@@ -346,33 +352,54 @@ def inject_array_contains(source, alias_name, groups):
     return _ensure_pydantic_import(out, "AfterValidator")
 
 
-def _iter_nodes(root):
-    """Yield every dict/list node in a JSON tree (cycle-safe)."""
-    stack = [root]
-    seen = {id(root)}
-    while stack:
-        cur = stack.pop()
-        yield cur
-        if isinstance(cur, dict):
-            children = cur.values()
-        elif isinstance(cur, list):
-            children = cur
-        else:
-            children = ()
-        for child in children:
-            if isinstance(child, (dict, list)) and id(child) not in seen:
-                seen.add(id(child))
-                stack.append(child)
-
-
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
     A schema node needs a title so its constraint can be associated with a
-    generated class. Untitled nodes are skipped instead of applying their
-    field names globally and potentially constraining unrelated classes.
+    generated class. Untitled nodes are resolved using their property path.
     """
     fields_by_class = {}
+
+    def walk(node, current_class_name, path_str):
+        if not isinstance(node, dict):
+            return
+
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+
+        props = node.get("properties")
+        if isinstance(props, dict):
+            for name, prop in props.items():
+                if not isinstance(prop, dict):
+                    continue
+
+                if prop.get("uniqueItems") is True and (
+                    prop.get("type") == "array" or "items" in prop
+                ):
+                    if current_class_name is None:
+                        sys.stderr.write(
+                            f"  ! {path_str}: uniqueItems field '{name}' "
+                            "belongs to an untitled object; cannot map to a class\n"
+                        )
+                        continue
+                    fields_by_class.setdefault(current_class_name, set()).add(name)
+
+                # Recurse into properties
+                next_class_name = _to_camel_case(name) if current_class_name else None
+                walk(prop, next_class_name, path_str)
+
+        # Recurse into $defs
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), path_str)
+
+        # Recurse into combinators (allOf, anyOf, oneOf)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name, path_str)
+
     for path in sorted(Path(schema_dir).rglob("*.json")):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
@@ -380,30 +407,11 @@ def find_unique_items_fields(schema_dir):
             continue
         if not isinstance(schema, dict):
             continue
-        for node in _iter_nodes(schema):
-            if not isinstance(node, dict):
-                continue
-            props = node.get("properties")
-            if not isinstance(props, dict):
-                continue
-            class_name = (
-                _alias_name(node["title"])
-                if isinstance(node.get("title"), str)
-                else None
-            )
-            for name, prop in props.items():
-                if (
-                    isinstance(prop, dict)
-                    and prop.get("uniqueItems") is True
-                    and (prop.get("type") == "array" or "items" in prop)
-                ):
-                    if class_name is None:
-                        sys.stderr.write(
-                            f"  ! {path}: uniqueItems field '{name}' belongs "
-                            "to an untitled object; cannot map to a class\n"
-                        )
-                        continue
-                    fields_by_class.setdefault(class_name, set()).add(name)
+
+        root_title = schema.get("title")
+        initial_class = _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        walk(schema, initial_class, str(path))
+
     return fields_by_class
 
 
