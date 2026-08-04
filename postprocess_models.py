@@ -250,7 +250,7 @@ def _alias_name(title):
 
 def _to_camel_case(string):
     """Convert a string (snake, kebab, space-separated) to CamelCase."""
-    parts = re.split(r'[^a-zA-Z0-9]', string)
+    parts = re.split(r"[^a-zA-Z0-9]", string)
     return "".join(p.capitalize() for p in parts if p)
 
 
@@ -382,10 +382,14 @@ def find_unique_items_fields(schema_dir):
                             "belongs to an untitled object; cannot map to a class\n"
                         )
                         continue
-                    fields_by_class.setdefault(current_class_name, set()).add(name)
+                    fields_by_class.setdefault(current_class_name, set()).add(
+                        name
+                    )
 
                 # Recurse into properties
-                next_class_name = _to_camel_case(name) if current_class_name else None
+                next_class_name = (
+                    _to_camel_case(name) if current_class_name else None
+                )
                 walk(prop, next_class_name, path_str)
 
         # Recurse into $defs
@@ -409,7 +413,9 @@ def find_unique_items_fields(schema_dir):
             continue
 
         root_title = schema.get("title")
-        initial_class = _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
         walk(schema, initial_class, str(path))
 
     return fields_by_class
