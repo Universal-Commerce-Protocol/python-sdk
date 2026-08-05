@@ -247,6 +247,33 @@ class RequestMetadataTest(unittest.TestCase):
 class VariantGenerationTest(unittest.TestCase):
     """Tests request variant construction and output."""
 
+    def test_rewrite_external_ref_preserves_fragment(self) -> None:
+        """External refs target variants without losing their fragments."""
+        schema = {
+            "properties": {
+                "child": {"$ref": "nested/child.json#/$defs/item"},
+                "local": {"$ref": "#/$defs/local"},
+            }
+        }
+        file_path = Path("/schemas/parent.json")
+        child_path = str((file_path.parent / "nested" / "child.json").resolve())
+
+        preprocess_schemas.rewrite_refs_to_variants(
+            schema,
+            "create",
+            file_path,
+            {child_path: {"create"}},
+        )
+
+        self.assertEqual(
+            schema["properties"]["child"]["$ref"],
+            "nested/child_create_request.json#/$defs/item",
+        )
+        self.assertEqual(
+            schema["properties"]["local"]["$ref"],
+            "#/$defs/local",
+        )
+
     def test_object_variant_filters_fields_and_rewrites_refs(self) -> None:
         """Object variants filter fields and target child variants."""
         schema = {

@@ -449,16 +449,21 @@ def rewrite_refs_to_variants(root, op, file_path, variant_needs):
     for node in iter_nodes(root):
         if isinstance(node, dict) and "$ref" in node:
             ref = node["$ref"]
-            if "#" not in ref:  # External file reference
-                abs_target = (file_path.parent / ref).resolve()
-                if (
-                    str(abs_target) in variant_needs
-                    and op in variant_needs[str(abs_target)]
-                ):
-                    ref_path = Path(ref)
-                    node["$ref"] = str(
-                        ref_path.parent / f"{ref_path.stem}_{op}_request.json"
-                    )
+            ref_file, separator, fragment = ref.partition("#")
+            if not ref_file:
+                continue
+            abs_target = (file_path.parent / ref_file).resolve()
+            if (
+                str(abs_target) in variant_needs
+                and op in variant_needs[str(abs_target)]
+            ):
+                ref_path = Path(ref_file)
+                variant_ref = str(
+                    ref_path.parent / f"{ref_path.stem}_{op}_request.json"
+                )
+                node["$ref"] = variant_ref + (
+                    separator + fragment if separator else ""
+                )
 
 
 def _apply_request_rules_to_object(
