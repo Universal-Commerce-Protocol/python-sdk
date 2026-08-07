@@ -91,7 +91,7 @@ uv run \
     --enum-field-as-literal all \
     --disable-timestamp \
     --use-double-quotes \
-    --allow-extra-fields \
+    --extra-fields=allow \
     --use-type-alias \
     --reuse-model \
     --custom-template-dir templates \
