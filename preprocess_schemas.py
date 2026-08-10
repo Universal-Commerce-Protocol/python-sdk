@@ -597,8 +597,9 @@ def extract_external_refs(schema, path):
         for node in iter_nodes(data):
             if isinstance(node, dict) and "$ref" in node:
                 ref = node["$ref"]
-                if "#" not in ref:
-                    abs_path = str((path.parent / ref).resolve())
+                ref_file, _, _ = ref.partition("#")
+                if ref_file:
+                    abs_path = str((path.parent / ref_file).resolve())
                     refs.append((name, abs_path))
     return refs
 
