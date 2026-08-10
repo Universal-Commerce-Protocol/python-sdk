@@ -20,21 +20,16 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from .types import payment_instrument_complete_request
 
-
-class PaymentCompleteRequest(BaseModel):
+class PaymentCredentialCreateRequest(BaseModel):
     """
-    Payment configuration containing handlers.
+    The base definition for any payment credential. Handlers define specific credential types.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    instruments: (
-        list[payment_instrument_complete_request.SelectedPaymentInstrument]
-        | None
-    ) = None
+    type: str
     """
-    The payment instruments available for this payment. Each instrument is associated with a specific handler via the handler_id field. Handlers can extend the base payment_instrument schema to add handler-specific fields.
+    The credential type discriminator. Specific schemas will constrain this to a constant value.
     """

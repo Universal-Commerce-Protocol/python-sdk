@@ -616,15 +616,11 @@ class PipelineDependencyTest(unittest.TestCase):
                         "item": {
                             "type": "object",
                             "properties": {
-                                "grandchild": {
-                                    "$ref": "grandchild.json"
-                                }
-                            }
+                                "grandchild": {"$ref": "grandchild.json"}
+                            },
                         }
                     },
-                    "properties": {
-                        "dummy": {"type": "string"}
-                    }
+                    "properties": {"dummy": {"type": "string"}},
                 },
                 root / "child.json",
             )
@@ -667,9 +663,15 @@ class PipelineDependencyTest(unittest.TestCase):
             ):
                 preprocess_schemas.main()
 
-            self.assertTrue((root / "child_create_request.json").exists(), "child_create_request.json was not generated")
-            self.assertTrue((root / "grandchild_create_request.json").exists(), "grandchild_create_request.json was not generated")
-            
+            self.assertTrue(
+                (root / "child_create_request.json").exists(),
+                "child_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "grandchild_create_request.json").exists(),
+                "grandchild_create_request.json was not generated",
+            )
+
             parent_variant = preprocess_schemas.load_json(
                 root / "parent_create_request.json"
             )
