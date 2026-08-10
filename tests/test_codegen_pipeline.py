@@ -247,6 +247,33 @@ class RequestMetadataTest(unittest.TestCase):
 class VariantGenerationTest(unittest.TestCase):
     """Tests request variant construction and output."""
 
+    def test_rewrite_external_ref_preserves_fragment(self) -> None:
+        """External refs target variants without losing their fragments."""
+        schema = {
+            "properties": {
+                "child": {"$ref": "nested/child.json#/$defs/item"},
+                "local": {"$ref": "#/$defs/local"},
+            }
+        }
+        file_path = Path("/schemas/parent.json")
+        child_path = str((file_path.parent / "nested" / "child.json").resolve())
+
+        preprocess_schemas.rewrite_refs_to_variants(
+            schema,
+            "create",
+            file_path,
+            {child_path: {"create"}},
+        )
+
+        self.assertEqual(
+            schema["properties"]["child"]["$ref"],
+            "nested/child_create_request.json#/$defs/item",
+        )
+        self.assertEqual(
+            schema["properties"]["local"]["$ref"],
+            "#/$defs/local",
+        )
+
     def test_object_variant_filters_fields_and_rewrites_refs(self) -> None:
         """Object variants filter fields and target child variants."""
         schema = {
@@ -563,6 +590,95 @@ class PipelineDependencyTest(unittest.TestCase):
         )
         self.assertEqual(set(parent_variant["required"]), {"id", "child"})
         self.assertEqual(child_variant["required"], ["value"])
+
+    def test_propagation_with_fragment(self) -> None:
+        """Propagation should work even if the reference has a fragment."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            preprocess_schemas.save_json(
+                {
+                    "$defs": {
+                        "entity": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        }
+                    }
+                },
+                root / "ucp.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/child.json",
+                    "title": "Child",
+                    "type": "object",
+                    "$defs": {
+                        "item": {
+                            "type": "object",
+                            "properties": {
+                                "grandchild": {"$ref": "grandchild.json"}
+                            },
+                        }
+                    },
+                    "properties": {"dummy": {"type": "string"}},
+                },
+                root / "child.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/grandchild.json",
+                    "title": "Grandchild",
+                    "type": "object",
+                    "properties": {
+                        "value": {
+                            "type": "string",
+                            "ucp_request": {"create": "required"},
+                        }
+                    },
+                },
+                root / "grandchild.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/parent.json",
+                    "title": "Parent",
+                    "allOf": [{"$ref": "ucp.json#/$defs/entity"}],
+                    "properties": {
+                        "child_item": {
+                            "$ref": "child.json#/$defs/item",
+                            "ucp_request": {"create": "required"},
+                        }
+                    },
+                },
+                root / "parent.json",
+            )
+
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    ["preprocess_schemas.py", str(root)],
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                preprocess_schemas.main()
+
+            self.assertTrue(
+                (root / "child_create_request.json").exists(),
+                "child_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "grandchild_create_request.json").exists(),
+                "grandchild_create_request.json was not generated",
+            )
+
+            parent_variant = preprocess_schemas.load_json(
+                root / "parent_create_request.json"
+            )
+            self.assertEqual(
+                parent_variant["properties"]["child_item"]["$ref"],
+                "child_create_request.json#/$defs/item",
+            )
 
 
 class MetadataUnionTest(unittest.TestCase):

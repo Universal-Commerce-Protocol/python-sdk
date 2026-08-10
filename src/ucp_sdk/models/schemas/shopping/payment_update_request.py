@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from .types import payment_instrument
+from .types import payment_instrument_update_request
 
 
 class PaymentUpdateRequest(BaseModel):
@@ -31,9 +31,9 @@ class PaymentUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    instruments: list[payment_instrument.SelectedPaymentInstrument] | None = (
-        None
-    )
+    instruments: (
+        list[payment_instrument_update_request.SelectedPaymentInstrument] | None
+    ) = None
     """
     The payment instruments available for this payment. Each instrument is associated with a specific handler via the handler_id field. Handlers can extend the base payment_instrument schema to add handler-specific fields.
     """
