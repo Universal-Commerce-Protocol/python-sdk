@@ -18,7 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+import re
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SignalsCreateRequest(BaseModel):
@@ -37,3 +39,16 @@ class SignalsCreateRequest(BaseModel):
     """
     Client's HTTP User-Agent header or equivalent.
     """
+
+    @model_validator(mode="after")
+    def _enforce_property_names(self):
+        """JSON Schema propertyNames: every extra key must match the
+        declared reverse-domain pattern (schema propertyNames)."""
+        pattern = "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
+        for key in self.model_extra or {}:
+            if re.fullmatch(pattern, key) is None:
+                raise ValueError(
+                    f"Property name {key!r} does not match the schema "
+                    f"propertyNames pattern {pattern}"
+                )
+        return self

@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Three constraint families are handled:
+Four constraint families are handled:
 
 * ``minProperties`` on an object schema WITH declared properties is dropped by
   the generator (issue #49): every field is optional, so an empty instance
@@ -48,6 +48,18 @@ Three constraint families are handled:
   ``ucp/raw_schemas`` before preprocessing for exactly this reason. The bound is
   applied to the base model and to its generated request variants (linked by file
   stem), and travels wherever the alias is reused as a field type.
+
+* ``propertyNames`` on an object WITH named ``properties`` is not enforced. Such
+  a schema is emitted as a ``BaseModel(extra="allow")`` with the named fields, so
+  unknown (extra) keys are accepted without being checked against the declared
+  key pattern (``signals.json`` requires reverse-domain keys, yet a malformed
+  extra key validates). The script scans for objects that declare
+  ``propertyNames`` AND carry named ``properties`` and injects a
+  ``model_validator(mode="after")`` that matches every ``model_extra`` key against
+  the pattern. The pattern is read from the source schema (inline or via ``$ref``
+  to e.g. ``reverse_domain_name.json``), never duplicated here. An object with
+  ``propertyNames`` but *no* named properties is emitted as a ``dict[KeyType, V]``
+  whose key type already carries the pattern, so it is out of scope.
 
 * ``uniqueItems`` on an array is dropped entirely by the generator, so a list
   field accepts duplicate entries in violation of the schema. The script
@@ -83,6 +95,23 @@ _VALIDATOR_TEMPLATE = '''
                 "At least {minimum} {properties_noun} must be provided "
                 "(schema minProperties={minimum})"
             )
+        return self
+'''
+
+_PROPNAMES_MARKER = "_enforce_property_names"
+
+_PROPNAMES_VALIDATOR_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema propertyNames: every extra key must match the
+        declared reverse-domain pattern (schema propertyNames)."""
+        pattern = {pattern!r}
+        for key in self.model_extra or {{}}:
+            if re.fullmatch(pattern, key) is None:
+                raise ValueError(
+                    f"Property name {{key!r}} does not match the schema "
+                    f"propertyNames pattern {{pattern}}"
+                )
         return self
 '''
 
@@ -142,6 +171,153 @@ def _ensure_pydantic_import(source, symbol):
         count=1,
         flags=re.M,
     )
+
+
+def _ensure_stdlib_import(source, statement):
+    """Add a top-level ``import`` statement if absent.
+
+    Inserted right after ``from __future__ import annotations`` so ruff's
+    isort pass (run later in the pipeline) settles it into the stdlib group.
+    """
+    if re.search(rf"^{re.escape(statement)}$", source, re.M):
+        return source
+    return re.sub(
+        r"^(from __future__ import annotations\n)",
+        lambda m: f"{m.group(1)}\n{statement}\n",
+        source,
+        count=1,
+        flags=re.M,
+    )
+
+
+def _resolve_property_names_pattern(prop_names, schema_path):
+    """Return the key pattern a ``propertyNames`` node enforces, or ``None``.
+
+    Reads an inline ``pattern`` directly, or follows a ``$ref`` to an external
+    schema file's root ``pattern`` (e.g. ``reverse_domain_name.json``) so the
+    pattern is never duplicated here — it always comes from the source schema.
+    Local ``#/...`` pointer refs are not resolved and are skipped with a
+    warning rather than guessed.
+    """
+    if not isinstance(prop_names, dict):
+        return None
+    inline = prop_names.get("pattern")
+    if isinstance(inline, str):
+        return inline
+    ref = prop_names.get("$ref")
+    if not isinstance(ref, str):
+        return None
+    if ref.startswith("#"):
+        sys.stderr.write(
+            f"  ! {schema_path}: propertyNames $ref '{ref}' is a local "
+            "pointer; pattern not resolved\n"
+        )
+        return None
+    file_part = ref.split("#", 1)[0]
+    target = (Path(schema_path).parent / file_part).resolve()
+    try:
+        referenced = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        sys.stderr.write(
+            f"  ! {schema_path}: propertyNames $ref '{ref}' could not be "
+            "loaded; pattern not resolved\n"
+        )
+        return None
+    pattern = (
+        referenced.get("pattern") if isinstance(referenced, dict) else None
+    )
+    if not isinstance(pattern, str):
+        sys.stderr.write(
+            f"  ! {schema_path}: propertyNames $ref '{ref}' target has no "
+            "root pattern; not resolved\n"
+        )
+        return None
+    return pattern
+
+
+def find_property_names_patterns(schema_dir):
+    """Map generated class name -> propertyNames pattern for extra-allow models.
+
+    The gap this targets: an object schema that declares ``propertyNames`` AND
+    carries named ``properties`` is emitted by the generator as a
+    ``BaseModel(extra="allow")`` with those named fields, so unknown (extra)
+    keys are never pattern-checked. An object with ``propertyNames`` but *no*
+    named ``properties`` is emitted as a ``dict[KeyType, V]`` map whose key type
+    already carries the pattern (pydantic validates the keys), so it is out of
+    scope. The class is defined mechanically: has ``propertyNames`` (resolvable
+    to a pattern) AND non-empty ``properties`` AND a ``title`` to map to a class.
+    Nested titled objects are walked too, so the rule is general, not per-file.
+    """
+    found = {}
+
+    def walk(node, path_str):
+        if not isinstance(node, dict):
+            if isinstance(node, list):
+                for item in node:
+                    walk(item, path_str)
+            return
+        props = node.get("properties")
+        if "propertyNames" in node and isinstance(props, dict) and props:
+            pattern = _resolve_property_names_pattern(
+                node["propertyNames"], path_str
+            )
+            title = node.get("title")
+            if pattern is None:
+                pass
+            elif not title:
+                sys.stderr.write(
+                    f"  ! {path_str}: propertyNames on an extra-allow object "
+                    "but no title; cannot map to a class\n"
+                )
+            else:
+                # The injected validator uses re.fullmatch to mirror
+                # pydantic-core / ECMA-262 (JSON Schema's regex dialect) key
+                # semantics, which the sibling dict-map path already applies.
+                # That is exact for the ^...$-anchored patterns UCP uses. An
+                # unanchored pattern means JSON Schema unanchored-search
+                # semantics, where fullmatch would over-restrict; warn so a
+                # future schema does not silently get a stricter check.
+                if not (pattern.startswith("^") and pattern.endswith("$")):
+                    sys.stderr.write(
+                        f"  ! {path_str}: propertyNames pattern {pattern!r} is "
+                        "not ^/$-anchored; fullmatch enforcement may be "
+                        "stricter than JSON Schema search semantics\n"
+                    )
+                found[_alias_name(title)] = pattern
+        for value in node.values():
+            walk(value, path_str)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        walk(schema, str(path))
+    return found
+
+
+def inject_property_names(source, class_name, pattern):
+    """Inject the propertyNames key validator at the end of ``class_name``."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    # The class body ends at the next top-level statement or EOF.
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    # Scope the idempotency guard to this class's own body, so a second
+    # target class in the same module is still patched.
+    if f"def {_PROPNAMES_MARKER}(" in source[match.start() : end]:
+        return source
+    method = _PROPNAMES_VALIDATOR_TEMPLATE.format(
+        marker=_PROPNAMES_MARKER, pattern=pattern
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    out = _ensure_pydantic_import(out, "model_validator")
+    return _ensure_stdlib_import(out, "import re")
 
 
 def inject_min_properties(source, class_name, minimum):
@@ -540,6 +716,42 @@ def _array_contains_targets():
     return targets
 
 
+def _patch_property_names():
+    """Inject propertyNames validators; return (patched_count, exit_code)."""
+    patterns = find_property_names_patterns(SCHEMA_DIR)
+    if not patterns:
+        sys.stdout.write(
+            "postprocess: no propertyNames constraints on extra-allow "
+            "models found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name, pattern in sorted(patterns.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_property_names(source, class_name, pattern)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = ", ".join(str(h) for h in hits) or "NO GENERATED CLASS FOUND"
+        sys.stdout.write(
+            f"  propertyNames {pattern!r} on '{class_name}' -> {label}\n"
+        )
+        if not hits:
+            sys.stderr.write(
+                f"  ! '{class_name}' has no generated class; "
+                "constraint not enforced\n"
+            )
+            return patched, 1
+    return patched, 0
+
+
 def _patch_array_contains():
     """Inject array-contains validators; return (patched_count, exit_code)."""
     targets = _array_contains_targets()
@@ -606,11 +818,12 @@ def _patch_unique_items():
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
+    patched_pn, rc_pn = _patch_property_names()
     patched_ac, rc_ac = _patch_array_contains()
     patched_ui, rc_ui = _patch_unique_items()
-    total = patched_mp + patched_ac + patched_ui
+    total = patched_mp + patched_pn + patched_ac + patched_ui
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_ac or rc_ui
+    return rc_mp or rc_pn or rc_ac or rc_ui
 
 
 if __name__ == "__main__":

@@ -774,6 +774,180 @@ class DescriptionMinPropertiesTest(unittest.TestCase):
         Description(plain="p", html="<p>p</p>", markdown="p")
 
 
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class SignalsPropertyNamesTest(unittest.TestCase):
+    """signals.json declares propertyNames (reverse-domain keys).
+
+    Signals has named ``properties`` AND ``additionalProperties: true``, so the
+    generator emits ``class Signals(BaseModel)`` with ``extra="allow"`` and named
+    fields; extra keys bypass the ``propertyNames`` pattern. The post-generation
+    injector restores the check on every ``model_extra`` key while preserving
+    well-formed reverse-domain extras (extra="allow" keeps them).
+    """
+
+    def _signals(self):
+        from ucp_sdk.models.schemas.shopping.types.signals import Signals
+
+        return Signals
+
+    def test_malformed_extra_key_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "propertyNames"):
+            self._signals().model_validate(
+                {"dev.ucp.buyer_ip": "1.2.3.4", "bogus KEY!": "x"}
+            )
+
+    def test_trailing_newline_key_rejected(self):
+        # A $-anchored pattern with re.match would let a trailing newline
+        # slip through; the enforcement uses re.fullmatch to agree with
+        # pydantic-core's key validation on the sibling dict-map path.
+        with self.assertRaisesRegex(ValidationError, "propertyNames"):
+            self._signals().model_validate({"com.example.k\n": "x"})
+
+    def test_valid_reverse_domain_extra_accepted_and_preserved(self):
+        signals = self._signals().model_validate(
+            {"com.example.device_id": "abc123"}
+        )
+        # extra="allow" must still keep a well-formed extra key.
+        self.assertEqual(
+            signals.model_extra, {"com.example.device_id": "abc123"}
+        )
+
+    def test_known_named_fields_still_work(self):
+        signals = self._signals().model_validate(
+            {
+                "dev.ucp.buyer_ip": "1.2.3.4",
+                "dev.ucp.user_agent": "curl/8",
+            }
+        )
+        self.assertEqual(signals.dev_ucp_buyer_ip, "1.2.3.4")
+        self.assertEqual(signals.dev_ucp_user_agent, "curl/8")
+        self.assertEqual(signals.model_extra, {})
+
+    def test_request_variants_enforce_property_names(self):
+        # The gap and its fix travel to the generated request variants too.
+        from ucp_sdk.models.schemas.shopping.types.signals_complete_request import (
+            SignalsCompleteRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.types.signals_create_request import (
+            SignalsCreateRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.types.signals_update_request import (
+            SignalsUpdateRequest,
+        )
+
+        for cls in (
+            SignalsCreateRequest,
+            SignalsUpdateRequest,
+            SignalsCompleteRequest,
+        ):
+            with self.subTest(model=cls.__name__):
+                with self.assertRaisesRegex(ValidationError, "propertyNames"):
+                    cls.model_validate({"bogus KEY!": "x"})
+                self.assertEqual(
+                    cls.model_validate({"com.example.k": "v"}).model_extra,
+                    {"com.example.k": "v"},
+                )
+
+
+class PropertyNamesInjectorTest(unittest.TestCase):
+    """The propertyNames post-generation injector's own behavior."""
+
+    PATTERN = "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$"
+
+    SCHEMA = {
+        "title": "Signals",
+        "type": "object",
+        "propertyNames": {"pattern": PATTERN},
+        "properties": {"dev.ucp.buyer_ip": {"type": "string"}},
+        "additionalProperties": True,
+    }
+
+    # An object with propertyNames but no named properties is a dict-map
+    # (key type already carries the pattern) — out of scope.
+    DICT_MAP_SCHEMA = {
+        "title": "Requires",
+        "type": "object",
+        "propertyNames": {"pattern": PATTERN},
+        "additionalProperties": {"type": "string"},
+    }
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict, Field\n"
+        "\n"
+        "\n"
+        "class Signals(BaseModel):\n"
+        '    """Signals."""\n'
+        "\n"
+        "    model_config = ConfigDict(\n"
+        '        extra="allow",\n'
+        "    )\n"
+        '    dev_ucp_buyer_ip: str | None = Field(None, alias="dev.ucp.buyer_ip")\n'
+    )
+
+    def test_scan_finds_only_extra_allow_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "signals.json").write_text(json.dumps(self.SCHEMA))
+            (Path(tmp) / "requires.json").write_text(
+                json.dumps(self.DICT_MAP_SCHEMA)
+            )
+            found = postprocess_models.find_property_names_patterns(Path(tmp))
+        self.assertEqual(found, {"Signals": self.PATTERN})
+
+    def test_scan_resolves_ref_pattern(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "reverse_domain_name.json").write_text(
+                json.dumps({"type": "string", "pattern": self.PATTERN})
+            )
+            (Path(tmp) / "thing.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Thing",
+                        "type": "object",
+                        "propertyNames": {"$ref": "reverse_domain_name.json"},
+                        "properties": {"a": {"type": "string"}},
+                    }
+                )
+            )
+            found = postprocess_models.find_property_names_patterns(Path(tmp))
+        self.assertEqual(found, {"Thing": self.PATTERN})
+
+    def test_injects_validator_and_imports(self):
+        out = postprocess_models.inject_property_names(
+            self.MODULE, "Signals", self.PATTERN
+        )
+        self.assertIn("model_validator", out)
+        self.assertIn("import re", out)
+        self.assertIn("propertyNames", out)
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_property_names(
+            self.MODULE, "Signals", self.PATTERN
+        )
+        twice = postprocess_models.inject_property_names(
+            once, "Signals", self.PATTERN
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_pattern(self):
+        out = postprocess_models.inject_property_names(
+            self.MODULE, "Signals", self.PATTERN
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        signals_cls = namespace["Signals"]
+        with self.assertRaises(ValidationError):
+            signals_cls.model_validate({"bogus KEY!": "x"})
+        # fullmatch (not match) — a trailing newline must not slip through.
+        with self.assertRaises(ValidationError):
+            signals_cls.model_validate({"com.example.ok\n": "v"})
+        signals_cls.model_validate({"com.example.ok": "v"})
+
+
 class InjectorTest(unittest.TestCase):
     """The post-generation injector's own behavior."""
 
