@@ -231,7 +231,9 @@ class RequestMetadataTest(unittest.TestCase):
                 "transition-omit",
                 {
                     "ucp_request": {
-                        "update": {"transition": {"from": "required", "to": "omit"}}
+                        "update": {
+                            "transition": {"from": "required", "to": "omit"}
+                        }
                     }
                 },
                 "update",
