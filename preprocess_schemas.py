@@ -412,6 +412,10 @@ def eval_prop_inclusion(name, data, op, base_required):
         is_required = False
     elif isinstance(marker, dict):
         val = marker.get(op)
+        if isinstance(val, dict):
+            # Handle transition-shaped marker: {"transition": {"from": "...", "to": "..."}}
+            transition = val.get("transition", {})
+            val = transition.get("to")
         if val == "omit" or val is None:
             include = False
         elif val == "required":
