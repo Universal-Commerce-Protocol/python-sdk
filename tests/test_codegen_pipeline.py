@@ -91,6 +91,29 @@ class SchemaNormalizationTest(unittest.TestCase):
         self.assertEqual(set(branch["required"]), {"id", "kind"})
         self.assertEqual(branch["type"], "object")
 
+    def test_preprocess_preserves_multiple_conditional_branches(self) -> None:
+        """Each conditional allOf branch survives schema flattening."""
+        negative = {
+            "if": {"properties": {"type": {"const": "discount"}}},
+            "then": {"properties": {"amount": {"exclusiveMaximum": 0}}},
+        }
+        non_negative = {
+            "if": {"properties": {"type": {"const": "subtotal"}}},
+            "then": {"properties": {"amount": {"minimum": 0}}},
+        }
+        schema = {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "amount": {"type": "integer"},
+            },
+            "allOf": [negative, non_negative],
+        }
+
+        preprocess_schemas.preprocess_full_schema(schema)
+
+        self.assertEqual(schema["allOf"], [negative, non_negative])
+
     def test_preprocess_inlines_entity_fields(self) -> None:
         """The shared entity definition is inlined without its metadata."""
         entity = {
