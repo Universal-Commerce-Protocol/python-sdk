@@ -29,7 +29,7 @@ class AllowsMultiDestination(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
     )
     shipping: bool | None = None
     """

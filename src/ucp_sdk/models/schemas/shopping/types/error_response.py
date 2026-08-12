@@ -30,7 +30,7 @@ class ErrorResponse(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
     )
     ucp: ucp_1.UcpMetadata
     """

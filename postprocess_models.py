@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Four constraint families are handled:
+Six constraint families are handled:
 
 * ``minProperties`` on an object schema WITH declared properties is dropped by
   the generator (issue #49): every field is optional, so an empty instance
@@ -73,6 +73,12 @@ Four constraint families are handled:
   required discriminator using ``const``/``enum`` and a ``then.required`` list,
   then injects a ``model_validator(mode="after")``. More complex conditions are
   skipped rather than approximated.
+
+* ``additionalProperties: false`` on an object schema with named properties is
+  normally overridden by the generator's ``--extra-fields=allow`` flag. The
+  script detects schemas with ``additionalProperties: false`` and flips their
+  generated ``model_config`` to ``extra="forbid"`` while preserving
+  ``extra="allow"`` on sibling models in the same module.
 
 Runs from generate_models.sh between generation and formatting; idempotent.
 """
@@ -1004,6 +1010,111 @@ def _patch_unique_items():
     return unique_patched, 0
 
 
+def find_extra_forbid_class_names(schema_dir):
+    """Map generated class names for objects that forbid unknown keys.
+
+    The gap this targets: an object schema that declares
+    ``additionalProperties: false`` AND carries named ``properties`` is still
+    emitted by the generator as ``BaseModel(extra="allow")`` (generation runs
+    with ``--extra-fields=allow``), so unknown keys are silently retained in
+    ``model_extra`` instead of being rejected. The rule is mechanical: an
+    object node with ``additionalProperties is False`` and non-empty named
+    ``properties`` maps to its generated class name via its ``title`` (root
+    objects) or its property path (untitled nested objects, e.g.
+    ``allows_multi_destination`` -> ``AllowsMultiDestination``).
+    """
+    found = set()
+
+    def visit(node, class_name):
+        if not isinstance(node, dict):
+            if isinstance(node, list):
+                for item in node:
+                    visit(item, class_name)
+            return
+        effective = (
+            _alias_name(node["title"]) if node.get("title") else class_name
+        )
+        if (
+            node.get("additionalProperties") is False
+            and isinstance(node.get("properties"), dict)
+            and node["properties"]
+        ):
+            found.add(effective)
+        for name, child in (node.get("properties") or {}).items():
+            visit(child, _to_camel_case(name))
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_name = (
+            _alias_name(schema["title"])
+            if schema.get("title")
+            else _to_camel_case(path.stem)
+        )
+        visit(schema, root_name)
+    return found
+
+
+def inject_extra_forbid(source, class_name):
+    """Flip the target class's ``extra="allow"`` config to ``extra="forbid"``.
+
+    Only the named class's own ``model_config`` is changed (its body, from the
+    ``class`` statement to the next top-level ``class``/``def``), so sibling
+    classes in the same module keep ``extra="allow"``. The source is returned
+    unchanged when the class is absent or already ``extra="forbid"``.
+    """
+    head = re.search(
+        rf"^class {re.escape(class_name)}\(BaseModel\):", source, re.M
+    )
+    if not head:
+        return source
+    rest = source[head.end() :]
+    next_top = re.search(r"^(?=class |def )", rest, re.M)
+    body_end = len(rest) if next_top is None else next_top.start()
+    body = rest[:body_end]
+    if 'extra="allow"' not in body:
+        return source
+    new_body = body.replace('extra="allow"', 'extra="forbid"', 1)
+    return source[: head.end()] + new_body + rest[body_end:]
+
+
+def _patch_extra_forbid():
+    """Inject extra="forbid" on models whose schema forbids unknown keys."""
+    class_names = find_extra_forbid_class_names(SCHEMA_DIR)
+    if not class_names:
+        sys.stdout.write(
+            "postprocess: no additionalProperties:false models found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name in sorted(class_names):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_extra_forbid(source, class_name)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = ", ".join(str(h) for h in hits) or "NO GENERATED CLASS FOUND"
+        sys.stdout.write(f"  extra=forbid on '{class_name}' -> {label}\n")
+        if not hits:
+            sys.stderr.write(
+                f"  ! '{class_name}' has no generated class; "
+                "constraint not enforced\n"
+            )
+            return patched, 1
+    return patched, 0
+
+
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
@@ -1011,9 +1122,17 @@ def main():
     patched_ac, rc_ac = _patch_array_contains()
     patched_cr, rc_cr = _patch_conditional_required()
     patched_ui, rc_ui = _patch_unique_items()
-    total = patched_mp + patched_pn + patched_ac + patched_cr + patched_ui
+    patched_ef, rc_ef = _patch_extra_forbid()
+    total = (
+        patched_mp
+        + patched_pn
+        + patched_ac
+        + patched_cr
+        + patched_ui
+        + patched_ef
+    )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_cr or rc_ui
+    return rc_mp or rc_pn or rc_ac or rc_cr or rc_ui or rc_ef
 
 
 if __name__ == "__main__":
