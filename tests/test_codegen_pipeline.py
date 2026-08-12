@@ -1472,5 +1472,197 @@ class UniqueItemsSemanticTest(unittest.TestCase):
         self.assertIsNone(Constraints().brands)
 
 
+class AdditionalPropertiesForbidFinderTest(unittest.TestCase):
+    """additionalProperties:false objects map to generated class names."""
+
+    def test_root_titled_object(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "error_response.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Error Response",
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"messages": {"type": "array"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            names = postprocess_models.find_extra_forbid_class_names(Path(tmp))
+        self.assertEqual(names, {"ErrorResponse"})
+
+    def test_nested_untitled_object_uses_property_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "merchant_fulfillment_config.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Merchant Fulfillment Config",
+                        "type": "object",
+                        "properties": {
+                            "allows_multi_destination": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {"shipping": {"type": "boolean"}},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            names = postprocess_models.find_extra_forbid_class_names(Path(tmp))
+        self.assertEqual(names, {"AllowsMultiDestination"})
+
+    def test_loose_and_map_objects_are_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "open.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Open Object",
+                        "type": "object",
+                        "properties": {"a": {"type": "string"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            Path(tmp, "map.json").write_text(
+                json.dumps(
+                    {
+                        "title": "Map Object",
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "properties": {"a": {"type": "string"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            names = postprocess_models.find_extra_forbid_class_names(Path(tmp))
+        self.assertEqual(names, set())
+
+
+class AdditionalPropertiesForbidInjectorTest(unittest.TestCase):
+    """The injector flips only the target class's model_config to forbid."""
+
+    SOURCE = '''\
+class AllowsMultiDestination(BaseModel):
+    """
+    Permits multiple destinations per method type.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    shipping: bool | None = None
+
+
+class MerchantFulfillmentConfig(BaseModel):
+    """
+    Merchant's fulfillment configuration.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    allows_multi_destination: AllowsMultiDestination | None = None
+'''
+
+    def test_flips_only_target_class(self) -> None:
+        updated = postprocess_models.inject_extra_forbid(
+            self.SOURCE, "AllowsMultiDestination"
+        )
+        # Target class body now forbids extra keys.
+        self.assertIn('extra="forbid"', updated)
+        # The sibling class in the same module keeps extra="allow".
+        sibling = """class MerchantFulfillmentConfig(BaseModel):
+    \"\"\"
+    Merchant's fulfillment configuration.
+    \"\"\"
+
+    model_config = ConfigDict(
+        extra="allow",
+    )"""
+        self.assertIn(sibling, updated)
+
+    def test_idempotent_after_flip(self) -> None:
+        once = postprocess_models.inject_extra_forbid(
+            self.SOURCE, "AllowsMultiDestination"
+        )
+        twice = postprocess_models.inject_extra_forbid(
+            once, "AllowsMultiDestination"
+        )
+        self.assertEqual(once, twice)
+
+    def test_unknown_class_untouched(self) -> None:
+        self.assertEqual(
+            postprocess_models.inject_extra_forbid(self.SOURCE, "Nope"),
+            self.SOURCE,
+        )
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
+    """Committed models reject unknown keys on additionalProperties:false."""
+
+    def test_error_response_rejects_unknown_keys(self) -> None:
+        from ucp_sdk.models.schemas.shopping.types.error_response import (
+            ErrorResponse,
+        )
+
+        with self.assertRaises(ValidationError):
+            ErrorResponse.model_validate(
+                {
+                    "ucp": {"version": "2026-04-08", "status": "error"},
+                    "messages": [
+                        {
+                            "type": "error",
+                            "code": "not_found",
+                            "severity": "unrecoverable",
+                            "content": "boom",
+                        }
+                    ],
+                    "bogus": "x",
+                }
+            )
+
+    def test_error_response_accepts_declared_fields(self) -> None:
+        from ucp_sdk.models.schemas.shopping.types.error_response import (
+            ErrorResponse,
+        )
+
+        obj = ErrorResponse.model_validate(
+            {
+                "ucp": {"version": "2026-04-08", "status": "error"},
+                "messages": [
+                    {
+                        "type": "error",
+                        "code": "not_found",
+                        "severity": "unrecoverable",
+                        "content": "boom",
+                    }
+                ],
+            }
+        )
+        self.assertEqual(obj.messages[0].content, "boom")
+
+    def test_allows_multi_destination_rejects_unknown_keys(self) -> None:
+        from ucp_sdk.models.schemas.shopping.types.merchant_fulfillment_config import (
+            AllowsMultiDestination,
+        )
+
+        with self.assertRaises(ValidationError):
+            AllowsMultiDestination.model_validate(
+                {"shipping": True, "bogus": "x"}
+            )
+
+    def test_sibling_config_keeps_extra_allow(self) -> None:
+        from ucp_sdk.models.schemas.shopping.types.merchant_fulfillment_config import (
+            MerchantFulfillmentConfig,
+        )
+
+        config = MerchantFulfillmentConfig.model_validate({"bogus": "x"})
+        self.assertEqual(config.model_extra, {"bogus": "x"})
+
+
 if __name__ == "__main__":
     unittest.main()
