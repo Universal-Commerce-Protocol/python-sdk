@@ -104,6 +104,10 @@ def _process_all_of_item(item, node, root, state):
     if not isinstance(item, dict):
         return
 
+    if any(key in item for key in ("if", "then", "else")):
+        state["remaining_refs"].append(item)
+        return
+
     # Extract polymorphic branches (anyOf, oneOf) to keep the node flat
     for poly_key in ["anyOf", "oneOf"]:
         if poly_key in item:
