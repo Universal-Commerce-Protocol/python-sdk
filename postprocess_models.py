@@ -67,6 +67,13 @@ Four constraint families are handled:
   injects a ``field_validator(mode="after")`` into each generated class that
   declares a matching list field.
 
+* Simple conditional ``required`` constraints are dropped: pagination requires
+  ``cursor`` when ``has_next_page`` is true, but the generated response model
+  always treats it as optional. The script accepts only an unambiguous single
+  required discriminator using ``const``/``enum`` and a ``then.required`` list,
+  then injects a ``model_validator(mode="after")``. More complex conditions are
+  skipped rather than approximated.
+
 Runs from generate_models.sh between generation and formatting; idempotent.
 """
 
@@ -116,6 +123,24 @@ _PROPNAMES_VALIDATOR_TEMPLATE = '''
 '''
 
 _UNIQUE_MARKER = "_enforce_unique_items"
+
+_CONDITIONAL_REQUIRED_MARKER = "_enforce_conditional_required"
+
+_CONDITIONAL_REQUIRED_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema if/then: enforce conditionally required fields."""
+        rules = {rules!r}
+        for rule in rules:
+            if getattr(self, rule["discriminator"], None) not in rule["values"]:
+                continue
+            for field in rule["required"]:
+                if field not in self.model_fields_set:
+                    raise ValueError(
+                        f"Field {{field!r}} is required by a schema condition"
+                    )
+        return self
+'''
 
 _UNIQUE_VALIDATOR_TEMPLATE = '''
     @field_validator("{field}", mode="after")
@@ -528,6 +553,137 @@ def inject_array_contains(source, alias_name, groups):
     return _ensure_pydantic_import(out, "AfterValidator")
 
 
+def find_conditional_required(schema_dir):
+    """Map generated class names to simple if/then required rules."""
+    rules_by_class = {}
+
+    def describe(node, properties):
+        if not isinstance(node, dict) or set(node) != {"if", "then"}:
+            return None
+        condition = node["if"]
+        consequence = node["then"]
+        if (
+            not isinstance(condition, dict)
+            or set(condition) != {"properties", "required"}
+            or not isinstance(consequence, dict)
+            or set(consequence) != {"required"}
+        ):
+            return None
+        condition_props = condition["properties"]
+        condition_required = condition["required"]
+        consequence_required = consequence["required"]
+        if (
+            not isinstance(condition_props, dict)
+            or len(condition_props) != 1
+            or not isinstance(condition_required, list)
+            or len(condition_required) != 1
+            or not isinstance(consequence_required, list)
+            or not consequence_required
+        ):
+            return None
+        discriminator, predicate = next(iter(condition_props.items()))
+        if condition_required != [discriminator] or not isinstance(
+            predicate, dict
+        ):
+            return None
+        if set(predicate) == {"const"}:
+            values = [predicate["const"]]
+        elif (
+            set(predicate) == {"enum"}
+            and isinstance(predicate["enum"], list)
+            and predicate["enum"]
+        ):
+            values = predicate["enum"]
+        else:
+            return None
+        if (
+            discriminator not in properties
+            or any(
+                not isinstance(name, str) or name not in properties
+                for name in consequence_required
+            )
+            or any(
+                not isinstance(value, (str, int, float, bool))
+                for value in values
+            )
+        ):
+            return None
+        return {
+            "discriminator": discriminator,
+            "values": values,
+            "required": sorted(consequence_required),
+        }
+
+    def walk(node, current_class_name, path_str):
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+        properties = node.get("properties")
+        then = node.get("then")
+        is_required_rule = isinstance(then, dict) and "required" in then
+        if isinstance(properties, dict) and is_required_rule:
+            if "else" in node:
+                rule = None
+            else:
+                rule = describe(
+                    {key: node[key] for key in ("if", "then") if key in node},
+                    properties,
+                )
+            if rule is None:
+                sys.stderr.write(
+                    f"  ! {path_str}: unsupported conditional required rule; skipped\n"
+                )
+            elif current_class_name is not None:
+                rules_by_class.setdefault(current_class_name, []).append(rule)
+        if isinstance(properties, dict):
+            for name, prop in properties.items():
+                walk(prop, _to_camel_case(name), path_str)
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), path_str)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name, path_str)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class, str(path))
+    return rules_by_class
+
+
+def inject_conditional_required(source, class_name, rules):
+    """Inject simple conditional-required checks into one generated class."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    if f"def {_CONDITIONAL_REQUIRED_MARKER}(" in source[match.start() : end]:
+        return source
+    method = _CONDITIONAL_REQUIRED_TEMPLATE.format(
+        marker=_CONDITIONAL_REQUIRED_MARKER,
+        rules=rules,
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -787,6 +943,39 @@ def _patch_array_contains():
     return patched, 0
 
 
+def _patch_conditional_required():
+    """Inject conditional-required validators; return counts and status."""
+    rules_by_class = find_conditional_required(SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write(
+            "postprocess: no simple conditional required rules found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name, rules in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_conditional_required(source, class_name, rules)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = (
+            ", ".join(str(path) for path in hits) or "NO GENERATED CLASS FOUND"
+        )
+        sys.stdout.write(
+            f"  conditional required on '{class_name}' -> {label}\n"
+        )
+        if not hits:
+            return patched, 1
+    return patched, 0
+
+
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
     unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
@@ -820,10 +1009,11 @@ def main():
     patched_mp, rc_mp = _patch_min_properties()
     patched_pn, rc_pn = _patch_property_names()
     patched_ac, rc_ac = _patch_array_contains()
+    patched_cr, rc_cr = _patch_conditional_required()
     patched_ui, rc_ui = _patch_unique_items()
-    total = patched_mp + patched_pn + patched_ac + patched_ui
+    total = patched_mp + patched_pn + patched_ac + patched_cr + patched_ui
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_ui
+    return rc_mp or rc_pn or rc_ac or rc_cr or rc_ui
 
 
 if __name__ == "__main__":

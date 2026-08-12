@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Pagination(BaseModel):
@@ -69,3 +69,23 @@ class Response(BaseModel):
     """
     Total number of matching items, if available.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_required(self):
+        """JSON Schema if/then: enforce conditionally required fields."""
+        rules = [
+            {
+                "discriminator": "has_next_page",
+                "values": [True],
+                "required": ["cursor"],
+            }
+        ]
+        for rule in rules:
+            if getattr(self, rule["discriminator"], None) not in rule["values"]:
+                continue
+            for field in rule["required"]:
+                if field not in self.model_fields_set:
+                    raise ValueError(
+                        f"Field {field!r} is required by a schema condition"
+                    )
+        return self

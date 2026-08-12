@@ -984,6 +984,95 @@ class PropertyNamesInjectorTest(unittest.TestCase):
         signals_cls.model_validate({"com.example.ok": "v"})
 
 
+class ConditionalRequiredInjectorTest(unittest.TestCase):
+    """Simple JSON Schema if/then required constraints are restored."""
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class Response(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    cursor: str | None = None\n"
+        "    has_next_page: bool\n"
+    )
+    RULES = [
+        {
+            "discriminator": "has_next_page",
+            "values": [True],
+            "required": ["cursor"],
+        }
+    ]
+
+    def test_schema_scan_maps_nested_definition_to_generated_class(self):
+        schema = {
+            "title": "Pagination",
+            "type": "object",
+            "$defs": {
+                "response": {
+                    "type": "object",
+                    "properties": {
+                        "cursor": {"type": "string"},
+                        "has_next_page": {"type": "boolean"},
+                    },
+                    "if": {
+                        "properties": {"has_next_page": {"const": True}},
+                        "required": ["has_next_page"],
+                    },
+                    "then": {"required": ["cursor"]},
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "pagination.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_required(Path(tmp))
+        self.assertEqual(found, {"Response": self.RULES})
+
+    def test_schema_scan_skips_else_branches(self):
+        schema = {
+            "title": "Response",
+            "type": "object",
+            "properties": {
+                "cursor": {"type": "string"},
+                "has_next_page": {"type": "boolean"},
+            },
+            "if": {
+                "properties": {"has_next_page": {"const": True}},
+                "required": ["has_next_page"],
+            },
+            "then": {"required": ["cursor"]},
+            "else": {"required": ["other"]},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "response.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_required(Path(tmp))
+        self.assertEqual(found, {})
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_conditional_required(
+            self.MODULE, "Response", self.RULES
+        )
+        twice = postprocess_models.inject_conditional_required(
+            once, "Response", self.RULES
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_conditional_required(self):
+        out = postprocess_models.inject_conditional_required(
+            self.MODULE, "Response", self.RULES
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        response = namespace["Response"]
+        with self.assertRaises(ValidationError):
+            response(has_next_page=True)
+        response(has_next_page=True, cursor="next-page")
+        response(has_next_page=False)
+
+
 class InjectorTest(unittest.TestCase):
     """The post-generation injector's own behavior."""
 
