@@ -140,6 +140,30 @@ def _enforce_contains_totals(value):
             "Array must contain at most 1 entry "
             "matching type=='total' (schema maxContains=1)"
         )
+    _excluded = [
+        "subtotal",
+        "items_discount",
+        "discount",
+        "fulfillment",
+        "tax",
+        "fee",
+        "total",
+    ]
+    for _item in value:
+        _actual = (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        if _actual in _excluded:
+            continue
+        if isinstance(_item, dict) and "display_text" not in _item:
+            raise ValueError("Field 'display_text' is required for custom type")
+        if (
+            not isinstance(_item, dict)
+            and "display_text" not in _item.model_fields_set
+        ):
+            raise ValueError("Field 'display_text' is required for custom type")
     return value
 
 

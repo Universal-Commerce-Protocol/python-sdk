@@ -1293,6 +1293,27 @@ class TotalsContainsTest(unittest.TestCase):
     def test_update_request_variant_enforces_both_bounds(self):
         self._assert_matrix(TotalsUpdateRequest)
 
+    def test_custom_type_requires_display_text(self):
+        base = [self.SUBTOTAL, self.TOTAL]
+        for alias in (Totals, TotalsCreateRequest, TotalsUpdateRequest):
+            adapter = TypeAdapter(alias)
+            with self.subTest(model=alias.__name__):
+                with self.assertRaisesRegex(ValidationError, "display_text"):
+                    adapter.validate_python(
+                        base + [{"type": "surcharge", "amount": 5}]
+                    )
+                adapter.validate_python(base + [{"type": "tax", "amount": 5}])
+                adapter.validate_python(
+                    base
+                    + [
+                        {
+                            "type": "surcharge",
+                            "amount": 5,
+                            "display_text": "Surcharge",
+                        }
+                    ]
+                )
+
     def test_missing_total_names_the_total_rule(self):
         # A subtotal-only array must fail specifically on the total rule.
         with self.assertRaisesRegex(ValidationError, "total"):
@@ -1328,11 +1349,30 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         {"pairs": [("type", "total")], "min": 1, "max": 1},
     ]
 
+    ITEM_CONDITION = {
+        "field": "type",
+        "excluded": ["subtotal", "total"],
+        "required": ["display_text"],
+    }
+
     def test_scan_reads_both_contains_from_allof_branches(self):
         # The pristine totals.json shape: two allOf contains branches.
         schema = {
             "title": "Totals",
             "type": "array",
+            "items": {
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "type": {"not": {"enum": ["subtotal", "total"]}}
+                            },
+                            "required": ["type"],
+                        },
+                        "then": {"required": ["display_text"]},
+                    }
+                ]
+            },
             "allOf": [
                 {
                     "contains": {"properties": {"type": {"const": "subtotal"}}},
@@ -1356,6 +1396,10 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         self.assertEqual(
             [g["pairs"] for g in found["totals"]["groups"]],
             [[("type", "subtotal")], [("type", "total")]],
+        )
+        self.assertEqual(
+            found["totals"]["item_condition"],
+            self.ITEM_CONDITION,
         )
 
     def test_scan_reads_root_level_single_contains(self):
@@ -1434,6 +1478,31 @@ class ArrayContainsInjectorTest(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 adapter.validate_python(bad)
         adapter.validate_python([sub, tot])
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_requires_custom_display_text(self):
+        out = postprocess_models.inject_array_contains(
+            self.MODULE, "Totals", self.GROUPS, self.ITEM_CONDITION
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        adapter = TypeAdapter(namespace["Totals"])
+        base = [
+            {"type": "subtotal", "amount": 1},
+            {"type": "total", "amount": 1},
+        ]
+        with self.assertRaisesRegex(ValidationError, "display_text"):
+            adapter.validate_python(base + [{"type": "surcharge", "amount": 1}])
+        adapter.validate_python(
+            base
+            + [
+                {
+                    "type": "surcharge",
+                    "amount": 1,
+                    "display_text": "Surcharge",
+                }
+            ]
+        )
 
 
 class UniqueItemsInjectorTest(unittest.TestCase):
