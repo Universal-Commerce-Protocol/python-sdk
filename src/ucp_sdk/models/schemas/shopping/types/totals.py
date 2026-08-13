@@ -18,9 +18,17 @@
 
 from __future__ import annotations
 
+import operator
+
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, AfterValidator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    AfterValidator,
+    model_validator,
+)
 from typing_extensions import TypeAliasType
 
 from . import signed_amount
@@ -50,6 +58,44 @@ class Total(Total_1):
     """
     Optional itemized breakdown. The parent entry is always rendered; lines are supplementary. Sum of line amounts MUST equal the parent entry amount.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_bounds(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = [
+            {
+                "discriminator": "type",
+                "values": ["discount", "items_discount"],
+                "bounds": {"amount": {"exclusiveMaximum": 0}},
+            },
+            {
+                "discriminator": "type",
+                "values": ["subtotal", "fulfillment", "tax", "fee"],
+                "bounds": {"amount": {"minimum": 0}},
+            },
+        ]
+        checks = {
+            "minimum": (">=", "lt"),
+            "maximum": ("<=", "gt"),
+            "exclusiveMinimum": (">", "le"),
+            "exclusiveMaximum": ("<", "ge"),
+        }
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for field, bounds in rule["bounds"].items():
+                value = getattr(self, field, None)
+                if value is None:
+                    continue
+                for keyword, limit in bounds.items():
+                    symbol, op_name = checks[keyword]
+                    if getattr(operator, op_name)(value, limit):
+                        raise ValueError(
+                            f"Field {field!r} must be {symbol} {limit} "
+                            f"when {rule['discriminator']} is {actual!r}"
+                        )
+        return self
 
 
 def _enforce_contains_totals(value):
