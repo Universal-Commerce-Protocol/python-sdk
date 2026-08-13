@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Six constraint families are handled:
+Seven constraint families are handled:
 
 * ``minProperties`` on an object schema WITH declared properties is dropped by
   the generator (issue #49): every field is optional, so an empty instance
@@ -73,6 +73,15 @@ Six constraint families are handled:
   required discriminator using ``const``/``enum`` and a ``then.required`` list,
   then injects a ``model_validator(mode="after")``. More complex conditions are
   skipped rather than approximated.
+
+* Conditional numeric bounds are dropped for the same reason: ``total.json``
+  requires a ``discount`` amount to be negative and a ``tax`` amount to be
+  non-negative via if/then branches, but the generated ``Total`` carries no
+  validator, so a positive discount validates. These rules are carried as
+  ``allOf`` branches, which have no sibling ``properties`` of their own, so the
+  scan validates them against the enclosing object's property set. A rule whose
+  fields were stripped by request-variant projection is inapplicable rather than
+  malformed and is skipped silently.
 
 * ``additionalProperties: false`` on an object schema with named properties is
   normally overridden by the generator's ``--extra-fields=allow`` flag. The
@@ -145,6 +154,46 @@ _CONDITIONAL_REQUIRED_TEMPLATE = '''
                     raise ValueError(
                         f"Field {{field!r}} is required by a schema condition"
                     )
+        return self
+'''
+
+_CONDITIONAL_BOUNDS_MARKER = "_enforce_conditional_bounds"
+
+# Returned when a rule is well-formed but names fields absent from the class it
+# would apply to — distinct from None, which means the shape is unsupported and
+# warrants a warning.
+_RULE_NOT_APPLICABLE = object()
+
+# Keyword -> (comparison rendered in the message, python operator name). The
+# operator is applied as "value <op> limit" and a true result is a violation.
+_BOUND_KEYWORDS = {
+    "minimum": (">=", "lt"),
+    "maximum": ("<=", "gt"),
+    "exclusiveMinimum": (">", "le"),
+    "exclusiveMaximum": ("<", "ge"),
+}
+
+_CONDITIONAL_BOUNDS_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = {rules!r}
+        checks = {checks!r}
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for field, bounds in rule["bounds"].items():
+                value = getattr(self, field, None)
+                if value is None:
+                    continue
+                for keyword, limit in bounds.items():
+                    symbol, op_name = checks[keyword]
+                    if getattr(operator, op_name)(value, limit):
+                        raise ValueError(
+                            f"Field {{field!r}} must be {{symbol}} {{limit}} "
+                            f"when {{rule['discriminator']}} is {{actual!r}}"
+                        )
         return self
 '''
 
@@ -690,6 +739,169 @@ def inject_conditional_required(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def find_conditional_bounds(schema_dir):
+    """Map generated class names to if/then numeric-bound rules.
+
+    Complements find_conditional_required, which only handles a ``then`` that
+    adds required fields. A ``then`` that instead narrows a numeric range is
+    dropped by datamodel-code-generator, so the constraint would otherwise be
+    absent from the generated model entirely.
+    """
+    rules_by_class = {}
+
+    def describe(node, properties):
+        if not isinstance(node, dict) or set(node) != {"if", "then"}:
+            return None
+        condition = node["if"]
+        consequence = node["then"]
+        if (
+            not isinstance(condition, dict)
+            or set(condition) != {"properties", "required"}
+            or not isinstance(consequence, dict)
+            or set(consequence) != {"properties"}
+        ):
+            return None
+        condition_props = condition["properties"]
+        condition_required = condition["required"]
+        consequence_props = consequence["properties"]
+        if (
+            not isinstance(condition_props, dict)
+            or len(condition_props) != 1
+            or not isinstance(condition_required, list)
+            or len(condition_required) != 1
+            or not isinstance(consequence_props, dict)
+            or not consequence_props
+        ):
+            return None
+        discriminator, predicate = next(iter(condition_props.items()))
+        if condition_required != [discriminator] or not isinstance(
+            predicate, dict
+        ):
+            return None
+        if set(predicate) == {"const"}:
+            values = [predicate["const"]]
+        elif (
+            set(predicate) == {"enum"}
+            and isinstance(predicate["enum"], list)
+            and predicate["enum"]
+        ):
+            values = predicate["enum"]
+        else:
+            return None
+        if any(
+            not isinstance(value, (str, int, float, bool)) for value in values
+        ):
+            return None
+        bounds = {}
+        for name, constraint in consequence_props.items():
+            if (
+                not isinstance(name, str)
+                or not isinstance(constraint, dict)
+                or not constraint
+                or set(constraint) - set(_BOUND_KEYWORDS)
+            ):
+                return None
+            if any(
+                not isinstance(limit, (int, float)) or isinstance(limit, bool)
+                for limit in constraint.values()
+            ):
+                return None
+            bounds[name] = dict(constraint)
+        # A request variant strips the fields a platform must not send, so a
+        # rule naming one is inapplicable to that class rather than malformed.
+        if discriminator not in properties or any(
+            name not in properties for name in bounds
+        ):
+            return _RULE_NOT_APPLICABLE
+        return {
+            "discriminator": discriminator,
+            "values": values,
+            "bounds": bounds,
+        }
+
+    def walk(node, current_class_name, path_str, enclosing_properties=None):
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+        properties = node.get("properties")
+        # An if/then pair carried as an allOf branch has no sibling properties:
+        # the object it constrains is the enclosing schema, so its property set
+        # is what the rule must be validated against.
+        scope = (
+            properties if isinstance(properties, dict) else enclosing_properties
+        )
+        then = node.get("then")
+        is_bounds_rule = (
+            isinstance(then, dict)
+            and "properties" in then
+            and "required" not in then
+        )
+        if isinstance(scope, dict) and is_bounds_rule:
+            rule = (
+                None
+                if "else" in node
+                else describe(
+                    {key: node[key] for key in ("if", "then") if key in node},
+                    scope,
+                )
+            )
+            if rule is None:
+                sys.stderr.write(
+                    f"  ! {path_str}: unsupported conditional bounds rule; skipped\n"
+                )
+            elif rule is not _RULE_NOT_APPLICABLE and current_class_name:
+                rules_by_class.setdefault(current_class_name, []).append(rule)
+        if isinstance(properties, dict):
+            for name, prop in properties.items():
+                walk(prop, _to_camel_case(name), path_str)
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), path_str)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name, path_str, scope)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class, str(path))
+    return rules_by_class
+
+
+def inject_conditional_bounds(source, class_name, rules):
+    """Inject conditional numeric-bound checks into one generated class."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    if f"def {_CONDITIONAL_BOUNDS_MARKER}(" in source[match.start() : end]:
+        return source
+    method = _CONDITIONAL_BOUNDS_TEMPLATE.format(
+        marker=_CONDITIONAL_BOUNDS_MARKER,
+        rules=rules,
+        checks=_BOUND_KEYWORDS,
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    out = _ensure_stdlib_import(out, "import operator")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -982,6 +1194,35 @@ def _patch_conditional_required():
     return patched, 0
 
 
+def _patch_conditional_bounds():
+    """Inject conditional numeric-bound validators; return counts and status."""
+    rules_by_class = find_conditional_bounds(SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write("postprocess: no conditional bounds rules found\n")
+        return 0, 0
+    patched = 0
+    for class_name, rules in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_conditional_bounds(source, class_name, rules)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = (
+            ", ".join(str(path) for path in hits) or "NO GENERATED CLASS FOUND"
+        )
+        sys.stdout.write(f"  conditional bounds on '{class_name}' -> {label}\n")
+        if not hits:
+            return patched, 1
+    return patched, 0
+
+
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
     unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
@@ -1121,6 +1362,7 @@ def main():
     patched_pn, rc_pn = _patch_property_names()
     patched_ac, rc_ac = _patch_array_contains()
     patched_cr, rc_cr = _patch_conditional_required()
+    patched_cb, rc_cb = _patch_conditional_bounds()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
     total = (
@@ -1128,11 +1370,12 @@ def main():
         + patched_pn
         + patched_ac
         + patched_cr
+        + patched_cb
         + patched_ui
         + patched_ef
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_cr or rc_ui or rc_ef
+    return rc_mp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef
 
 
 if __name__ == "__main__":

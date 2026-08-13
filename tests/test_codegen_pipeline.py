@@ -1073,6 +1073,119 @@ class ConditionalRequiredInjectorTest(unittest.TestCase):
         response(has_next_page=False)
 
 
+class ConditionalBoundsInjectorTest(unittest.TestCase):
+    """JSON Schema if/then numeric bounds are restored."""
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class Total(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    type: str\n"
+        "    amount: int\n"
+    )
+    RULES = [
+        {
+            "discriminator": "type",
+            "values": ["discount"],
+            "bounds": {"amount": {"exclusiveMaximum": 0}},
+        },
+        {
+            "discriminator": "type",
+            "values": ["tax"],
+            "bounds": {"amount": {"minimum": 0}},
+        },
+    ]
+
+    def _schema(self):
+        return {
+            "title": "Total",
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "amount": {"type": "integer"},
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"type": {"enum": ["discount"]}},
+                        "required": ["type"],
+                    },
+                    "then": {"properties": {"amount": {"exclusiveMaximum": 0}}},
+                },
+                {
+                    "if": {
+                        "properties": {"type": {"enum": ["tax"]}},
+                        "required": ["type"],
+                    },
+                    "then": {"properties": {"amount": {"minimum": 0}}},
+                },
+            ],
+        }
+
+    def test_schema_scan_reads_rules_carried_as_allof_branches(self):
+        """An if/then branch constrains the enclosing object's properties."""
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "total.json").write_text(json.dumps(self._schema()))
+            found = postprocess_models.find_conditional_bounds(Path(tmp))
+        self.assertEqual(found, {"Total": self.RULES})
+
+    def test_schema_scan_skips_rules_whose_fields_were_stripped(self):
+        """A request variant drops the fields, so the rule cannot apply."""
+        schema = self._schema()
+        schema["properties"] = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "total_create_request.json").write_text(
+                json.dumps(schema)
+            )
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                found = postprocess_models.find_conditional_bounds(Path(tmp))
+        self.assertEqual(found, {})
+        self.assertNotIn("unsupported", stderr.getvalue())
+
+    def test_schema_scan_warns_on_unsupported_shape(self):
+        schema = self._schema()
+        schema["allOf"][0]["then"]["properties"]["amount"] = {"pattern": "^x$"}
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "total.json").write_text(json.dumps(schema))
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                found = postprocess_models.find_conditional_bounds(Path(tmp))
+        # The malformed branch is dropped; the well-formed sibling survives.
+        self.assertEqual(found, {"Total": [self.RULES[1]]})
+        self.assertIn("unsupported", stderr.getvalue())
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_conditional_bounds(
+            self.MODULE, "Total", self.RULES
+        )
+        twice = postprocess_models.inject_conditional_bounds(
+            once, "Total", self.RULES
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_conditional_bounds(self):
+        out = postprocess_models.inject_conditional_bounds(
+            self.MODULE, "Total", self.RULES
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        total = namespace["Total"]
+        with self.assertRaises(ValidationError):
+            total(type="discount", amount=500)
+        with self.assertRaises(ValidationError):
+            total(type="tax", amount=-1)
+        total(type="discount", amount=-500)
+        total(type="tax", amount=0)
+        # A type carrying no rule is unconstrained (the vocabulary is open).
+        total(type="total", amount=-5)
+
+
 class InjectorTest(unittest.TestCase):
     """The post-generation injector's own behavior."""
 
