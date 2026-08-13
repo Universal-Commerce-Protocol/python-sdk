@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Six constraint families are handled:
+Seven constraint families are handled:
 
 * ``minProperties`` on an object schema WITH declared properties is dropped by
   the generator (issue #49): every field is optional, so an empty instance
@@ -73,6 +73,12 @@ Six constraint families are handled:
   required discriminator using ``const``/``enum`` and a ``then.required`` list,
   then injects a ``model_validator(mode="after")``. More complex conditions are
   skipped rather than approximated.
+
+* Simple conditional numeric bounds are also dropped: well-known ``Total``
+  categories constrain ``amount`` to negative or non-negative values. The script
+  accepts only one discriminator, one target field, and one numeric bound in each
+  ``if``/``then`` rule, and injects a ``model_validator(mode="after")``. Rules
+  with ``else`` or multiple consequence fields are skipped.
 
 * ``additionalProperties: false`` on an object schema with named properties is
   normally overridden by the generator's ``--extra-fields=allow`` flag. The
@@ -145,6 +151,33 @@ _CONDITIONAL_REQUIRED_TEMPLATE = '''
                     raise ValueError(
                         f"Field {{field!r}} is required by a schema condition"
                     )
+        return self
+'''
+
+_CONDITIONAL_NUMERIC_MARKER = "_enforce_conditional_numeric_bounds"
+
+_CONDITIONAL_NUMERIC_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = {rules!r}
+        operators = {{
+            "minimum": lambda value, bound: value >= bound,
+            "exclusiveMinimum": lambda value, bound: value > bound,
+            "maximum": lambda value, bound: value <= bound,
+            "exclusiveMaximum": lambda value, bound: value < bound,
+        }}
+        for rule in rules:
+            if getattr(self, rule["discriminator"], None) not in rule["values"]:
+                continue
+            value = getattr(self, rule["field"], None)
+            if value is not None and not operators[rule["bound"]](
+                value, rule["value"]
+            ):
+                raise ValueError(
+                    f"Field {{rule['field']!r}} violates conditional "
+                    f"{{rule['bound']}}={{rule['value']}}"
+                )
         return self
 '''
 
@@ -690,6 +723,162 @@ def inject_conditional_required(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def find_conditional_numeric_bounds(schema_dir):
+    """Map generated classes to simple if/then numeric-bound rules."""
+    rules_by_class = {}
+    bound_names = {
+        "minimum",
+        "exclusiveMinimum",
+        "maximum",
+        "exclusiveMaximum",
+    }
+
+    def describe(node, properties):
+        if not isinstance(node, dict) or set(node) != {"if", "then"}:
+            return None
+        condition = node["if"]
+        consequence = node["then"]
+        if (
+            not isinstance(condition, dict)
+            or set(condition) != {"properties", "required"}
+            or not isinstance(consequence, dict)
+            or set(consequence) != {"properties"}
+        ):
+            return None
+        condition_props = condition["properties"]
+        condition_required = condition["required"]
+        consequence_props = consequence["properties"]
+        if (
+            not isinstance(condition_props, dict)
+            or len(condition_props) != 1
+            or not isinstance(condition_required, list)
+            or len(condition_required) != 1
+            or not isinstance(consequence_props, dict)
+            or len(consequence_props) != 1
+        ):
+            return None
+        discriminator, predicate = next(iter(condition_props.items()))
+        field, constraint = next(iter(consequence_props.items()))
+        if condition_required != [discriminator] or not isinstance(
+            predicate, dict
+        ):
+            return None
+        if set(predicate) == {"const"}:
+            values = [predicate["const"]]
+        elif (
+            set(predicate) == {"enum"}
+            and isinstance(predicate["enum"], list)
+            and predicate["enum"]
+        ):
+            values = predicate["enum"]
+        else:
+            return None
+        if (
+            not isinstance(constraint, dict)
+            or len(constraint) != 1
+            or not set(constraint) <= bound_names
+        ):
+            return None
+        bound, value = next(iter(constraint.items()))
+        if (
+            discriminator not in properties
+            or field not in properties
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or any(
+                not isinstance(item, (str, int, float, bool)) for item in values
+            )
+        ):
+            return None
+        return {
+            "discriminator": discriminator,
+            "values": values,
+            "field": field,
+            "bound": bound,
+            "value": value,
+        }
+
+    def walk(node, current_class_name, class_properties, path_str):
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            class_properties = properties
+        if "if" in node or "then" in node:
+            consequence = node.get("then")
+            consequence_props = (
+                consequence.get("properties")
+                if isinstance(consequence, dict)
+                else None
+            )
+            is_numeric_rule = isinstance(consequence_props, dict) and any(
+                isinstance(constraint, dict)
+                and bool(set(constraint) & bound_names)
+                for constraint in consequence_props.values()
+            )
+            if is_numeric_rule:
+                rule = (
+                    None if "else" in node else describe(node, class_properties)
+                )
+                if rule is None:
+                    sys.stderr.write(
+                        f"  ! {path_str}: unsupported conditional numeric "
+                        "rule; skipped\n"
+                    )
+                elif current_class_name is not None:
+                    rules_by_class.setdefault(current_class_name, []).append(
+                        rule
+                    )
+        if isinstance(properties, dict):
+            for name, prop in properties.items():
+                walk(prop, _to_camel_case(name), properties, path_str)
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), {}, path_str)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name, class_properties, path_str)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class, {}, str(path))
+    return rules_by_class
+
+
+def inject_conditional_numeric_bounds(source, class_name, rules):
+    """Inject simple conditional numeric checks into one generated class."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    if f"def {_CONDITIONAL_NUMERIC_MARKER}(" in source[match.start() : end]:
+        return source
+    method = _CONDITIONAL_NUMERIC_TEMPLATE.format(
+        marker=_CONDITIONAL_NUMERIC_MARKER,
+        rules=rules,
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -982,6 +1171,41 @@ def _patch_conditional_required():
     return patched, 0
 
 
+def _patch_conditional_numeric_bounds():
+    """Inject conditional numeric validators; return counts and status."""
+    rules_by_class = find_conditional_numeric_bounds(RAW_SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write(
+            "postprocess: no simple conditional numeric rules found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name, rules in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_conditional_numeric_bounds(
+                source, class_name, rules
+            )
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = (
+            ", ".join(str(path) for path in hits) or "NO GENERATED CLASS FOUND"
+        )
+        sys.stdout.write(
+            f"  conditional numeric bounds on '{class_name}' -> {label}\n"
+        )
+        if not hits:
+            return patched, 1
+    return patched, 0
+
+
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
     unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
@@ -1121,6 +1345,7 @@ def main():
     patched_pn, rc_pn = _patch_property_names()
     patched_ac, rc_ac = _patch_array_contains()
     patched_cr, rc_cr = _patch_conditional_required()
+    patched_cn, rc_cn = _patch_conditional_numeric_bounds()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
     total = (
@@ -1128,11 +1353,12 @@ def main():
         + patched_pn
         + patched_ac
         + patched_cr
+        + patched_cn
         + patched_ui
         + patched_ef
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_cr or rc_ui or rc_ef
+    return rc_mp or rc_pn or rc_ac or rc_cr or rc_cn or rc_ui or rc_ef
 
 
 if __name__ == "__main__":

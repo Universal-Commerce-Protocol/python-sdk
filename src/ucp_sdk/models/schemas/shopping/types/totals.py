@@ -20,7 +20,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, AfterValidator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    AfterValidator,
+    model_validator,
+)
 from typing_extensions import TypeAliasType
 
 from . import signed_amount
@@ -50,6 +56,44 @@ class Total(Total_1):
     """
     Optional itemized breakdown. The parent entry is always rendered; lines are supplementary. Sum of line amounts MUST equal the parent entry amount.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_numeric_bounds(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = [
+            {
+                "discriminator": "type",
+                "values": ["discount", "items_discount"],
+                "field": "amount",
+                "bound": "exclusiveMaximum",
+                "value": 0,
+            },
+            {
+                "discriminator": "type",
+                "values": ["subtotal", "fulfillment", "tax", "fee"],
+                "field": "amount",
+                "bound": "minimum",
+                "value": 0,
+            },
+        ]
+        operators = {
+            "minimum": lambda value, bound: value >= bound,
+            "exclusiveMinimum": lambda value, bound: value > bound,
+            "maximum": lambda value, bound: value <= bound,
+            "exclusiveMaximum": lambda value, bound: value < bound,
+        }
+        for rule in rules:
+            if getattr(self, rule["discriminator"], None) not in rule["values"]:
+                continue
+            value = getattr(self, rule["field"], None)
+            if value is not None and not operators[rule["bound"]](
+                value, rule["value"]
+            ):
+                raise ValueError(
+                    f"Field {rule['field']!r} violates conditional "
+                    f"{rule['bound']}={rule['value']}"
+                )
+        return self
 
 
 def _enforce_contains_totals(value):

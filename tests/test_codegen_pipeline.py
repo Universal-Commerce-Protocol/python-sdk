@@ -31,6 +31,7 @@ try:
     from pydantic import TypeAdapter, ValidationError
 
     from ucp_sdk.models.schemas.shopping.types.description import Description
+    from ucp_sdk.models.schemas.shopping.types.total import Total
     from ucp_sdk.models.schemas.shopping.types.totals import Totals
     from ucp_sdk.models.schemas.shopping.types.totals_create_request import (
         TotalsCreateRequest,
@@ -1071,6 +1072,146 @@ class ConditionalRequiredInjectorTest(unittest.TestCase):
             response(has_next_page=True)
         response(has_next_page=True, cursor="next-page")
         response(has_next_page=False)
+
+
+class ConditionalNumericBoundsInjectorTest(unittest.TestCase):
+    """Simple JSON Schema if/then numeric bounds are restored."""
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class Total(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    type: str\n"
+        "    amount: int\n"
+    )
+    RULES = [
+        {
+            "discriminator": "type",
+            "values": ["discount", "items_discount"],
+            "field": "amount",
+            "bound": "exclusiveMaximum",
+            "value": 0,
+        },
+        {
+            "discriminator": "type",
+            "values": ["subtotal", "tax"],
+            "field": "amount",
+            "bound": "minimum",
+            "value": 0,
+        },
+    ]
+
+    def test_schema_scan_finds_allof_numeric_bounds(self):
+        schema = {
+            "title": "Total",
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "amount": {"type": "integer"},
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "type": {"enum": ["discount", "items_discount"]}
+                        },
+                        "required": ["type"],
+                    },
+                    "then": {"properties": {"amount": {"exclusiveMaximum": 0}}},
+                },
+                {
+                    "if": {
+                        "properties": {"type": {"enum": ["subtotal", "tax"]}},
+                        "required": ["type"],
+                    },
+                    "then": {"properties": {"amount": {"minimum": 0}}},
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "total.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_numeric_bounds(
+                Path(tmp)
+            )
+        self.assertEqual(found, {"Total": self.RULES})
+
+    def test_schema_scan_skips_else_and_multiple_target_fields(self):
+        schema = {
+            "title": "Total",
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "amount": {"type": "integer"},
+                "other": {"type": "integer"},
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"type": {"const": "discount"}},
+                        "required": ["type"],
+                    },
+                    "then": {"properties": {"amount": {"maximum": 0}}},
+                    "else": {"properties": {"amount": {"minimum": 0}}},
+                },
+                {
+                    "if": {
+                        "properties": {"type": {"const": "fee"}},
+                        "required": ["type"],
+                    },
+                    "then": {
+                        "properties": {
+                            "amount": {"minimum": 0},
+                            "other": {"minimum": 0},
+                        }
+                    },
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "total.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_numeric_bounds(
+                Path(tmp)
+            )
+        self.assertEqual(found, {})
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_conditional_numeric_bounds(
+            self.MODULE, "Total", self.RULES
+        )
+        twice = postprocess_models.inject_conditional_numeric_bounds(
+            once, "Total", self.RULES
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_numeric_bounds(self):
+        out = postprocess_models.inject_conditional_numeric_bounds(
+            self.MODULE, "Total", self.RULES
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        total_cls = namespace["Total"]
+        with self.assertRaises(ValidationError):
+            total_cls(type="discount", amount=1)
+        with self.assertRaises(ValidationError):
+            total_cls(type="subtotal", amount=-1)
+        total_cls(type="discount", amount=-1)
+        total_cls(type="subtotal", amount=0)
+        total_cls(type="custom", amount=-1)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the model needs pydantic")
+    def test_generated_total_enforces_schema_bounds(self):
+        with self.assertRaises(ValidationError):
+            Total(type="discount", amount=1)
+        with self.assertRaises(ValidationError):
+            Total(type="subtotal", amount=-1)
+        Total(type="discount", amount=-1)
+        Total(type="subtotal", amount=0)
+        Total(type="custom", amount=-1)
 
 
 class InjectorTest(unittest.TestCase):
