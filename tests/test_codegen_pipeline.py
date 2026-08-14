@@ -460,10 +460,10 @@ class VariantGenerationTest(unittest.TestCase):
 class PipelineDependencyTest(unittest.TestCase):
     """Tests metadata normalization and transitive variant dependencies."""
 
-    def test_normalize_metadata_schemas_sets_root_union_and_ucp_refs(
+    def test_normalize_metadata_schemas_sets_root_anyof_and_ucp_refs(
         self,
     ) -> None:
-        """Metadata schemas expose the root union and normalized references."""
+        """Equivalent response profiles remain valid metadata alternatives."""
         target_dir = Path("/schemas")
         ucp_path = str((target_dir / "ucp.json").resolve())
         checkout_path = str((target_dir / "checkout.json").resolve())
@@ -497,8 +497,9 @@ class PipelineDependencyTest(unittest.TestCase):
 
         preprocess_schemas.normalize_metadata_schemas(schemas, target_dir)
 
+        self.assertNotIn("oneOf", schemas[ucp_path])
         self.assertEqual(
-            schemas[ucp_path]["oneOf"],
+            schemas[ucp_path]["anyOf"],
             [
                 {"$ref": "#/$defs/platform_schema"},
                 {"$ref": "#/$defs/business_schema"},

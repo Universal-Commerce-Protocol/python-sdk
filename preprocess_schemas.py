@@ -573,7 +573,7 @@ def normalize_metadata_schemas(schemas, target_dir):
     ucp_path = str((target_dir / "ucp.json").resolve())
     if ucp_path in schemas:
         ucp = schemas[ucp_path]
-        ucp["oneOf"] = [
+        ucp["anyOf"] = [
             {"$ref": f"#/$defs/{name}"} for name in metadata_union_members(ucp)
         ]
 
