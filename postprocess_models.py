@@ -488,6 +488,7 @@ def find_array_contains_constraints(schema_dir):
         groups = _extract_contains_groups(schema, path)
         if not groups:
             continue
+        item_condition = _extract_item_required_condition(schema)
         title = schema.get("title")
         if not title:
             sys.stderr.write(
@@ -495,8 +496,56 @@ def find_array_contains_constraints(schema_dir):
                 "cannot map to a model\n"
             )
             continue
-        found[path.stem] = {"title": title, "groups": groups}
+        found[path.stem] = {
+            "title": title,
+            "groups": groups,
+            "item_condition": item_condition,
+        }
     return found
+
+
+def _extract_item_required_condition(schema):
+    """Read a simple array-item ``not.enum`` + ``then.required`` rule."""
+    items = schema.get("items")
+    if not isinstance(items, dict):
+        return None
+    nodes = [items]
+    nodes.extend(
+        node for node in items.get("allOf", []) if isinstance(node, dict)
+    )
+    for node in nodes:
+        condition = node.get("if")
+        consequence = node.get("then")
+        if not isinstance(condition, dict) or not isinstance(consequence, dict):
+            continue
+        props = condition.get("properties")
+        required = consequence.get("required")
+        if not isinstance(props, dict) or len(props) != 1:
+            continue
+        field, predicate = next(iter(props.items()))
+        if (
+            not isinstance(predicate, dict)
+            or set(node) != {"if", "then"}
+            or set(condition) != {"properties", "required"}
+            or set(consequence) != {"required"}
+        ):
+            continue
+        excluded = predicate.get("not")
+        values = excluded.get("enum") if isinstance(excluded, dict) else None
+        if (
+            condition.get("required") == [field]
+            and set(predicate) == {"not"}
+            and isinstance(excluded, dict)
+            and set(excluded) == {"enum"}
+            and isinstance(values, list)
+            and values
+            and all(isinstance(value, str) for value in values)
+            and isinstance(required, list)
+            and required
+            and all(isinstance(name, str) for name in required)
+        ):
+            return {"field": field, "excluded": values, "required": required}
+    return None
 
 
 def _alias_name(title):
@@ -530,7 +579,7 @@ def _predicate_expr(pairs):
     return " and ".join(parts)
 
 
-def _build_contains_function(func_name, groups):
+def _build_contains_function(func_name, groups, item_condition=None):
     """Render the module-level ``AfterValidator`` counting function."""
     lines = [
         f"def {func_name}(value):",
@@ -565,11 +614,28 @@ def _build_contains_function(func_name, groups):
                 f'            "matching {desc} (schema maxContains={maximum})"',
                 "        )",
             ]
+    if item_condition:
+        field = item_condition["field"]
+        lines += [
+            f"    _excluded = {item_condition['excluded']!r}",
+            "    for _item in value:",
+            f"        _actual = (_item.get({field!r}) if isinstance(_item, dict) ",
+            f"                   else getattr(_item, {field!r}, None))",
+            "        if _actual in _excluded:",
+            "            continue",
+        ]
+        for required in item_condition["required"]:
+            lines += [
+                f"        if isinstance(_item, dict) and {required!r} not in _item:",
+                f'            raise ValueError("Field {required!r} is required for custom {field}")',
+                f"        if not isinstance(_item, dict) and {required!r} not in _item.model_fields_set:",
+                f'            raise ValueError("Field {required!r} is required for custom {field}")',
+            ]
     lines.append("    return value")
     return "\n".join(lines) + "\n"
 
 
-def inject_array_contains(source, alias_name, groups):
+def inject_array_contains(source, alias_name, groups, item_condition=None):
     """Thread an ``AfterValidator`` into ``alias_name``'s alias metadata.
 
     Array roots are emitted as ``NAME = TypeAliasType("NAME", Annotated[...])``,
@@ -602,7 +668,7 @@ def inject_array_contains(source, alias_name, groups):
     if close is None:
         return source
     out = source[:close] + f", AfterValidator({func_name})" + source[close:]
-    func_src = _build_contains_function(func_name, groups)
+    func_src = _build_contains_function(func_name, groups, item_condition)
     insert_at = assign_re.search(out).start()
     out = out[:insert_at] + func_src + "\n\n" + out[insert_at:]
     return _ensure_pydantic_import(out, "AfterValidator")
@@ -1082,11 +1148,20 @@ def _array_contains_targets():
             None,
         )
         if origin is not None:
-            targets[info["title"]] = raw[origin]["groups"]
+            targets[info["title"]] = {
+                "groups": raw[origin]["groups"],
+                "item_condition": raw[origin]["item_condition"],
+            }
     # Defensive: cover each raw base title even if the preprocessed base lost
     # its contains entirely.
     for info in raw.values():
-        targets.setdefault(info["title"], info["groups"])
+        targets.setdefault(
+            info["title"],
+            {
+                "groups": info["groups"],
+                "item_condition": info["item_condition"],
+            },
+        )
     return targets
 
 
@@ -1133,7 +1208,8 @@ def _patch_array_contains():
         sys.stdout.write("postprocess: no array contains constraints found\n")
         return 0, 0
     patched = 0
-    for title, groups in sorted(targets.items()):
+    for title, constraint in sorted(targets.items()):
+        groups = constraint["groups"]
         alias = _alias_name(title)
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
@@ -1142,7 +1218,9 @@ def _patch_array_contains():
                 rf"^{re.escape(alias)} = TypeAliasType\(", source, re.M
             ):
                 continue
-            updated = inject_array_contains(source, alias, groups)
+            updated = inject_array_contains(
+                source, alias, groups, constraint["item_condition"]
+            )
             if updated != source:
                 path.write_text(updated, encoding="utf-8")
                 patched += 1
