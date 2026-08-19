@@ -218,6 +218,31 @@ class RequestMetadataTest(unittest.TestCase):
             {"create", "update", "complete"},
         )
 
+    def test_get_required_ops_collects_from_nested_defs(self) -> None:
+        """Markers inside $defs contribute their operations even if root has none."""
+        schema = {
+            "title": "Extension",
+            "type": "object",
+            "$defs": {
+                "custom": {
+                    "type": "object",
+                    "properties": {
+                        "secret": {"ucp_request": "omit"},
+                        "action": {
+                            "ucp_request": {
+                                "complete": "optional",
+                            }
+                        },
+                    },
+                }
+            },
+        }
+
+        self.assertEqual(
+            preprocess_schemas.get_required_ops(schema),
+            {"create", "update", "complete"},
+        )
+
     def test_eval_prop_inclusion_applies_operation_overrides(self) -> None:
         """Operation markers override base required and inclusion rules."""
         cases = [
@@ -455,6 +480,94 @@ class VariantGenerationTest(unittest.TestCase):
         self.assertEqual(create_variant["required"], [])
         self.assertEqual(set(update_variant["properties"]), {"id"})
         self.assertEqual(update_variant["required"], ["id"])
+
+    def test_nested_defs_filtered_and_refs_rewritten(self) -> None:
+        """Nested $defs properties are filtered and external refs rewritten."""
+        schema = {
+            "$id": "https://ucp.dev/schemas/food/cart.json",
+            "title": "Cart",
+            "type": "object",
+            "$defs": {
+                "checkout": {
+                    "title": "Checkout with Cart",
+                    "type": "object",
+                    "properties": {
+                        "cart_id": {
+                            "type": "string",
+                            "ucp_request": {
+                                "create": "optional",
+                                "update": "omit",
+                                "complete": "omit",
+                            },
+                        }
+                    },
+                    "allOf": [{"$ref": "checkout.json"}],
+                }
+            },
+            "properties": {
+                "restaurant": {"$ref": "restaurant.json"},
+            },
+        }
+        file_path = Path("/schemas/food/cart.json")
+        checkout_path = str((file_path.parent / "checkout.json").resolve())
+        restaurant_path = str((file_path.parent / "restaurant.json").resolve())
+        variant_needs = {
+            checkout_path: {"create", "update", "complete"},
+            restaurant_path: {"create", "update"},
+        }
+
+        create_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "create",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+        update_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "update",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+        complete_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "complete",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+
+        # Create variant includes cart_id (without ucp_request) and rewrites checkout.json
+        checkout_def_create = create_variant["$defs"]["checkout"]
+        self.assertIn("cart_id", checkout_def_create["properties"])
+        self.assertNotIn(
+            "ucp_request", checkout_def_create["properties"]["cart_id"]
+        )
+        self.assertEqual(
+            checkout_def_create["allOf"][0]["$ref"],
+            "checkout_create_request.json",
+        )
+        self.assertEqual(
+            create_variant["properties"]["restaurant"]["$ref"],
+            "restaurant_create_request.json",
+        )
+
+        # Update variant omits cart_id and rewrites checkout.json
+        checkout_def_update = update_variant["$defs"]["checkout"]
+        self.assertEqual(checkout_def_update["properties"], {})
+        self.assertEqual(
+            checkout_def_update["allOf"][0]["$ref"],
+            "checkout_update_request.json",
+        )
+
+        # Complete variant omits cart_id and rewrites checkout.json
+        checkout_def_complete = complete_variant["$defs"]["checkout"]
+        self.assertEqual(checkout_def_complete["properties"], {})
+        self.assertEqual(
+            checkout_def_complete["allOf"][0]["$ref"],
+            "checkout_complete_request.json",
+        )
 
 
 class PipelineDependencyTest(unittest.TestCase):
@@ -715,6 +828,125 @@ class PipelineDependencyTest(unittest.TestCase):
             self.assertEqual(
                 parent_variant["properties"]["child_item"]["$ref"],
                 "child_create_request.json#/$defs/item",
+            )
+
+    def test_main_preprocesses_nested_capability_extensions_end_to_end(
+        self,
+    ) -> None:
+        """Capability extensions in $defs trigger variants and propagate refs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            preprocess_schemas.save_json(
+                {
+                    "$defs": {
+                        "entity": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        }
+                    }
+                },
+                root / "ucp.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/checkout.json",
+                    "title": "Checkout",
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "ucp_request": {
+                                "create": "omit",
+                                "update": "required",
+                            },
+                        }
+                    },
+                },
+                root / "checkout.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/cart.json",
+                    "title": "Cart",
+                    "type": "object",
+                    "$defs": {
+                        "checkout": {
+                            "title": "Checkout with Cart",
+                            "type": "object",
+                            "properties": {
+                                "cart_id": {
+                                    "type": "string",
+                                    "ucp_request": {
+                                        "create": "optional",
+                                        "update": "omit",
+                                    },
+                                }
+                            },
+                            "allOf": [{"$ref": "checkout.json"}],
+                        }
+                    },
+                    "properties": {
+                        "items": {"type": "array"},
+                    },
+                },
+                root / "cart.json",
+            )
+
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    ["preprocess_schemas.py", str(root)],
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                preprocess_schemas.main()
+
+            self.assertTrue(
+                (root / "checkout_create_request.json").exists(),
+                "checkout_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "checkout_update_request.json").exists(),
+                "checkout_update_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "cart_create_request.json").exists(),
+                "cart_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "cart_update_request.json").exists(),
+                "cart_update_request.json was not generated",
+            )
+
+            cart_create = preprocess_schemas.load_json(
+                root / "cart_create_request.json"
+            )
+            cart_update = preprocess_schemas.load_json(
+                root / "cart_update_request.json"
+            )
+
+            # Check cart_create_request.json
+            self.assertIn(
+                "cart_id", cart_create["$defs"]["checkout"]["properties"]
+            )
+            self.assertNotIn(
+                "ucp_request",
+                cart_create["$defs"]["checkout"]["properties"]["cart_id"],
+            )
+            self.assertEqual(
+                cart_create["$defs"]["checkout"]["allOf"][0]["$ref"],
+                "checkout_create_request.json",
+            )
+
+            # Check cart_update_request.json
+            self.assertEqual(
+                cart_update["$defs"]["checkout"]["properties"], {}
+            )
+            self.assertEqual(
+                cart_update["$defs"]["checkout"]["allOf"][0]["$ref"],
+                "checkout_update_request.json",
             )
 
 
@@ -1849,3 +2081,4 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
