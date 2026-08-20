@@ -145,7 +145,7 @@ The generated code is automatically formatted using `ruff`.
 Run the schema preprocessing test suite with:
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+uv run python -m unittest discover -s tests -p "test_*.py"
 ```
 
 ## Contributing

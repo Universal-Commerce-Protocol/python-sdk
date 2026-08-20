@@ -86,6 +86,37 @@ def resolve_local_ref(ref, root):
     return current
 
 
+def resolve_local_refs(fragment, root, seen=None):
+    """
+    Recursively resolves and inlines local $ref pointers (#/...) within a schema fragment.
+    """
+    if seen is None:
+        seen = set()
+
+    if isinstance(fragment, dict):
+        if "$ref" in fragment:
+            ref = fragment["$ref"]
+            if (
+                isinstance(ref, str)
+                and ref.startswith("#/")
+                and ref not in seen
+            ):
+                target = resolve_local_ref(ref, root)
+                if target is not None:
+                    resolved = copy.deepcopy(target)
+                    resolve_local_refs(resolved, root, seen | {ref})
+                    for k, v in fragment.items():
+                        if k != "$ref":
+                            resolved[k] = v
+                    fragment.clear()
+                    fragment.update(resolved)
+        for v in list(fragment.values()):
+            resolve_local_refs(v, root, seen)
+    elif isinstance(fragment, list):
+        for item in fragment:
+            resolve_local_refs(item, root, seen)
+
+
 # --- Schema Normalization and Flattening ---
 
 
@@ -702,7 +733,10 @@ def main():
     ucp_path = str((target_dir / "ucp.json").resolve())
     entity_def = {}
     if ucp_path in schemas:
-        entity_def = schemas[ucp_path].get("$defs", {}).get("entity", {})
+        entity_def = copy.deepcopy(
+            schemas[ucp_path].get("$defs", {}).get("entity", {})
+        )
+        resolve_local_refs(entity_def, schemas[ucp_path])
     if not entity_def:
         raise ValueError(
             "Entity definition not found! 'ucp.json' must define '$defs.entity'"

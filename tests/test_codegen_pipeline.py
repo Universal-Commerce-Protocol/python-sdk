@@ -63,6 +63,103 @@ class SchemaNormalizationTest(unittest.TestCase):
             preprocess_schemas.resolve_local_ref("other.json", schema)
         )
 
+    def test_resolve_local_refs_inlines_nested_and_transitive_pointers(
+        self,
+    ) -> None:
+        """Local references in fragment are inlined recursively with overrides."""
+        root = {
+            "$defs": {
+                "base_version": {
+                    "type": "string",
+                    "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                    "description": "Default version description",
+                },
+                "version_alias": {
+                    "$ref": "#/$defs/base_version",
+                },
+            }
+        }
+        fragment = {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "$ref": "#/$defs/version_alias",
+                    "description": "Entity version in YYYY-MM-DD format.",
+                }
+            },
+        }
+
+        preprocess_schemas.resolve_local_refs(fragment, root)
+
+        self.assertEqual(
+            fragment["properties"]["version"],
+            {
+                "type": "string",
+                "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                "description": "Entity version in YYYY-MM-DD format.",
+            },
+        )
+
+    def test_main_inlines_entity_local_refs_without_dangling_pointers(
+        self,
+    ) -> None:
+        """Entity local refs like $defs/version are resolved before inlining into child schemas."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            preprocess_schemas.save_json(
+                {
+                    "$defs": {
+                        "version": {
+                            "type": "string",
+                            "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                        },
+                        "entity": {
+                            "type": "object",
+                            "properties": {
+                                "version": {"$ref": "#/$defs/version"},
+                                "id": {"type": "string"},
+                            },
+                            "required": ["version"],
+                        },
+                    }
+                },
+                root / "ucp.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/capability.json",
+                    "title": "Capability",
+                    "$defs": {
+                        "base": {
+                            "allOf": [{"$ref": "ucp.json#/$defs/entity"}],
+                        }
+                    },
+                },
+                root / "capability.json",
+            )
+
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    ["preprocess_schemas.py", str(root)],
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                preprocess_schemas.main()
+
+            capability = preprocess_schemas.load_json(root / "capability.json")
+            base = capability["$defs"]["base"]
+            self.assertNotIn("allOf", base)
+            self.assertEqual(
+                base["properties"]["version"],
+                {
+                    "type": "string",
+                    "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                },
+            )
+            self.assertNotIn("$ref", base["properties"]["version"])
+
     def test_preprocess_flattens_and_distributes_properties(self) -> None:
         """Flattened base fields are distributed to polymorphic branches."""
         schema = {
@@ -2077,6 +2174,37 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
 
         config = MerchantFulfillmentConfig.model_validate({"bogus": "x"})
         self.assertEqual(config.model_extra, {"bogus": "x"})
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class EntityVersionValidationSemanticTest(unittest.TestCase):
+    """Committed entity-derived models enforce version pattern validation."""
+
+    def test_capability_base_accepts_valid_version(self) -> None:
+        from ucp_sdk.models.schemas.capability import Base
+
+        model = Base.model_validate({"version": "2026-04-08", "id": "test"})
+        self.assertEqual(model.version, "2026-04-08")
+
+    def test_capability_base_rejects_invalid_version(self) -> None:
+        from ucp_sdk.models.schemas.capability import Base
+
+        with self.assertRaises(ValidationError):
+            Base.model_validate({"version": "not-a-version", "id": "test"})
+
+    def test_service_base_rejects_invalid_version(self) -> None:
+        from ucp_sdk.models.schemas.service import Base
+
+        with self.assertRaises(ValidationError):
+            Base.model_validate({"version": "invalid-format"})
+
+    def test_payment_handler_base_rejects_invalid_version(self) -> None:
+        from ucp_sdk.models.schemas.payment_handler import Base
+
+        with self.assertRaises(ValidationError):
+            Base.model_validate({"version": {"not": "a version"}})
 
 
 if __name__ == "__main__":

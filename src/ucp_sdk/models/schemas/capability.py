@@ -58,56 +58,11 @@ Parent capability(s) this extends. Present for extensions, absent for root capab
 """
 
 
-Extends2 = TypeAliasType("Extends2", Extends)
-
-
-Extends3Item = TypeAliasType("Extends3Item", Extends1Item)
-
-
-Extends3 = TypeAliasType(
-    "Extends3", Annotated[list[Extends3Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
-
-
-Extends4 = TypeAliasType("Extends4", Extends)
-
-
-Extends5Item = TypeAliasType("Extends5Item", Extends1Item)
-
-
-Extends5 = TypeAliasType(
-    "Extends5", Annotated[list[Extends5Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
-
-
-Extends6 = TypeAliasType("Extends6", Extends)
-
-
-Extends7Item = TypeAliasType("Extends7Item", Extends1Item)
-
-
-Extends7 = TypeAliasType(
-    "Extends7", Annotated[list[Extends7Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
-
-
-Version = TypeAliasType("Version", Any)
-
-
 class Base(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -133,6 +88,20 @@ class Base(BaseModel):
     """
 
 
+Extends2 = TypeAliasType("Extends2", Extends)
+
+
+Extends3Item = TypeAliasType("Extends3Item", Extends1Item)
+
+
+Extends3 = TypeAliasType(
+    "Extends3", Annotated[list[Extends3Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
+
+
 class PlatformSchema(BaseModel):
     """
     Full capability declaration for platform-level discovery. Includes spec/schema URLs for agent fetching.
@@ -141,7 +110,7 @@ class PlatformSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -167,6 +136,20 @@ class PlatformSchema(BaseModel):
     """
 
 
+Extends4 = TypeAliasType("Extends4", Extends)
+
+
+Extends5Item = TypeAliasType("Extends5Item", Extends1Item)
+
+
+Extends5 = TypeAliasType(
+    "Extends5", Annotated[list[Extends5Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
+
+
 class BusinessSchema(BaseModel):
     """
     Capability configuration for business/merchant level. May include business-specific config overrides.
@@ -175,7 +158,7 @@ class BusinessSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -201,6 +184,20 @@ class BusinessSchema(BaseModel):
     """
 
 
+Extends6 = TypeAliasType("Extends6", Extends)
+
+
+Extends7Item = TypeAliasType("Extends7Item", Extends1Item)
+
+
+Extends7 = TypeAliasType(
+    "Extends7", Annotated[list[Extends7Item], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
+
+
 class ResponseSchema(BaseModel):
     """
     Capability reference in responses. Only name/version required to confirm active capabilities.
@@ -209,7 +206,7 @@ class ResponseSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
