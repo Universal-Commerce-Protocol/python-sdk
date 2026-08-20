@@ -408,21 +408,26 @@ def flatten_dotted_defs(schema):
 
 def get_required_ops(schema):
     """
-    Scans a schema for the custom 'ucp_request' metadata.
+    Scans a schema's properties and $defs for custom 'ucp_request' metadata.
     Returns a set of operation keys (e.g. {'create', 'update'}) that need distinct models.
     """
     ops = set()
-    properties = schema.get("properties", {})
-    if not isinstance(properties, dict):
-        return ops
+    containers = []
+    if isinstance(schema.get("properties"), dict):
+        containers.append(schema["properties"])
+    if isinstance(schema.get("$defs"), dict):
+        containers.append(schema["$defs"])
 
-    for data in properties.values():
-        if isinstance(data, dict):
-            marker = data.get("ucp_request")
-            if isinstance(marker, str):
-                ops.update(["create", "update"])  # Standard shortcut
-            elif isinstance(marker, dict):
-                ops.update(marker.keys())
+    for container in containers:
+        for node in iter_nodes(container):
+            if not isinstance(node, dict):
+                continue
+            marker = node.get("ucp_request")
+            if marker is not None:
+                if isinstance(marker, str):
+                    ops.update(["create", "update"])  # Standard shortcut
+                elif isinstance(marker, dict):
+                    ops.update(marker.keys())
     return ops
 
 
@@ -558,6 +563,20 @@ def _create_single_variant(
             variant, op, file_path, global_variant_requirements
         )
 
+    # Apply request rules to top-level definitions in $defs
+    defs = variant.get("$defs", {})
+    if isinstance(defs, dict):
+        for node in defs.values():
+            if isinstance(node, dict) and (
+                "properties" in node or node.get("type") == "object"
+            ):
+                _apply_request_rules_to_object(
+                    node, op, file_path, global_variant_requirements
+                )
+
+    # Rewrite all external references across the entire variant tree
+    rewrite_refs_to_variants(variant, op, file_path, global_variant_requirements)
+
     return variant
 
 
@@ -626,20 +645,23 @@ def normalize_metadata_schemas(schemas, target_dir):
 
 
 def extract_external_refs(schema, path):
-    """Finds all relative external file references in the schema properties."""
+    """Finds all relative external file references in properties and $defs."""
     refs = []
-    props = schema.get("properties", {})
-    if not isinstance(props, dict):
-        return refs
+    containers = []
+    if isinstance(schema.get("properties"), dict):
+        containers.append(schema["properties"])
+    if isinstance(schema.get("$defs"), dict):
+        containers.append(schema["$defs"])
 
-    for name, data in props.items():
-        for node in iter_nodes(data):
-            if isinstance(node, dict) and "$ref" in node:
-                ref = node["$ref"]
-                ref_file, _, _ = ref.partition("#")
-                if ref_file:
-                    abs_path = str((path.parent / ref_file).resolve())
-                    refs.append((name, abs_path))
+    for container in containers:
+        for name, data in container.items():
+            for node in iter_nodes(data):
+                if isinstance(node, dict) and "$ref" in node:
+                    ref = node["$ref"]
+                    ref_file, _, _ = ref.partition("#")
+                    if ref_file:
+                        abs_path = str((path.parent / ref_file).resolve())
+                        refs.append((name, abs_path))
     return refs
 
 
@@ -660,9 +682,10 @@ def propagate_needs_transitive(variant_needs, schema_refs, schemas):
                     if child_path not in schemas:
                         continue
 
-                    # Only propagate if the property isn't 'omit'ted for this op
+                    # Check properties first, then $defs for any operation override
                     data = (
-                        schemas[path].get("properties", {}).get(prop_name, {})
+                        schemas[path].get("properties", {}).get(prop_name)
+                        or schemas[path].get("$defs", {}).get(prop_name, {})
                     )
                     include, _ = eval_prop_inclusion(
                         prop_name, data, op, schemas[path].get("required", [])
@@ -760,3 +783,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
