@@ -14,6 +14,7 @@
 
 """Tests for the schema preprocessing pipeline."""
 
+import ast
 import contextlib
 import copy
 import io
@@ -40,7 +41,14 @@ try:
     )
 
     HAVE_SDK = True
-except ImportError:  # pragma: no cover
+except (ImportError, SyntaxError):  # pragma: no cover
+    # A generated model with invalid Python (e.g. a postprocessing splice
+    # that lands beside a stray trailing comma - see
+    # ArrayContainsInjectorTest.test_injects_cleanly_when_annotated_is_line_wrapped)
+    # raises SyntaxError on import, not ImportError. Without catching it
+    # here too, one broken generated file takes the whole test module down
+    # at collection time and every other test in this file - most of which
+    # have nothing to do with the SDK build - never runs.
     HAVE_SDK = False
 
 
@@ -1504,6 +1512,31 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         ")\n"
     )
 
+    #: The same alias, but formatted the way ruff/black renders it once the
+    #: item type name is long enough to force line-wrapping (e.g. once a
+    #: request-variant $ref like ``total_create_request.TotalCreateRequest``
+    #: replaces the short ``Total`` reference). The trailing comma after
+    #: ``Field(...)`` before the closing ``]`` is the shape that matters here.
+    MODULE_LINE_WRAPPED = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from typing import Annotated\n"
+        "\n"
+        "from pydantic import Field\n"
+        "from typing_extensions import TypeAliasType\n"
+        "\n"
+        "from . import total_create_request\n"
+        "\n"
+        "\n"
+        "TotalsCreateRequest = TypeAliasType(\n"
+        '    "TotalsCreateRequest",\n'
+        "    Annotated[\n"
+        "        list[total_create_request.TotalCreateRequest],\n"
+        '        Field(..., title="Totals Create Request"),\n'
+        "    ],\n"
+        ")\n"
+    )
+
     #: subtotal AND total, mirroring the real totals.json.
     GROUPS = [
         {"pairs": [("type", "subtotal")], "min": 1, "max": 1},
@@ -1624,6 +1657,27 @@ class ArrayContainsInjectorTest(unittest.TestCase):
             once, "Totals", self.GROUPS
         )
         self.assertEqual(once, twice)
+
+    def test_injects_cleanly_when_annotated_is_line_wrapped(self):
+        """A line-wrapped Annotated[...] with a trailing comma before the
+        closing bracket must still parse (see #34/#35: a longer item-type
+        reference, such as a request-variant $ref, pushes the formatter to
+        wrap the annotation onto multiple lines with a trailing comma; a
+        naive "insert before the closing bracket" splice then lands after
+        that comma and produces "Field(...),\\n, AfterValidator(...)]" -
+        two commas with nothing between them, a SyntaxError)."""
+        out = postprocess_models.inject_array_contains(
+            self.MODULE_LINE_WRAPPED, "TotalsCreateRequest", self.GROUPS
+        )
+
+        # The regression: this must be syntactically valid Python.
+        ast.parse(out)
+
+        self.assertIn(
+            "AfterValidator(_enforce_contains_totals_create_request)", out
+        )
+        # No orphaned comma left behind by the splice.
+        self.assertNotRegex(out, r",\s*,")
 
     @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
     def test_injected_validator_enforces_both_bounds(self):
