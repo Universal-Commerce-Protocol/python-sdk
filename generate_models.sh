@@ -56,7 +56,7 @@ rm -rf "$RAW_SCHEMA_DIR"
 cp -R "$SCHEMA_DIR" "$RAW_SCHEMA_DIR"
 
 echo "Preprocessing schemas..."
-uv run python preprocess_schemas.py
+uv run --no-sync python preprocess_schemas.py
 
 echo "Generating Pydantic models from preprocessed schemas..."
 
@@ -77,9 +77,8 @@ mkdir -p "$OUTPUT_DIR"
 # We use --field-constraints to include validation constraints (regex, min/max, etc.)
 # We use --reuse-model to collapse structurally identical generated types.
 # Note: Formatting is done as a post-processing step.
-uv run \
-    --link-mode=copy \
-    --extra-index-url https://pypi.org/simple python \
+uv run --no-sync \
+    --link-mode=copy python \
     -m datamodel_code_generator \
     --input "$SCHEMA_DIR" \
     --input-file-type jsonschema \
@@ -99,11 +98,11 @@ uv run \
 
 
 echo "Post-processing generated models (constraints the generator ignores)..."
-uv run python postprocess_models.py || exit 1
+uv run --no-sync python postprocess_models.py || exit 1
 
 echo "Formatting generated models..."
-uv run ruff format
-uv run ruff check --fix "$OUTPUT_DIR"
+uv run --no-sync ruff format
+uv run --no-sync ruff check --fix "$OUTPUT_DIR"
 
 
 echo "Done. Models generated in $OUTPUT_DIR"

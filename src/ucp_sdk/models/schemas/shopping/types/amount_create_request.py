@@ -18,20 +18,15 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from typing import Annotated
 
-from .postal_address_update_request import PostalAddressUpdateRequest
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
-    """
-    Shipping destination.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str | None = None
-    """
-    ID specific to this shipping destination.
-    """
+AmountCreateRequest = TypeAliasType(
+    "AmountCreateRequest",
+    Annotated[int, Field(..., ge=0, title="Amount Create Request")],
+)
+"""
+Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to the currency's exponent to determine minor-to-major ratio (e.g., 2 for USD, 0 for JPY, 3 for KWD).
+"""

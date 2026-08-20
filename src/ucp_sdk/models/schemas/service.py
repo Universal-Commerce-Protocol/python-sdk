@@ -124,7 +124,7 @@ class PlatformSchema(BaseModel):
     """
 
 
-class PlatformSchema7(BaseModel):
+class PlatformSchema10(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -162,7 +162,7 @@ class PlatformSchema7(BaseModel):
     """
 
 
-class PlatformSchema8(BaseModel):
+class PlatformSchema11(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -200,7 +200,7 @@ class PlatformSchema8(BaseModel):
     """
 
 
-class PlatformSchema9(BaseModel):
+class PlatformSchema12(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -238,10 +238,10 @@ class PlatformSchema9(BaseModel):
     """
 
 
-PlatformSchema5 = TypeAliasType(
-    "PlatformSchema5",
+PlatformSchema8 = TypeAliasType(
+    "PlatformSchema8",
     Annotated[
-        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9,
+        PlatformSchema | PlatformSchema10 | PlatformSchema11 | PlatformSchema12,
         Field(..., title="Service (Platform Schema)"),
     ],
 )
@@ -288,7 +288,7 @@ class BusinessSchema(BaseModel):
     """
 
 
-class BusinessSchema4(BaseModel):
+class BusinessSchema7(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -326,7 +326,7 @@ class BusinessSchema4(BaseModel):
     """
 
 
-class BusinessSchema5(BaseModel):
+class BusinessSchema8(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -364,7 +364,7 @@ class BusinessSchema5(BaseModel):
     """
 
 
-class BusinessSchema6(BaseModel):
+class BusinessSchema9(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -402,10 +402,10 @@ class BusinessSchema6(BaseModel):
     """
 
 
-BusinessSchema2 = TypeAliasType(
-    "BusinessSchema2",
+BusinessSchema5 = TypeAliasType(
+    "BusinessSchema5",
     Annotated[
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6,
+        BusinessSchema | BusinessSchema7 | BusinessSchema8 | BusinessSchema9,
         Field(..., title="Service (Business Schema)"),
     ],
 )
@@ -452,7 +452,7 @@ class ResponseSchema(BaseModel):
     """
 
 
-class ResponseSchema4(BaseModel):
+class ResponseSchema7(BaseModel):
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
@@ -490,7 +490,7 @@ class ResponseSchema4(BaseModel):
     """
 
 
-class ResponseSchema5(BaseModel):
+class ResponseSchema8(BaseModel):
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
@@ -528,7 +528,7 @@ class ResponseSchema5(BaseModel):
     """
 
 
-class ResponseSchema6(BaseModel):
+class ResponseSchema9(BaseModel):
     """
     Service binding in API responses. Includes per-resource transport configuration via typed config.
     """
@@ -566,10 +566,10 @@ class ResponseSchema6(BaseModel):
     """
 
 
-ResponseSchema2 = TypeAliasType(
-    "ResponseSchema2",
+ResponseSchema5 = TypeAliasType(
+    "ResponseSchema5",
     Annotated[
-        ResponseSchema | ResponseSchema4 | ResponseSchema5 | ResponseSchema6,
+        ResponseSchema | ResponseSchema7 | ResponseSchema8 | ResponseSchema9,
         Field(..., title="Service (Response Schema)"),
     ],
 )

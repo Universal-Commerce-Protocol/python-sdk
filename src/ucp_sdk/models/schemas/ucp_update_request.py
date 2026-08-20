@@ -23,8 +23,8 @@ from typing import Annotated, Any, Literal
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
-from . import capability, payment_handler, service
-from .shopping.types import reverse_domain_name
+from . import capability_update_request, payment_handler, service
+from .shopping.types import reverse_domain_name_update_request
 
 Version = TypeAliasType(
     "Version", Annotated[str, Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")]
@@ -65,7 +65,11 @@ class Requires(BaseModel):
     Required protocol version.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, VersionConstraint] | None
+        dict[
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            VersionConstraint,
+        ]
+        | None
     ) = None
     """
     Required capability versions, keyed by capability name. Keys must be a subset of the extension's $defs keys.
@@ -116,20 +120,30 @@ class Base(BaseModel):
     Application-level status of the UCP operation.
     """
     services: (
-        dict[reverse_domain_name.ReverseDomainName, list[service.Base]] | None
+        dict[
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[service.Base],
+        ]
+        | None
     ) = None
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
-        dict[reverse_domain_name.ReverseDomainName, list[capability.Base]]
+        dict[
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.Base],
+        ]
         | None
     ) = None
     """
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: (
-        dict[reverse_domain_name.ReverseDomainName, list[payment_handler.Base]]
+        dict[
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[payment_handler.Base],
+        ]
         | None
     ) = None
     """
@@ -174,15 +188,16 @@ class PlatformSchema(Base):
         extra="allow",
     )
     services: dict[
-        reverse_domain_name.ReverseDomainName, list[service.PlatformSchema5]
+        reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+        list[service.PlatformSchema8],
     ]
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.PlatformSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.PlatformSchema],
         ]
         | None
     ) = None
@@ -190,7 +205,7 @@ class PlatformSchema(Base):
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName,
+        reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
         list[payment_handler.PlatformSchema],
     ]
     """
@@ -211,15 +226,16 @@ class BusinessSchema(Base):
     Previous protocol versions this business supports, mapped to profile URIs. Businesses that support older protocol versions SHOULD advertise each version and link to its profile. Each URI points to a complete, self-contained profile for that version. When omitted, only `version` is supported.
     """
     services: dict[
-        reverse_domain_name.ReverseDomainName, list[service.BusinessSchema2]
+        reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+        list[service.BusinessSchema5],
     ]
     """
     Service registry keyed by reverse-domain name.
     """
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.BusinessSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.BusinessSchema],
         ]
         | None
     ) = None
@@ -227,7 +243,7 @@ class BusinessSchema(Base):
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName,
+        reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
         list[payment_handler.BusinessSchema],
     ]
     """
@@ -245,7 +261,8 @@ class ResponseCheckoutSchema(Base):
     )
     services: (
         dict[
-            reverse_domain_name.ReverseDomainName, list[service.ResponseSchema2]
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[service.ResponseSchema5],
         ]
         | None
     ) = None
@@ -254,8 +271,8 @@ class ResponseCheckoutSchema(Base):
     """
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.ResponseSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.ResponseSchema],
         ]
         | None
     ) = None
@@ -263,7 +280,7 @@ class ResponseCheckoutSchema(Base):
     Capability registry keyed by reverse-domain name.
     """
     payment_handlers: dict[
-        reverse_domain_name.ReverseDomainName,
+        reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
         list[payment_handler.ResponseSchema],
     ]
     """
@@ -281,8 +298,8 @@ class ResponseOrderSchema(Base):
     )
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.ResponseSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.ResponseSchema],
         ]
         | None
     ) = None
@@ -301,8 +318,8 @@ class ResponseCartSchema(Base):
     )
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.ResponseSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.ResponseSchema],
         ]
         | None
     ) = None
@@ -321,8 +338,8 @@ class ResponseCatalogSchema(Base):
     )
     capabilities: (
         dict[
-            reverse_domain_name.ReverseDomainName,
-            list[capability.ResponseSchema],
+            reverse_domain_name_update_request.ReverseDomainNameUpdateRequest,
+            list[capability_update_request.ResponseSchema],
         ]
         | None
     ) = None

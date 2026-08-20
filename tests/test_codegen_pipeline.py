@@ -941,9 +941,7 @@ class PipelineDependencyTest(unittest.TestCase):
             )
 
             # Check cart_update_request.json
-            self.assertEqual(
-                cart_update["$defs"]["checkout"]["properties"], {}
-            )
+            self.assertEqual(cart_update["$defs"]["checkout"]["properties"], {})
             self.assertEqual(
                 cart_update["$defs"]["checkout"]["allOf"][0]["$ref"],
                 "checkout_update_request.json",
@@ -2079,6 +2077,185 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
         self.assertEqual(config.model_extra, {"bogus": "x"})
 
 
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class CapabilityExtensionSemanticTest(unittest.TestCase):
+    """Test capability extension models generated across shopping operations."""
+
+    def test_cart_checkout_create_request_with_cart_id(self) -> None:
+        """CheckoutCreateRequest with cart capability accepts cart_id."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        req = CartCheckoutCreateRequest(cart_id="cart_12345")
+        self.assertEqual(req.cart_id, "cart_12345")
+        self.assertIsNone(req.line_items)
+
+    def test_cart_checkout_create_request_with_line_items(self) -> None:
+        """CheckoutCreateRequest with cart capability accepts line_items."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        req = CartCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Test Product",
+                        "price": 1000,
+                    },
+                    "quantity": 1,
+                }
+            ]
+        )
+        self.assertIsNotNone(req.line_items)
+        self.assertIsNone(req.cart_id)
+
+    def test_cart_checkout_create_request_requires_cart_id_or_line_items(
+        self,
+    ) -> None:
+        """CheckoutCreateRequest with cart capability requires cart_id or line_items."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            CartCheckoutCreateRequest()
+        self.assertIn(
+            "Either cart_id or line_items must be provided", str(ctx.exception)
+        )
+
+    def test_fulfillment_checkout_create_and_update(self) -> None:
+        """Fulfillment extension models include fulfillment in create and update."""
+        from ucp_sdk.models.schemas.shopping.fulfillment_create_request import (
+            Checkout as FulfillmentCheckoutCreateRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.fulfillment_update_request import (
+            Checkout as FulfillmentCheckoutUpdateRequest,
+        )
+
+        create_req = FulfillmentCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            fulfillment={
+                "methods": [
+                    {
+                        "id": "method_1",
+                        "type": "shipping",
+                        "line_item_ids": ["prod_1"],
+                    }
+                ]
+            },
+        )
+        self.assertIsNotNone(create_req.fulfillment)
+
+        update_req = FulfillmentCheckoutUpdateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            fulfillment={
+                "methods": [
+                    {
+                        "id": "method_1",
+                        "type": "shipping",
+                        "line_item_ids": ["prod_1"],
+                        "selected_option_id": "opt_ground",
+                    }
+                ]
+            },
+        )
+        self.assertIsNotNone(update_req.fulfillment)
+
+    def test_discount_checkout_and_cart_create_and_update(self) -> None:
+        """Discount extension models include discounts in create and update."""
+        from ucp_sdk.models.schemas.shopping.discount_create_request import (
+            Cart as DiscountCartCreateRequest,
+            Checkout as DiscountCheckoutCreateRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.discount_update_request import (
+            Cart as DiscountCartUpdateRequest,
+            Checkout as DiscountCheckoutUpdateRequest,
+        )
+
+        checkout_create = DiscountCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["SAVE10"]},
+        )
+        self.assertEqual(checkout_create.discounts.codes, ["SAVE10"])
+
+        cart_create = DiscountCartCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["CART10"]},
+        )
+        self.assertEqual(cart_create.discounts.codes, ["CART10"])
+
+        checkout_update = DiscountCheckoutUpdateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["SAVE20"]},
+        )
+        self.assertEqual(checkout_update.discounts.codes, ["SAVE20"])
+
+        cart_update = DiscountCartUpdateRequest(
+            id="cart_123",
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["CART20"]},
+        )
+        self.assertEqual(cart_update.discounts.codes, ["CART20"])
+
+
 if __name__ == "__main__":
     unittest.main()
-

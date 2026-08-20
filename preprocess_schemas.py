@@ -544,7 +544,9 @@ def _create_single_variant(
                 )
 
     # Rewrite all external references across the entire variant tree
-    rewrite_refs_to_variants(variant, op, file_path, global_variant_requirements)
+    rewrite_refs_to_variants(
+        variant, op, file_path, global_variant_requirements
+    )
 
     return variant
 
@@ -652,10 +654,9 @@ def propagate_needs_transitive(variant_needs, schema_refs, schemas):
                         continue
 
                     # Check properties first, then $defs for any operation override
-                    data = (
-                        schemas[path].get("properties", {}).get(prop_name)
-                        or schemas[path].get("$defs", {}).get(prop_name, {})
-                    )
+                    data = schemas[path].get("properties", {}).get(
+                        prop_name
+                    ) or schemas[path].get("$defs", {}).get(prop_name, {})
                     include, _ = eval_prop_inclusion(
                         prop_name, data, op, schemas[path].get("required", [])
                     )
@@ -749,4 +750,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

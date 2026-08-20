@@ -18,20 +18,22 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from typing import Annotated
 
-from .postal_address_update_request import PostalAddressUpdateRequest
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
-
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
-    """
-    Shipping destination.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str | None = None
-    """
-    ID specific to this shipping destination.
-    """
+ReverseDomainNameCompleteRequest = TypeAliasType(
+    "ReverseDomainNameCompleteRequest",
+    Annotated[
+        str,
+        Field(
+            ...,
+            pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$",
+            title="Reverse Domain Name Complete Request",
+        ),
+    ],
+)
+"""
+Reverse-domain identifier used for collision-safe namespacing of capabilities, services, handlers, eligibility claims, and extension-contributed keys. Must contain at least two dot-separated segments (e.g., 'dev.ucp.shopping.checkout', 'com.example.loyalty_gold').
+"""

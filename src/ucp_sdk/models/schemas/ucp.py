@@ -174,7 +174,7 @@ class PlatformSchema(Base):
         extra="allow",
     )
     services: dict[
-        reverse_domain_name.ReverseDomainName, list[service.PlatformSchema5]
+        reverse_domain_name.ReverseDomainName, list[service.PlatformSchema8]
     ]
     """
     Service registry keyed by reverse-domain name.
@@ -211,7 +211,7 @@ class BusinessSchema(Base):
     Previous protocol versions this business supports, mapped to profile URIs. Businesses that support older protocol versions SHOULD advertise each version and link to its profile. Each URI points to a complete, self-contained profile for that version. When omitted, only `version` is supported.
     """
     services: dict[
-        reverse_domain_name.ReverseDomainName, list[service.BusinessSchema2]
+        reverse_domain_name.ReverseDomainName, list[service.BusinessSchema5]
     ]
     """
     Service registry keyed by reverse-domain name.
@@ -245,7 +245,7 @@ class ResponseCheckoutSchema(Base):
     )
     services: (
         dict[
-            reverse_domain_name.ReverseDomainName, list[service.ResponseSchema2]
+            reverse_domain_name.ReverseDomainName, list[service.ResponseSchema5]
         ]
         | None
     ) = None
