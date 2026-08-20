@@ -20,17 +20,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from .checkout_update_request import CheckoutUpdateRequest
-from .types import (
-    attribution_update_request,
-    buyer_update_request,
-    context_update_request,
-    line_item_update_request,
-    signals_update_request,
-)
+from .checkout_complete_request import CheckoutCompleteRequest
 
 
-class CartUpdateRequest(BaseModel):
+class CartCompleteRequest(BaseModel):
     """
     Shopping cart with estimated pricing before checkout. Lightweight pre-purchase exploration with no payment info or complex status states.
     """
@@ -38,29 +31,9 @@ class CartUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
-    """
-    Unique cart identifier.
-    """
-    line_items: list[line_item_update_request.LineItemUpdateRequest]
-    """
-    Cart line items. Same structure as checkout. Full replacement on update.
-    """
-    context: context_update_request.ContextUpdateRequest | None = None
-    """
-    Buyer signals for localization (country, region, postal_code). Merchant uses for pricing, availability, currency. Falls back to geo-IP if omitted.
-    """
-    signals: signals_update_request.SignalsUpdateRequest | None = None
-    attribution: attribution_update_request.AttributionUpdateRequest | None = (
-        None
-    )
-    buyer: buyer_update_request.BuyerUpdateRequest | None = None
-    """
-    Optional buyer information for personalized estimates.
-    """
 
 
-class Checkout(CheckoutUpdateRequest):
+class Checkout(CheckoutCompleteRequest):
     """
     Checkout extended with cart capability. Adds cart_id to create_checkout for cart-to-checkout conversion.
     """

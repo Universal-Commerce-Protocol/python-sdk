@@ -18,20 +18,14 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
-
-from .postal_address_update_request import PostalAddressUpdateRequest
+from pydantic import BaseModel, ConfigDict
 
 
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
+class FulfillmentOptionCompleteRequest(BaseModel):
     """
-    Shipping destination.
+    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str | None = None
-    """
-    ID specific to this shipping destination.
-    """

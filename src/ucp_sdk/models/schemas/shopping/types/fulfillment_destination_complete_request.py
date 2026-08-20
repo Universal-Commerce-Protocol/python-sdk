@@ -18,20 +18,21 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from typing import Annotated
 
-from .postal_address_update_request import PostalAddressUpdateRequest
+from pydantic import Field
+from typing_extensions import TypeAliasType
 
+from . import retail_location, shipping_destination
 
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
-    """
-    Shipping destination.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str | None = None
-    """
-    ID specific to this shipping destination.
-    """
+FulfillmentDestinationCompleteRequest = TypeAliasType(
+    "FulfillmentDestinationCompleteRequest",
+    Annotated[
+        shipping_destination.ShippingDestination
+        | retail_location.RetailLocation,
+        Field(..., title="Fulfillment Destination Complete Request"),
+    ],
+)
+"""
+A destination for fulfillment.
+"""

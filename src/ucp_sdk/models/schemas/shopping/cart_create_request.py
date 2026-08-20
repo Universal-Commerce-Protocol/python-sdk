@@ -18,9 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from .checkout import Checkout as Checkout_1
+from .checkout_create_request import CheckoutCreateRequest
 from .types import (
     attribution_create_request,
     buyer_create_request,
@@ -56,7 +56,7 @@ class CartCreateRequest(BaseModel):
     """
 
 
-class Checkout(Checkout_1):
+class Checkout(CheckoutCreateRequest):
     """
     Checkout extended with cart capability. Adds cart_id to create_checkout for cart-to-checkout conversion.
     """
@@ -64,6 +64,19 @@ class Checkout(Checkout_1):
     model_config = ConfigDict(
         extra="allow",
     )
+    line_items: list[line_item_create_request.LineItemCreateRequest] | None = (
+        None
+    )
+
+    @model_validator(mode="after")
+    def _enforce_cart_conversion(self):
+        """Require either cart_id or line_items for checkout creation."""
+        if not getattr(self, "cart_id", None) and not getattr(
+            self, "line_items", None
+        ):
+            raise ValueError("Either cart_id or line_items must be provided")
+        return self
+
     cart_id: str | None = None
     """
     Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.

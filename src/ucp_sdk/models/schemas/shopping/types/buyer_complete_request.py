@@ -18,20 +18,26 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
-
-from .postal_address_update_request import PostalAddressUpdateRequest
+from pydantic import BaseModel, ConfigDict
 
 
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
-    """
-    Shipping destination.
-    """
-
+class BuyerCompleteRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str | None = None
+    first_name: str | None = None
     """
-    ID specific to this shipping destination.
+    First name of the buyer.
+    """
+    last_name: str | None = None
+    """
+    Last name of the buyer.
+    """
+    email: str | None = None
+    """
+    Email of the buyer.
+    """
+    phone_number: str | None = None
+    """
+    E.164 standard.
     """

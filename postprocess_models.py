@@ -667,7 +667,10 @@ def inject_array_contains(source, alias_name, groups, item_condition=None):
                 break
     if close is None:
         return source
-    out = source[:close] + f", AfterValidator({func_name})" + source[close:]
+    before = source[:close].rstrip()
+    if before.endswith(","):
+        before = before[:-1].rstrip()
+    out = before + f", AfterValidator({func_name})" + source[close:]
     func_src = _build_contains_function(func_name, groups, item_condition)
     insert_at = assign_re.search(out).start()
     out = out[:insert_at] + func_src + "\n\n" + out[insert_at:]
@@ -1434,6 +1437,48 @@ def _patch_extra_forbid():
     return patched, 0
 
 
+def _patch_cart_checkout_create_request():
+    """Ensure Checkout in cart_create_request allows cart_id or line_items."""
+    path = OUTPUT_DIR / "shopping" / "cart_create_request.py"
+    if not path.exists():
+        return 0, 0
+    source = path.read_text(encoding="utf-8")
+    if "_enforce_cart_conversion" in source:
+        return 0, 0
+
+    class_match = re.search(
+        r"^class Checkout\(CheckoutCreateRequest\):", source, re.M
+    )
+    if not class_match:
+        return 0, 0
+
+    validator_code = '''    line_items: list[line_item_create_request.LineItemCreateRequest] | None = None
+
+    @model_validator(mode="after")
+    def _enforce_cart_conversion(self):
+        """Require either cart_id or line_items for checkout creation."""
+        if not getattr(self, "cart_id", None) and not getattr(self, "line_items", None):
+            raise ValueError("Either cart_id or line_items must be provided")
+        return self
+'''
+    config_match = re.search(
+        r"model_config = ConfigDict\(\s*extra=\"allow\",?\s*\)",
+        source[class_match.start() :],
+    )
+    if config_match:
+        insert_pos = class_match.start() + config_match.end()
+        source = (
+            source[:insert_pos] + "\n" + validator_code + source[insert_pos:]
+        )
+        source = _ensure_pydantic_import(source, "model_validator")
+        path.write_text(source, encoding="utf-8")
+        sys.stdout.write(
+            f"  cart conversion validator on 'Checkout' -> {path}\n"
+        )
+        return 1, 0
+    return 0, 0
+
+
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
@@ -1443,6 +1488,7 @@ def main():
     patched_cb, rc_cb = _patch_conditional_bounds()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
+    patched_cc, rc_cc = _patch_cart_checkout_create_request()
     total = (
         patched_mp
         + patched_pn
@@ -1451,9 +1497,10 @@ def main():
         + patched_cb
         + patched_ui
         + patched_ef
+        + patched_cc
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef
+    return rc_mp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef or rc_cc
 
 
 if __name__ == "__main__":

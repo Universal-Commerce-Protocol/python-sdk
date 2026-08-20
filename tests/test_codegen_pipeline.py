@@ -218,6 +218,31 @@ class RequestMetadataTest(unittest.TestCase):
             {"create", "update", "complete"},
         )
 
+    def test_get_required_ops_collects_from_nested_defs(self) -> None:
+        """Markers inside $defs contribute their operations even if root has none."""
+        schema = {
+            "title": "Extension",
+            "type": "object",
+            "$defs": {
+                "custom": {
+                    "type": "object",
+                    "properties": {
+                        "secret": {"ucp_request": "omit"},
+                        "action": {
+                            "ucp_request": {
+                                "complete": "optional",
+                            }
+                        },
+                    },
+                }
+            },
+        }
+
+        self.assertEqual(
+            preprocess_schemas.get_required_ops(schema),
+            {"create", "update", "complete"},
+        )
+
     def test_eval_prop_inclusion_applies_operation_overrides(self) -> None:
         """Operation markers override base required and inclusion rules."""
         cases = [
@@ -455,6 +480,94 @@ class VariantGenerationTest(unittest.TestCase):
         self.assertEqual(create_variant["required"], [])
         self.assertEqual(set(update_variant["properties"]), {"id"})
         self.assertEqual(update_variant["required"], ["id"])
+
+    def test_nested_defs_filtered_and_refs_rewritten(self) -> None:
+        """Nested $defs properties are filtered and external refs rewritten."""
+        schema = {
+            "$id": "https://ucp.dev/schemas/food/cart.json",
+            "title": "Cart",
+            "type": "object",
+            "$defs": {
+                "checkout": {
+                    "title": "Checkout with Cart",
+                    "type": "object",
+                    "properties": {
+                        "cart_id": {
+                            "type": "string",
+                            "ucp_request": {
+                                "create": "optional",
+                                "update": "omit",
+                                "complete": "omit",
+                            },
+                        }
+                    },
+                    "allOf": [{"$ref": "checkout.json"}],
+                }
+            },
+            "properties": {
+                "restaurant": {"$ref": "restaurant.json"},
+            },
+        }
+        file_path = Path("/schemas/food/cart.json")
+        checkout_path = str((file_path.parent / "checkout.json").resolve())
+        restaurant_path = str((file_path.parent / "restaurant.json").resolve())
+        variant_needs = {
+            checkout_path: {"create", "update", "complete"},
+            restaurant_path: {"create", "update"},
+        }
+
+        create_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "create",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+        update_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "update",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+        complete_variant = preprocess_schemas._create_single_variant(
+            schema,
+            "complete",
+            "cart",
+            file_path,
+            variant_needs,
+        )
+
+        # Create variant includes cart_id (without ucp_request) and rewrites checkout.json
+        checkout_def_create = create_variant["$defs"]["checkout"]
+        self.assertIn("cart_id", checkout_def_create["properties"])
+        self.assertNotIn(
+            "ucp_request", checkout_def_create["properties"]["cart_id"]
+        )
+        self.assertEqual(
+            checkout_def_create["allOf"][0]["$ref"],
+            "checkout_create_request.json",
+        )
+        self.assertEqual(
+            create_variant["properties"]["restaurant"]["$ref"],
+            "restaurant_create_request.json",
+        )
+
+        # Update variant omits cart_id and rewrites checkout.json
+        checkout_def_update = update_variant["$defs"]["checkout"]
+        self.assertEqual(checkout_def_update["properties"], {})
+        self.assertEqual(
+            checkout_def_update["allOf"][0]["$ref"],
+            "checkout_update_request.json",
+        )
+
+        # Complete variant omits cart_id and rewrites checkout.json
+        checkout_def_complete = complete_variant["$defs"]["checkout"]
+        self.assertEqual(checkout_def_complete["properties"], {})
+        self.assertEqual(
+            checkout_def_complete["allOf"][0]["$ref"],
+            "checkout_complete_request.json",
+        )
 
 
 class PipelineDependencyTest(unittest.TestCase):
@@ -715,6 +828,123 @@ class PipelineDependencyTest(unittest.TestCase):
             self.assertEqual(
                 parent_variant["properties"]["child_item"]["$ref"],
                 "child_create_request.json#/$defs/item",
+            )
+
+    def test_main_preprocesses_nested_capability_extensions_end_to_end(
+        self,
+    ) -> None:
+        """Capability extensions in $defs trigger variants and propagate refs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            preprocess_schemas.save_json(
+                {
+                    "$defs": {
+                        "entity": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        }
+                    }
+                },
+                root / "ucp.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/checkout.json",
+                    "title": "Checkout",
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "ucp_request": {
+                                "create": "omit",
+                                "update": "required",
+                            },
+                        }
+                    },
+                },
+                root / "checkout.json",
+            )
+            preprocess_schemas.save_json(
+                {
+                    "$id": "https://ucp.dev/schemas/cart.json",
+                    "title": "Cart",
+                    "type": "object",
+                    "$defs": {
+                        "checkout": {
+                            "title": "Checkout with Cart",
+                            "type": "object",
+                            "properties": {
+                                "cart_id": {
+                                    "type": "string",
+                                    "ucp_request": {
+                                        "create": "optional",
+                                        "update": "omit",
+                                    },
+                                }
+                            },
+                            "allOf": [{"$ref": "checkout.json"}],
+                        }
+                    },
+                    "properties": {
+                        "items": {"type": "array"},
+                    },
+                },
+                root / "cart.json",
+            )
+
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    ["preprocess_schemas.py", str(root)],
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                preprocess_schemas.main()
+
+            self.assertTrue(
+                (root / "checkout_create_request.json").exists(),
+                "checkout_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "checkout_update_request.json").exists(),
+                "checkout_update_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "cart_create_request.json").exists(),
+                "cart_create_request.json was not generated",
+            )
+            self.assertTrue(
+                (root / "cart_update_request.json").exists(),
+                "cart_update_request.json was not generated",
+            )
+
+            cart_create = preprocess_schemas.load_json(
+                root / "cart_create_request.json"
+            )
+            cart_update = preprocess_schemas.load_json(
+                root / "cart_update_request.json"
+            )
+
+            # Check cart_create_request.json
+            self.assertIn(
+                "cart_id", cart_create["$defs"]["checkout"]["properties"]
+            )
+            self.assertNotIn(
+                "ucp_request",
+                cart_create["$defs"]["checkout"]["properties"]["cart_id"],
+            )
+            self.assertEqual(
+                cart_create["$defs"]["checkout"]["allOf"][0]["$ref"],
+                "checkout_create_request.json",
+            )
+
+            # Check cart_update_request.json
+            self.assertEqual(cart_update["$defs"]["checkout"]["properties"], {})
+            self.assertEqual(
+                cart_update["$defs"]["checkout"]["allOf"][0]["$ref"],
+                "checkout_update_request.json",
             )
 
 
@@ -1845,6 +2075,186 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
 
         config = MerchantFulfillmentConfig.model_validate({"bogus": "x"})
         self.assertEqual(config.model_extra, {"bogus": "x"})
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class CapabilityExtensionSemanticTest(unittest.TestCase):
+    """Test capability extension models generated across shopping operations."""
+
+    def test_cart_checkout_create_request_with_cart_id(self) -> None:
+        """CheckoutCreateRequest with cart capability accepts cart_id."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        req = CartCheckoutCreateRequest(cart_id="cart_12345")
+        self.assertEqual(req.cart_id, "cart_12345")
+        self.assertIsNone(req.line_items)
+
+    def test_cart_checkout_create_request_with_line_items(self) -> None:
+        """CheckoutCreateRequest with cart capability accepts line_items."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        req = CartCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Test Product",
+                        "price": 1000,
+                    },
+                    "quantity": 1,
+                }
+            ]
+        )
+        self.assertIsNotNone(req.line_items)
+        self.assertIsNone(req.cart_id)
+
+    def test_cart_checkout_create_request_requires_cart_id_or_line_items(
+        self,
+    ) -> None:
+        """CheckoutCreateRequest with cart capability requires cart_id or line_items."""
+        from ucp_sdk.models.schemas.shopping.cart_create_request import (
+            Checkout as CartCheckoutCreateRequest,
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            CartCheckoutCreateRequest()
+        self.assertIn(
+            "Either cart_id or line_items must be provided", str(ctx.exception)
+        )
+
+    def test_fulfillment_checkout_create_and_update(self) -> None:
+        """Fulfillment extension models include fulfillment in create and update."""
+        from ucp_sdk.models.schemas.shopping.fulfillment_create_request import (
+            Checkout as FulfillmentCheckoutCreateRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.fulfillment_update_request import (
+            Checkout as FulfillmentCheckoutUpdateRequest,
+        )
+
+        create_req = FulfillmentCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            fulfillment={
+                "methods": [
+                    {
+                        "id": "method_1",
+                        "type": "shipping",
+                        "line_item_ids": ["prod_1"],
+                    }
+                ]
+            },
+        )
+        self.assertIsNotNone(create_req.fulfillment)
+
+        update_req = FulfillmentCheckoutUpdateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            fulfillment={
+                "methods": [
+                    {
+                        "id": "method_1",
+                        "type": "shipping",
+                        "line_item_ids": ["prod_1"],
+                        "selected_option_id": "opt_ground",
+                    }
+                ]
+            },
+        )
+        self.assertIsNotNone(update_req.fulfillment)
+
+    def test_discount_checkout_and_cart_create_and_update(self) -> None:
+        """Discount extension models include discounts in create and update."""
+        from ucp_sdk.models.schemas.shopping.discount_create_request import (
+            Cart as DiscountCartCreateRequest,
+            Checkout as DiscountCheckoutCreateRequest,
+        )
+        from ucp_sdk.models.schemas.shopping.discount_update_request import (
+            Cart as DiscountCartUpdateRequest,
+            Checkout as DiscountCheckoutUpdateRequest,
+        )
+
+        checkout_create = DiscountCheckoutCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["SAVE10"]},
+        )
+        self.assertEqual(checkout_create.discounts.codes, ["SAVE10"])
+
+        cart_create = DiscountCartCreateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["CART10"]},
+        )
+        self.assertEqual(cart_create.discounts.codes, ["CART10"])
+
+        checkout_update = DiscountCheckoutUpdateRequest(
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["SAVE20"]},
+        )
+        self.assertEqual(checkout_update.discounts.codes, ["SAVE20"])
+
+        cart_update = DiscountCartUpdateRequest(
+            id="cart_123",
+            line_items=[
+                {
+                    "item": {
+                        "id": "prod_1",
+                        "title": "Item",
+                        "price": 500,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            discounts={"codes": ["CART20"]},
+        )
+        self.assertEqual(cart_update.discounts.codes, ["CART20"])
 
 
 if __name__ == "__main__":

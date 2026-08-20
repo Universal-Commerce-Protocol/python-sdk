@@ -18,20 +18,25 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
-from .postal_address_update_request import PostalAddressUpdateRequest
+from . import fulfillment_method_complete_request
 
 
-class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
+class FulfillmentCompleteRequest(BaseModel):
     """
-    Shipping destination.
+    Container for fulfillment methods and availability.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str | None = None
+    methods: (
+        list[
+            fulfillment_method_complete_request.FulfillmentMethodCompleteRequest
+        ]
+        | None
+    ) = None
     """
-    ID specific to this shipping destination.
+    Fulfillment methods for cart items.
     """
