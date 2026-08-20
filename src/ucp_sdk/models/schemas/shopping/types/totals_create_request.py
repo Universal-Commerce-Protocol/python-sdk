@@ -20,16 +20,87 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, AfterValidator
 from typing_extensions import TypeAliasType
 
 from . import total_create_request
+
+
+def _enforce_contains_totals_create_request(value):
+    """JSON Schema contains/minContains/maxContains (see #49)."""
+    _matched_0 = sum(
+        1
+        for _item in value
+        if (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        == "subtotal"
+    )
+    if _matched_0 < 1:
+        raise ValueError(
+            "Array must contain at least 1 entry "
+            "matching type=='subtotal' (schema minContains=1)"
+        )
+    if _matched_0 > 1:
+        raise ValueError(
+            "Array must contain at most 1 entry "
+            "matching type=='subtotal' (schema maxContains=1)"
+        )
+    _matched_1 = sum(
+        1
+        for _item in value
+        if (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        == "total"
+    )
+    if _matched_1 < 1:
+        raise ValueError(
+            "Array must contain at least 1 entry "
+            "matching type=='total' (schema minContains=1)"
+        )
+    if _matched_1 > 1:
+        raise ValueError(
+            "Array must contain at most 1 entry "
+            "matching type=='total' (schema maxContains=1)"
+        )
+    _excluded = [
+        "subtotal",
+        "items_discount",
+        "discount",
+        "fulfillment",
+        "tax",
+        "fee",
+        "total",
+    ]
+    for _item in value:
+        _actual = (
+            _item.get("type")
+            if isinstance(_item, dict)
+            else getattr(_item, "type", None)
+        )
+        if _actual in _excluded:
+            continue
+        if isinstance(_item, dict) and "display_text" not in _item:
+            raise ValueError("Field 'display_text' is required for custom type")
+        if (
+            not isinstance(_item, dict)
+            and "display_text" not in _item.model_fields_set
+        ):
+            raise ValueError("Field 'display_text' is required for custom type")
+    return value
+
 
 TotalsCreateRequest = TypeAliasType(
     "TotalsCreateRequest",
     Annotated[
         list[total_create_request.TotalCreateRequest],
         Field(..., title="Totals Create Request"),
+        AfterValidator(_enforce_contains_totals_create_request),
     ],
 )
 """
