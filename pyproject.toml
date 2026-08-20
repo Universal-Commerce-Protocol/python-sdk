@@ -1,11 +1,10 @@
 [project]
 name = "ucp-sdk"
-version = "0.4.4"
+version = "0.4.5"
 description = "UCP Python SDK"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    { name = "Enric Cusell", email = "cusell@google.com" },
     { name = "Federico D'Amato", email = "damaz@google.com" }
 ]
 classifiers = [

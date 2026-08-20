@@ -31,32 +31,11 @@ Service binding for a specific transport. Each transport binding is a separate e
 """
 
 
-class Config(BaseModel):
-    """
-    Entity-specific configuration. Structure defined by each entity's schema.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    delegate: list[str] | None = None
-    """
-    Delegations the business allows. At service-level, declares available delegations. In UCP responses, confirms accepted delegations for this session.
-    """
-    color_scheme: list[Literal["light", "dark"]] | None = None
-    """
-    Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list.
-    """
-
-
-Version = TypeAliasType("Version", Any)
-
-
 class Base(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -94,7 +73,7 @@ class PlatformSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -132,7 +111,7 @@ class PlatformSchema7(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -170,7 +149,7 @@ class PlatformSchema8(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -208,7 +187,7 @@ class PlatformSchema9(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -258,7 +237,7 @@ class BusinessSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -296,7 +275,7 @@ class BusinessSchema4(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -334,7 +313,7 @@ class BusinessSchema5(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -364,6 +343,24 @@ class BusinessSchema5(BaseModel):
     """
 
 
+class Config(BaseModel):
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    delegate: list[str] | None = None
+    """
+    Delegations the business allows. At service-level, declares available delegations. In UCP responses, confirms accepted delegations for this session.
+    """
+    color_scheme: list[Literal["light", "dark"]] | None = None
+    """
+    Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list.
+    """
+
+
 class BusinessSchema6(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
@@ -372,7 +369,7 @@ class BusinessSchema6(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -422,7 +419,7 @@ class ResponseSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -460,7 +457,7 @@ class ResponseSchema4(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -498,7 +495,7 @@ class ResponseSchema5(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -536,7 +533,7 @@ class ResponseSchema6(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """

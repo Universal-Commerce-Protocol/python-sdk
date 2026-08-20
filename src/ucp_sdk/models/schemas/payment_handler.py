@@ -33,14 +33,11 @@ Schema for UCP payment handlers. Handlers define how payment instruments are pro
 """
 
 
-Version = TypeAliasType("Version", Any)
-
-
 class Base(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -76,7 +73,7 @@ class PlatformSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -112,7 +109,7 @@ class BusinessSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
@@ -148,7 +145,7 @@ class ResponseSchema(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    version: Version
+    version: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     """
     Entity version in YYYY-MM-DD format.
     """
