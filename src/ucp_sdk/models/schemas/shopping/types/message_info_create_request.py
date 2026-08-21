@@ -18,26 +18,31 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Literal
 
-from pydantic import Field
-from typing_extensions import TypeAliasType
+from pydantic import BaseModel, ConfigDict
 
-from . import (
-    message_error_update_request,
-    message_info_update_request,
-    message_warning_update_request,
-)
+from . import info_code_create_request
 
-MessageUpdateRequest = TypeAliasType(
-    "MessageUpdateRequest",
-    Annotated[
-        message_error_update_request.MessageErrorUpdateRequest
-        | message_warning_update_request.MessageWarningUpdateRequest
-        | message_info_update_request.MessageInfoUpdateRequest,
-        Field(..., title="Message Update Request"),
-    ],
-)
-"""
-Container for error, warning, or info messages.
-"""
+
+class MessageInfoCreateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["info"]
+    """
+    Message type discriminator.
+    """
+    path: str | None = None
+    """
+    RFC 9535 JSONPath to the component the message refers to.
+    """
+    code: info_code_create_request.InfoCodeCreateRequest | None = None
+    content_type: Literal["plain", "markdown"] | None = "plain"
+    """
+    Content format, default = plain.
+    """
+    content: str
+    """
+    Human-readable message.
+    """

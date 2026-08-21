@@ -23,21 +23,10 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import (
-    message_error_update_request,
-    message_info_update_request,
-    message_warning_update_request,
-)
-
-MessageUpdateRequest = TypeAliasType(
-    "MessageUpdateRequest",
-    Annotated[
-        message_error_update_request.MessageErrorUpdateRequest
-        | message_warning_update_request.MessageWarningUpdateRequest
-        | message_info_update_request.MessageInfoUpdateRequest,
-        Field(..., title="Message Update Request"),
-    ],
+SignedAmountCreateRequest = TypeAliasType(
+    "SignedAmountCreateRequest",
+    Annotated[int, Field(..., title="Signed Amount Create Request")],
 )
 """
-Container for error, warning, or info messages.
+Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to the currency's exponent to determine minor-to-major ratio (e.g., 2 for USD, 0 for JPY, 3 for KWD). May be negative — the sign is intrinsic to the value (e.g., discounts are negative, charges are positive).
 """

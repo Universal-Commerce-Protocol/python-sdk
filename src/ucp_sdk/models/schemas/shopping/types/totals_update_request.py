@@ -23,7 +23,7 @@ from typing import Annotated
 from pydantic import Field, AfterValidator
 from typing_extensions import TypeAliasType
 
-from . import total
+from . import total_update_request
 
 
 def _enforce_contains_totals_update_request(value):
@@ -98,7 +98,7 @@ def _enforce_contains_totals_update_request(value):
 TotalsUpdateRequest = TypeAliasType(
     "TotalsUpdateRequest",
     Annotated[
-        list[total.Total],
+        list[total_update_request.TotalUpdateRequest],
         Field(..., title="Totals Update Request"),
         AfterValidator(_enforce_contains_totals_update_request),
     ],
