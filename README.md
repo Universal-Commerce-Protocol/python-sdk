@@ -83,6 +83,7 @@ for item in checkout.line_items:
 | --------------------------------------- | --------------------------------------------------- |
 | `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, payment models      |
 | `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, signals     |
+| `ucp_sdk.models.schemas.common`         | Identity linking and other shared protocol models   |
 | `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings           |
 | `ucp_sdk.models.schemas`                | Service definitions, capabilities, payment handlers |
 
