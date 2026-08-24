@@ -23,21 +23,22 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import (
-    message_error_update_request,
-    message_info_update_request,
-    message_warning_update_request,
-)
-
-MessageUpdateRequest = TypeAliasType(
-    "MessageUpdateRequest",
+WarningCodeUpdateRequest = TypeAliasType(
+    "WarningCodeUpdateRequest",
     Annotated[
-        message_error_update_request.MessageErrorUpdateRequest
-        | message_warning_update_request.MessageWarningUpdateRequest
-        | message_info_update_request.MessageInfoUpdateRequest,
-        Field(..., title="Message Update Request"),
+        str,
+        Field(
+            ...,
+            examples=[
+                "final_sale",
+                "prop65",
+                "fulfillment_changed",
+                "age_restricted",
+            ],
+            title="Warning Code Update Request",
+        ),
     ],
 )
 """
-Container for error, warning, or info messages.
+Warning code identifying the type of warning. Standard codes are defined in capability specs (see examples), and have standardized semantics; freeform codes are permitted.
 """

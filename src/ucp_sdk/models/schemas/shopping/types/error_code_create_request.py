@@ -23,21 +23,26 @@ from typing import Annotated
 from pydantic import Field
 from typing_extensions import TypeAliasType
 
-from . import (
-    message_error_update_request,
-    message_info_update_request,
-    message_warning_update_request,
-)
-
-MessageUpdateRequest = TypeAliasType(
-    "MessageUpdateRequest",
+ErrorCodeCreateRequest = TypeAliasType(
+    "ErrorCodeCreateRequest",
     Annotated[
-        message_error_update_request.MessageErrorUpdateRequest
-        | message_warning_update_request.MessageWarningUpdateRequest
-        | message_info_update_request.MessageInfoUpdateRequest,
-        Field(..., title="Message Update Request"),
+        str,
+        Field(
+            ...,
+            examples=[
+                "not_found",
+                "out_of_stock",
+                "item_unavailable",
+                "address_undeliverable",
+                "payment_failed",
+                "eligibility_invalid",
+                "identity_required",
+                "insufficient_scope",
+            ],
+            title="Error Code Create Request",
+        ),
     ],
 )
 """
-Container for error, warning, or info messages.
+Error code identifying the type of error. Standard errors are defined in specification (see examples), and have standardized semantics; freeform codes are permitted.
 """

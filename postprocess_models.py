@@ -667,7 +667,26 @@ def inject_array_contains(source, alias_name, groups, item_condition=None):
                 break
     if close is None:
         return source
-    out = source[:close] + f", AfterValidator({func_name})" + source[close:]
+    # Insert right after the last real token inside Annotated[...], not
+    # blindly right before the closing bracket. When the annotation is
+    # line-wrapped -- which ruff/black do once the item type reference is
+    # long enough to push the line past the wrap width, e.g. a
+    # request-variant $ref such as total_create_request.TotalCreateRequest
+    # replacing the shorter total.Total -- there is already a trailing
+    # comma just before the whitespace that precedes "]". Splicing before
+    # that whitespace would leave the existing trailing comma and our own
+    # leading comma separated by nothing but whitespace: two commas with no
+    # expression between them, a SyntaxError (see #34/#35).
+    scan = close - 1
+    while scan >= 0 and source[scan] in " \t\n":
+        scan -= 1
+    if scan >= 0 and source[scan] == ",":
+        insert_at = scan + 1
+        addition = f" AfterValidator({func_name}),"
+    else:
+        insert_at = scan + 1
+        addition = f", AfterValidator({func_name})"
+    out = source[:insert_at] + addition + source[insert_at:]
     func_src = _build_contains_function(func_name, groups, item_condition)
     insert_at = assign_re.search(out).start()
     out = out[:insert_at] + func_src + "\n\n" + out[insert_at:]

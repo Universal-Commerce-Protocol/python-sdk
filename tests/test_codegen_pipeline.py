@@ -14,6 +14,7 @@
 
 """Tests for the schema preprocessing pipeline."""
 
+import ast
 import contextlib
 import copy
 import io
@@ -40,7 +41,14 @@ try:
     )
 
     HAVE_SDK = True
-except ImportError:  # pragma: no cover
+except (ImportError, SyntaxError):  # pragma: no cover
+    # A generated model with invalid Python (e.g. a postprocessing splice
+    # that lands beside a stray trailing comma - see
+    # ArrayContainsInjectorTest.test_injects_cleanly_when_annotated_is_line_wrapped)
+    # raises SyntaxError on import, not ImportError. Without catching it
+    # here too, one broken generated file takes the whole test module down
+    # at collection time and every other test in this file - most of which
+    # have nothing to do with the SDK build - never runs.
     HAVE_SDK = False
 
 
@@ -514,6 +522,49 @@ class VariantGenerationTest(unittest.TestCase):
         self.assertEqual(set(item_schema["required"]), {"amount", "label"})
         self.assertEqual(variant["title"], "Totals Create Request")
 
+    def test_composition_variant_rewrites_refs(self) -> None:
+        """Composition variants (oneOf/anyOf/allOf) rewrite refs to variants."""
+        schema = {
+            "$id": "https://ucp.dev/schemas/poly.json",
+            "title": "Poly",
+            "oneOf": [{"$ref": "child_a.json"}, {"$ref": "child_b.json"}],
+            "allOf": [{"$ref": "parent.json"}],
+            "anyOf": [{"$ref": "other.json"}],
+        }
+        file_path = Path("/schemas/poly.json")
+        child_a_path = str((file_path.parent / "child_a.json").resolve())
+        child_b_path = str((file_path.parent / "child_b.json").resolve())
+        parent_path = str((file_path.parent / "parent.json").resolve())
+        other_path = str((file_path.parent / "other.json").resolve())
+
+        variant_needs = {
+            child_a_path: {"create"},
+            child_b_path: {"create"},
+            parent_path: {"create"},
+            other_path: {"create"},
+        }
+
+        variant = preprocess_schemas._create_single_variant(
+            schema,
+            "create",
+            "poly",
+            file_path,
+            variant_needs,
+        )
+
+        self.assertEqual(
+            variant["oneOf"][0]["$ref"], "child_a_create_request.json"
+        )
+        self.assertEqual(
+            variant["oneOf"][1]["$ref"], "child_b_create_request.json"
+        )
+        self.assertEqual(
+            variant["allOf"][0]["$ref"], "parent_create_request.json"
+        )
+        self.assertEqual(
+            variant["anyOf"][0]["$ref"], "other_create_request.json"
+        )
+
     def test_generate_variants_writes_operation_specific_files(self) -> None:
         """Variant generation writes one filtered file per operation."""
         schema = {
@@ -652,6 +703,26 @@ class PipelineDependencyTest(unittest.TestCase):
 
         self.assertEqual(variant_needs[child_path], {"create"})
         self.assertEqual(variant_needs[grandchild_path], {"create"})
+
+    def test_variant_needs_propagate_through_composition_keywords(self) -> None:
+        """Variant dependencies propagate unconditionally through oneOf/anyOf/allOf/items."""
+        parent_path = "/schemas/parent.json"
+        child_path = "/schemas/child.json"
+        schemas = {
+            parent_path: {"oneOf": [{"$ref": "child.json"}]},
+            child_path: {"properties": {}},
+        }
+        schema_refs = {
+            parent_path: [("oneOf", child_path)],
+            child_path: [],
+        }
+        variant_needs = {parent_path: {"create", "update"}}
+
+        preprocess_schemas.propagate_needs_transitive(
+            variant_needs, schema_refs, schemas
+        )
+
+        self.assertEqual(variant_needs[child_path], {"create", "update"})
 
     def test_main_preprocesses_schema_tree_end_to_end(self) -> None:
         """The full pipeline normalizes schemas and writes linked variants."""
@@ -1441,6 +1512,31 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         ")\n"
     )
 
+    #: The same alias, but formatted the way ruff/black renders it once the
+    #: item type name is long enough to force line-wrapping (e.g. once a
+    #: request-variant $ref like ``total_create_request.TotalCreateRequest``
+    #: replaces the short ``Total`` reference). The trailing comma after
+    #: ``Field(...)`` before the closing ``]`` is the shape that matters here.
+    MODULE_LINE_WRAPPED = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from typing import Annotated\n"
+        "\n"
+        "from pydantic import Field\n"
+        "from typing_extensions import TypeAliasType\n"
+        "\n"
+        "from . import total_create_request\n"
+        "\n"
+        "\n"
+        "TotalsCreateRequest = TypeAliasType(\n"
+        '    "TotalsCreateRequest",\n'
+        "    Annotated[\n"
+        "        list[total_create_request.TotalCreateRequest],\n"
+        '        Field(..., title="Totals Create Request"),\n'
+        "    ],\n"
+        ")\n"
+    )
+
     #: subtotal AND total, mirroring the real totals.json.
     GROUPS = [
         {"pairs": [("type", "subtotal")], "min": 1, "max": 1},
@@ -1561,6 +1657,27 @@ class ArrayContainsInjectorTest(unittest.TestCase):
             once, "Totals", self.GROUPS
         )
         self.assertEqual(once, twice)
+
+    def test_injects_cleanly_when_annotated_is_line_wrapped(self):
+        """A line-wrapped Annotated[...] with a trailing comma before the
+        closing bracket must still parse (see #34/#35: a longer item-type
+        reference, such as a request-variant $ref, pushes the formatter to
+        wrap the annotation onto multiple lines with a trailing comma; a
+        naive "insert before the closing bracket" splice then lands after
+        that comma and produces "Field(...),\\n, AfterValidator(...)]" -
+        two commas with nothing between them, a SyntaxError)."""
+        out = postprocess_models.inject_array_contains(
+            self.MODULE_LINE_WRAPPED, "TotalsCreateRequest", self.GROUPS
+        )
+
+        # The regression: this must be syntactically valid Python.
+        ast.parse(out)
+
+        self.assertIn(
+            "AfterValidator(_enforce_contains_totals_create_request)", out
+        )
+        # No orphaned comma left behind by the splice.
+        self.assertNotRegex(out, r",\s*,")
 
     @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
     def test_injected_validator_enforces_both_bounds(self):
