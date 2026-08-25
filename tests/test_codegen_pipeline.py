@@ -55,6 +55,27 @@ except (ImportError, SyntaxError):  # pragma: no cover
 class SchemaNormalizationTest(unittest.TestCase):
     """Tests schema flattening and reference normalization."""
 
+    def test_iter_nodes_expands_properties_without_yielding_container(
+        self,
+    ) -> None:
+        """iter_nodes yields "properties" map values directly rather than the "properties" map as a container. Avoids traversal of property names that match json schema keywords."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "user": {"type": "string", "$ref": "user.json"},
+                "allOf": {"type": "object"},
+            },
+        }
+        nodes = list(preprocess_schemas.iter_nodes(schema))
+
+        # The root object is yielded
+        self.assertIn(schema, nodes)
+        # The property subschemas are yielded
+        self.assertIn(schema["properties"]["user"], nodes)
+        self.assertIn(schema["properties"]["allOf"], nodes)
+        # The container map {"user": ..., "allOf": ...} itself is NOT yielded
+        self.assertNotIn(schema["properties"], nodes)
+
     def test_resolve_local_ref_supports_objects_and_arrays(self) -> None:
         """Local JSON pointers resolve object keys and array indexes."""
         schema = {"$defs": {"choices": [{"const": "first"}]}}
