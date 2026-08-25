@@ -18,24 +18,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import Field
-from typing_extensions import TypeAliasType
 
-from . import (
-    retail_location_create_request,
-    shipping_destination_create_request,
-)
+class FulfillmentDestinationCreateRequest(BaseModel):
+    """
+    A destination for fulfillment.
+    """
 
-FulfillmentDestinationCreateRequest = TypeAliasType(
-    "FulfillmentDestinationCreateRequest",
-    Annotated[
-        shipping_destination_create_request.ShippingDestinationCreateRequest
-        | retail_location_create_request.RetailLocationCreateRequest,
-        Field(..., title="Fulfillment Destination Create Request"),
-    ],
-)
-"""
-A destination for fulfillment.
-"""
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str | None = None
+    """
+    Destination contract discriminator. Required in Business responses and optional in Platform requests. Well-known values: `shipping_address`, `business_location`. The enclosing method contract defines request defaults and which fields the Platform may write; negotiated extensions define additional values.
+    """
+    id: str | None = None
+    """
+    Fulfillment destination identifier.
+    """

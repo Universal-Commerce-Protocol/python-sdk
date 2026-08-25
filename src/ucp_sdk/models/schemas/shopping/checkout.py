@@ -23,13 +23,15 @@ from typing import Literal
 from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
+from ..common.types import actions as actions_1
+from ..common.types import context as context_1
+from ..common.types import link, message, policy
+from ..common.types import signals as signals_1
+from ..common.types import totals as totals_1
 from . import payment as payment_1
 from .types import attribution as attribution_1
 from .types import buyer as buyer_1
-from .types import context as context_1
-from .types import line_item, link, message, order_confirmation
-from .types import signals as signals_1
-from .types import totals as totals_1
+from .types import line_item, order_confirmation
 
 
 class Checkout(BaseModel):
@@ -65,7 +67,7 @@ class Checkout(BaseModel):
         "canceled",
     ]
     """
-    Checkout state indicating the current phase and required action. See Checkout Status lifecycle documentation for state transition details.
+    Checkout state indicating the current phase and required processing. See Checkout Status lifecycle documentation for state transition details.
     """
     currency: str
     """
@@ -75,6 +77,10 @@ class Checkout(BaseModel):
     """
     Different cart totals.
     """
+    actions: actions_1.Actions | None = None
+    """
+    Outstanding extension-defined Actions for this checkout.
+    """
     messages: list[message.Message] | None = None
     """
     List of messages with error and info about the checkout session state.
@@ -82,6 +88,10 @@ class Checkout(BaseModel):
     links: list[link.Link]
     """
     Links to be displayed by the platform (Privacy Policy, TOS). Mandatory for legal compliance.
+    """
+    policies: list[policy.Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the items in this checkout. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
     expires_at: AwareDatetime | None = None
     """

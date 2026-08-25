@@ -24,13 +24,14 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
 from . import capability, payment_handler, service
-from .shopping.types import reverse_domain_name_create_request
+from .common.types import request_constraints as request_constraints_1
+from .common.types import reverse_domain_name_create_request
 
 Version = TypeAliasType(
     "Version", Annotated[str, Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")]
 )
 """
-UCP version in YYYY-MM-DD format.
+Version identifier in YYYY-MM-DD format.
 """
 
 
@@ -62,7 +63,7 @@ class Requires(BaseModel):
     )
     protocol: VersionConstraint | None = None
     """
-    Required protocol version.
+    Required range for the selected `ucp.version`.
     """
     capabilities: (
         dict[
@@ -74,6 +75,12 @@ class Requires(BaseModel):
     """
     Required capability versions, keyed by capability name. Keys must be a subset of the extension's $defs keys.
     """
+
+
+MapOrder = TypeAliasType("MapOrder", dict[str, list[str]])
+"""
+Preferred key order for map-valued fields in the scope annotated by the containing `ucp` member. Each property names a target map, and its array lists target keys in preferred order. Lists may be partial and are not allowlists.
+"""
 
 
 class Entity(BaseModel):
@@ -106,6 +113,18 @@ class Entity(BaseModel):
     """
 
 
+class Members(BaseModel):
+    """
+    Members defined inside the reserved `ucp` protocol object. The object is open for forward compatibility: consumers MUST ignore unrecognized members. Only UCP core defines members, and every defined member MUST be safe to ignore.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    map_order: MapOrder | None = None
+    request_constraints: request_constraints_1.RequestConstraints | None = None
+
+
 class Base(BaseModel):
     """
     Base UCP metadata with shared properties for all schema types.
@@ -115,6 +134,10 @@ class Base(BaseModel):
         extra="allow",
     )
     version: Version
+    map_order: MapOrder | None = None
+    """
+    Preferred key-traversal order for sibling registry fields inside the root `ucp` envelope (`services`, `capabilities`, and `payment_handlers`).
+    """
     status: Literal["success", "error"] | None = "success"
     """
     Application-level status of the UCP operation.
@@ -189,7 +212,7 @@ class PlatformSchema(Base):
     )
     services: dict[
         reverse_domain_name_create_request.ReverseDomainNameCreateRequest,
-        list[service.PlatformSchema5],
+        list[service.PlatformSchema6],
     ]
     """
     Service registry keyed by reverse-domain name.
@@ -227,7 +250,7 @@ class BusinessSchema(Base):
     """
     services: dict[
         reverse_domain_name_create_request.ReverseDomainNameCreateRequest,
-        list[service.BusinessSchema2],
+        list[service.BusinessSchema3],
     ]
     """
     Service registry keyed by reverse-domain name.

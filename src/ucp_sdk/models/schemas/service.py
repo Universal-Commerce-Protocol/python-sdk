@@ -27,7 +27,7 @@ UcpService = TypeAliasType(
     "UcpService", Annotated[Any, Field(..., title="UCP Service")]
 )
 """
-Service binding for a specific transport. Each transport binding is a separate entry in the service array.
+Service declaration with one transport binding. Each transport binding is a separate entry in the service array; `version` identifies the service, not the transport.
 """
 
 
@@ -103,7 +103,7 @@ class PlatformSchema(BaseModel):
     """
 
 
-class PlatformSchema7(BaseModel):
+class PlatformSchema8(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -141,7 +141,7 @@ class PlatformSchema7(BaseModel):
     """
 
 
-class PlatformSchema8(BaseModel):
+class PlatformSchema9(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -179,7 +179,7 @@ class PlatformSchema8(BaseModel):
     """
 
 
-class PlatformSchema9(BaseModel):
+class PlatformSchema10(BaseModel):
     """
     Full service declaration for platform-level discovery. All transports require `version`, `spec`, and `transport`. REST, MCP, and embedded additionally require `schema`.
     """
@@ -217,10 +217,10 @@ class PlatformSchema9(BaseModel):
     """
 
 
-PlatformSchema5 = TypeAliasType(
-    "PlatformSchema5",
+PlatformSchema6 = TypeAliasType(
+    "PlatformSchema6",
     Annotated[
-        PlatformSchema | PlatformSchema7 | PlatformSchema8 | PlatformSchema9,
+        PlatformSchema | PlatformSchema8 | PlatformSchema9 | PlatformSchema10,
         Field(..., title="Service (Platform Schema)"),
     ],
 )
@@ -267,7 +267,7 @@ class BusinessSchema(BaseModel):
     """
 
 
-class BusinessSchema4(BaseModel):
+class BusinessSchema5(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -305,7 +305,7 @@ class BusinessSchema4(BaseModel):
     """
 
 
-class BusinessSchema5(BaseModel):
+class BusinessSchema6(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -361,7 +361,7 @@ class Config(BaseModel):
     """
 
 
-class BusinessSchema6(BaseModel):
+class BusinessSchema7(BaseModel):
     """
     Service binding for business/merchant configuration. May override platform endpoints.
     """
@@ -399,10 +399,10 @@ class BusinessSchema6(BaseModel):
     """
 
 
-BusinessSchema2 = TypeAliasType(
-    "BusinessSchema2",
+BusinessSchema3 = TypeAliasType(
+    "BusinessSchema3",
     Annotated[
-        BusinessSchema | BusinessSchema4 | BusinessSchema5 | BusinessSchema6,
+        BusinessSchema | BusinessSchema5 | BusinessSchema6 | BusinessSchema7,
         Field(..., title="Service (Business Schema)"),
     ],
 )

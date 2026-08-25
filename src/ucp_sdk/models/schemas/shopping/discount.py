@@ -23,10 +23,10 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
+from ..common.types import amount as amount_1
+from ..common.types import reverse_domain_name
 from .cart import Cart as Cart_1
 from .checkout import Checkout as Checkout_1
-from .types import amount as amount_1
-from .types import reverse_domain_name
 
 DiscountExtension = TypeAliasType(
     "DiscountExtension", Annotated[Any, Field(..., title="Discount Extension")]

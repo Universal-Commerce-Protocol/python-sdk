@@ -18,11 +18,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import postal_address
+from ...common.types import postal_address
 
 
 class LineItem(BaseModel):
@@ -33,9 +31,9 @@ class LineItem(BaseModel):
     """
     Line item ID reference.
     """
-    quantity: int = Field(..., ge=1)
+    quantity: int = Field(..., ge=1, le=9007199254740991)
     """
-    Quantity of this item in this expectation.
+    Integer count of steps of the referenced line item's `quantity_unit` (`10^-scale` × `unit`); when `quantity_unit` is absent, it counts whole items (`each`).
     """
 
 
@@ -55,9 +53,9 @@ class Expectation(BaseModel):
     """
     Which line items and quantities are in this expectation.
     """
-    method_type: Literal["shipping", "pickup", "digital"]
+    method_type: str
     """
-    Delivery method type (shipping, pickup, digital).
+    Delivery method type. Well-known values: `shipping`, `pickup`, `digital`; additional values MAY be used.
     """
     destination: postal_address.PostalAddress
     """

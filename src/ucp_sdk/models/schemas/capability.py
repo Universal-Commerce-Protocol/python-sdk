@@ -23,6 +23,8 @@ from typing import Annotated, Any
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
+from .common.types import reverse_domain_name
+
 UcpCapability = TypeAliasType(
     "UcpCapability", Annotated[Any, Field(..., title="UCP Capability")]
 )
@@ -34,24 +36,8 @@ Schema for UCP capabilities and extensions. Extensions are capabilities with an 
 Extends = TypeAliasType(
     "Extends",
     Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
+        list[reverse_domain_name.ReverseDomainName], Field(..., min_length=1)
     ],
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
-
-
-Extends1Item = TypeAliasType(
-    "Extends1Item",
-    Annotated[
-        str, Field(..., pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+$")
-    ],
-)
-
-
-Extends1 = TypeAliasType(
-    "Extends1", Annotated[list[Extends1Item], Field(..., min_length=1)]
 )
 """
 Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
@@ -82,24 +68,10 @@ class Base(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: Extends | Extends1 | None = None
+    extends: reverse_domain_name.ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
-
-
-Extends2 = TypeAliasType("Extends2", Extends)
-
-
-Extends3Item = TypeAliasType("Extends3Item", Extends1Item)
-
-
-Extends3 = TypeAliasType(
-    "Extends3", Annotated[list[Extends3Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
 
 
 class PlatformSchema(BaseModel):
@@ -130,29 +102,15 @@ class PlatformSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: Extends2 | Extends3 | None = None
+    extends: reverse_domain_name.ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
 
 
-Extends4 = TypeAliasType("Extends4", Extends)
-
-
-Extends5Item = TypeAliasType("Extends5Item", Extends1Item)
-
-
-Extends5 = TypeAliasType(
-    "Extends5", Annotated[list[Extends5Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
-
-
 class BusinessSchema(BaseModel):
     """
-    Capability configuration for business/merchant level. May include business-specific config overrides.
+    Capability declaration for business/merchant discovery. Requires the `schema` URL so platforms can fetch and compose it during negotiation; may also include business-specific config overrides.
     """
 
     model_config = ConfigDict(
@@ -166,7 +124,7 @@ class BusinessSchema(BaseModel):
     """
     URL to human-readable specification document.
     """
-    schema_: AnyUrl | None = Field(None, alias="schema")
+    schema_: AnyUrl = Field(..., alias="schema")
     """
     URL to JSON Schema defining this entity's structure and payloads.
     """
@@ -178,24 +136,10 @@ class BusinessSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: Extends4 | Extends5 | None = None
+    extends: reverse_domain_name.ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
-
-
-Extends6 = TypeAliasType("Extends6", Extends)
-
-
-Extends7Item = TypeAliasType("Extends7Item", Extends1Item)
-
-
-Extends7 = TypeAliasType(
-    "Extends7", Annotated[list[Extends7Item], Field(..., min_length=1)]
-)
-"""
-Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
-"""
 
 
 class ResponseSchema(BaseModel):
@@ -226,7 +170,7 @@ class ResponseSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: Extends6 | Extends7 | None = None
+    extends: reverse_domain_name.ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """

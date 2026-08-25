@@ -18,9 +18,13 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import ConfigDict
 
-from .postal_address_create_request import PostalAddressCreateRequest
+from ...common.types.postal_address_create_request import (
+    PostalAddressCreateRequest,
+)
 
 
 class ShippingDestinationCreateRequest(PostalAddressCreateRequest):
@@ -34,4 +38,8 @@ class ShippingDestinationCreateRequest(PostalAddressCreateRequest):
     id: str | None = None
     """
     ID specific to this shipping destination.
+    """
+    type: Literal["shipping_address"] | None = None
+    """
+    Destination type discriminator.
     """

@@ -18,9 +18,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from ...common.types import constraint_expression
 
 
 class AvailablePaymentInstrument(BaseModel):
@@ -35,7 +35,7 @@ class AvailablePaymentInstrument(BaseModel):
     """
     The instrument type identifier (e.g., 'card', 'gift_card'). References an instrument schema's type constant.
     """
-    constraints: dict[str, Any] | None = Field(None, min_length=1)
+    constraints: constraint_expression.ConstraintExpression | None = None
     """
-    Constraints on this instrument type. Structure depends on instrument type and active capabilities.
+    A Constraint Expression describing the instrument this entry makes available. Keys in `properties` name members of the `constraint_target` declared by the instrument schema for this `type`. Requirements on submitted request data belong in `ucp.request_constraints` instead.
     """

@@ -21,12 +21,14 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
+from ..common.types import actions as actions_1
+from ..common.types import context as context_1
+from ..common.types import message
+from ..common.types import pagination as pagination_1
+from ..common.types import policy
+from ..common.types import signals as signals_1
 from .types import attribution as attribution_1
-from .types import context as context_1
-from .types import message
-from .types import pagination as pagination_1
 from .types import product, search_filters
-from .types import signals as signals_1
 
 
 class CatalogSearch(BaseModel):
@@ -64,7 +66,15 @@ class SearchResponse(BaseModel):
     Products matching the search criteria.
     """
     pagination: pagination_1.Response | None = None
+    actions: actions_1.Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog search response.
+    """
     messages: list[message.Message] | None = None
     """
     Errors, warnings, or informational messages about the search results.
+    """
+    policies: list[policy.Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """

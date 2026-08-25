@@ -20,9 +20,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
-from .available_payment_instrument import AvailablePaymentInstrument
 from .payment_instrument import PaymentInstrument
 
 
@@ -36,7 +35,7 @@ class Display(BaseModel):
     )
     brand: str | None = None
     """
-    The card brand/network (e.g., visa, mastercard, amex).
+    The card brand/network shown to the buyer (e.g., visa, mastercard, amex). Presentational only.
     """
     last_digits: str | None = None
     """
@@ -60,40 +59,20 @@ class Display(BaseModel):
     """
 
 
-class Constraints(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    brands: list[str] | None = Field(None, min_length=1)
+class ConstraintTarget(BaseModel):
     """
-    Limit to specific card brands (e.g., ['visa', 'mastercard', 'amex']).
-    """
-
-    @field_validator("brands", mode="after")
-    def _enforce_unique_items_brands(cls, value):  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
-
-
-class AvailableCardPaymentInstrument(AvailablePaymentInstrument):
-    """
-    Declares card instrument availability with card-specific constraints.
+    The object an available card instrument's `constraints` describes. It declares the constrainable members and their types and is never carried in a payload.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    type: Literal["card"] | None = None
-    constraints: Constraints | None = None
+    brand: str | None = Field(
+        None, examples=["visa", "mastercard", "cartebancaire"]
+    )
+    """
+    Card scheme. Derived from the account number, not submitted.
+    """
 
 
 class CardPaymentInstrument(PaymentInstrument):
@@ -107,6 +86,10 @@ class CardPaymentInstrument(PaymentInstrument):
     type: Literal["card"]
     """
     Indicates this is a card payment instrument.
+    """
+    network: str | None = None
+    """
+    Card network elected for this transaction, typically a co-badged selection. When present, the business MAY decline if the card cannot route over it and MUST NOT substitute another.
     """
     display: Display | None = None
     """

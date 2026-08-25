@@ -22,7 +22,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_credential_create_request, postal_address_create_request
+from ...common.types import postal_address_create_request
+from . import payment_credential_create_request
 
 
 class PaymentInstrumentCreateRequest(BaseModel):
@@ -35,7 +36,7 @@ class PaymentInstrumentCreateRequest(BaseModel):
     )
     id: str
     """
-    A unique identifier for this instrument instance, assigned by the platform.
+    A unique identifier for this instrument instance. Typically assigned by the platform for instruments it collects. For a business-owned saved instrument returned on an identity-linked response, this identifier is assigned by the business; the platform MUST treat it as an opaque, business-scoped reference, and the business resolves it server-side when the buyer selects it.
     """
     handler_id: str
     """

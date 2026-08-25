@@ -21,13 +21,15 @@ from __future__ import annotations
 from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
+from ..common.types import actions as actions_1
+from ..common.types import context as context_1
+from ..common.types import link, message, policy
+from ..common.types import signals as signals_1
+from ..common.types import totals as totals_1
 from .checkout import Checkout as Checkout_1
 from .types import attribution as attribution_1
 from .types import buyer as buyer_1
-from .types import context as context_1
-from .types import line_item, link, message
-from .types import signals as signals_1
-from .types import totals as totals_1
+from .types import line_item
 
 
 class Cart(BaseModel):
@@ -65,6 +67,10 @@ class Cart(BaseModel):
     """
     Estimated cost breakdown. May be partial if shipping/tax not yet calculable.
     """
+    actions: actions_1.Actions | None = None
+    """
+    Outstanding extension-defined Actions for this cart.
+    """
     messages: list[message.Message] | None = None
     """
     Validation messages, warnings, or informational notices.
@@ -72,6 +78,10 @@ class Cart(BaseModel):
     links: list[link.Link] | None = None
     """
     Optional merchant links (policies, FAQs).
+    """
+    policies: list[policy.Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the items in this cart. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
     continue_url: AnyUrl | None = None
     """
