@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_complete_request
-from .types import attribution_complete_request, signals_complete_request
+from ..common.types import payment_complete_request, signals_complete_request
+from .types import attribution_complete_request
 
 
 class CheckoutCompleteRequest(BaseModel):

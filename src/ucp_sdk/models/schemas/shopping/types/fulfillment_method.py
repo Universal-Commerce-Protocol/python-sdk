@@ -18,8 +18,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
 from . import fulfillment_destination, fulfillment_group
@@ -27,7 +25,7 @@ from . import fulfillment_destination, fulfillment_group
 
 class FulfillmentMethod(BaseModel):
     """
-    A fulfillment method (shipping or pickup) with destinations and groups.
+    A fulfillment method with destinations and groups.
     """
 
     model_config = ConfigDict(
@@ -37,9 +35,9 @@ class FulfillmentMethod(BaseModel):
     """
     Unique fulfillment method identifier.
     """
-    type: Literal["shipping", "pickup"]
+    type: str
     """
-    Fulfillment method type.
+    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
     """
     line_item_ids: list[str]
     """
@@ -49,11 +47,11 @@ class FulfillmentMethod(BaseModel):
         list[fulfillment_destination.FulfillmentDestination] | None
     ) = None
     """
-    Available destinations. For shipping: addresses. For pickup: retail locations.
+    Available destinations for this method. In Business responses, each destination carries a `type` and `id`.
     """
     selected_destination_id: str | None = None
     """
-    ID of the selected destination.
+    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
     """
     groups: list[fulfillment_group.FulfillmentGroup] | None = None
     """

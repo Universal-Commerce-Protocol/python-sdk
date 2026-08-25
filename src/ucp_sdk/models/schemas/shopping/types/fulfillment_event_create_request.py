@@ -29,9 +29,9 @@ class LineItem(BaseModel):
     """
     Line item ID reference.
     """
-    quantity: int = Field(..., ge=1)
+    quantity: int = Field(..., ge=1, le=9007199254740991)
     """
-    Quantity fulfilled in this event.
+    Integer count of steps of the referenced line item's `quantity_unit` (`10^-scale` × `unit`); when `quantity_unit` is absent, it counts whole items (`each`).
     """
 
 

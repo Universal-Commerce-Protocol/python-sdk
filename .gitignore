@@ -3,3 +3,5 @@ node_modules/
 __pycache__/
 .venv/
 *.py[cod]
+ucp/
+uv.lock

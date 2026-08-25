@@ -20,24 +20,39 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
+from ..common.types import description as description_1
+from .catalog_lookup import DetailProduct
+from .catalog_lookup import GetProductRequest as GetProductRequest_1
+from .catalog_lookup import GetProductResponse as GetProductResponse_1
+from .catalog_lookup import LookupRequest as LookupRequest_1
+from .catalog_lookup import LookupResponse as LookupResponse_1
+from .catalog_lookup import LookupVariant
+from .catalog_search import SearchRequest as SearchRequest_1
+from .catalog_search import SearchResponse as SearchResponse_1
 from .checkout import Checkout as Checkout_1
+from .types import availability as availability_1
 from .types import fulfillment as fulfillment_1
 from .types import (
     fulfillment_available_method,
+    fulfillment_destination_filter,
     fulfillment_group,
     fulfillment_method,
     fulfillment_option,
+    fulfillment_option_base,
 )
+from .types.product import Product
+from .types.search_filters import SearchFilters
+from .types.variant import Variant
 
 FulfillmentExtension = TypeAliasType(
     "FulfillmentExtension",
     Annotated[Any, Field(..., title="Fulfillment Extension")],
 )
 """
-Extends Checkout with fulfillment support using methods, destinations, and groups.
+Extends Catalog with fulfillment discovery and Checkout with hierarchical fulfillment.
 """
 
 
@@ -50,8 +65,126 @@ FulfillmentAvailableMethod = TypeAliasType(
 )
 
 
+class CatalogFulfillmentMethod(BaseModel):
+    """
+    A fulfillment method on a catalog variant: how the variant can be fulfilled, and its availability.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
+    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
+    """
+    description: description_1.Description | None = None
+    """
+    Short buyer-facing summary (e.g. 'Ships in 2–4 business days').
+    """
+    availability: availability_1.Availability | None = None
+    """
+    Availability of this variant via this method at the specified or inferred location.
+    """
+    location: str | None = None
+    """
+    Stable, opaque identifier for the Business Location resolved for this place-based fulfillment method. The Business recognizes the same ID when submitted as `selected_destination_id` for that method; recognition does not reserve inventory or guarantee eligibility, and current terms are revalidated.
+    """
+    options: list[fulfillment_option_base.FulfillmentOptionBase] | None = None
+    """
+    Representative fulfillment options for this method (e.g. Standard, Express). Without a destination or full cart, a Business SHOULD preview meaningful boundary options (e.g. cheapest, fastest); more specific options are negotiated in Checkout once line items and destination are known.
+    """
+
+
+class CatalogFulfillment(BaseModel):
+    """
+    How a catalog variant can be fulfilled. Mirrors checkout `fulfillment`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    methods: list[CatalogFulfillmentMethod] | None = None
+    """
+    Fulfillment methods for this variant.
+    """
+
+
 FulfillmentOption = TypeAliasType(
     "FulfillmentOption", fulfillment_option.FulfillmentOption
+)
+
+
+class FulfillmentVariant(Variant):
+    """
+    A catalog variant with fulfillment.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    fulfillment: CatalogFulfillment | None = None
+
+
+class FulfillmentLookupVariant(LookupVariant):
+    """
+    A lookup variant (carrying input correlation) enriched with fulfillment.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    fulfillment: CatalogFulfillment | None = None
+
+
+class FulfillmentSearchFilters(SearchFilters):
+    """
+    Catalog filters extended with a fulfillment destination filter and a method-type filter.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    fulfills_to: (
+        fulfillment_destination_filter.FulfillmentDestinationFilter | None
+    ) = None
+    """
+    Explicit destination where items are fulfilled. It may differ from the locality or Business Location supplied in `context` (e.g. a gift delivered directly to the recipient). The filter restricts results to what can be fulfilled there and seeds method `availability`. It supersedes `context` only for fulfillment destination and availability resolution.
+    """
+    methods: list[str] | None = None
+    """
+    Restrict results to these fulfillment method types (e.g. ["pickup"]). Well-known values: `shipping`, `pickup`.
+    """
+
+
+class FulfillmentSearchRequest(SearchRequest_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    filters: FulfillmentSearchFilters | None = None
+
+
+class FulfillmentLookupRequest(LookupRequest_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    filters: FulfillmentSearchFilters | None = None
+
+
+class FulfillmentGetProductRequest(GetProductRequest_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    filters: FulfillmentSearchFilters | None = None
+
+
+SearchRequest = TypeAliasType("SearchRequest", FulfillmentSearchRequest)
+
+
+LookupRequest = TypeAliasType("LookupRequest", FulfillmentLookupRequest)
+
+
+GetProductRequest = TypeAliasType(
+    "GetProductRequest", FulfillmentGetProductRequest
 )
 
 
@@ -62,6 +195,71 @@ FulfillmentGroup = TypeAliasType(
 
 FulfillmentMethod = TypeAliasType(
     "FulfillmentMethod", fulfillment_method.FulfillmentMethod
+)
+
+
+class FulfillmentProduct(Product):
+    """
+    A catalog product whose variants are fulfillment-enriched. Used by search.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    variants: list[FulfillmentVariant] | None = None
+
+
+class FulfillmentLookupProduct(Product):
+    """
+    A lookup product whose variants are fulfillment-enriched, preserving input correlation. Used by lookup.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    variants: list[FulfillmentLookupVariant] | None = None
+
+
+class FulfillmentDetailProduct(DetailProduct):
+    """
+    A get_product detail product (carrying selected/options availability signals) whose variants are fulfillment-enriched. Used by get_product.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    variants: list[FulfillmentVariant] | None = None
+
+
+class FulfillmentSearchResponse(SearchResponse_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    products: list[FulfillmentProduct] | None = None
+
+
+class FulfillmentLookupResponse(LookupResponse_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    products: list[FulfillmentLookupProduct] | None = None
+
+
+class FulfillmentGetProductResponse(GetProductResponse_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    product: FulfillmentDetailProduct | None = None
+
+
+SearchResponse = TypeAliasType("SearchResponse", FulfillmentSearchResponse)
+
+
+LookupResponse = TypeAliasType("LookupResponse", FulfillmentLookupResponse)
+
+
+GetProductResponse = TypeAliasType(
+    "GetProductResponse", FulfillmentGetProductResponse
 )
 
 

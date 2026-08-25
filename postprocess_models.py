@@ -234,7 +234,7 @@ def find_root_min_properties(schema_dir):
                 "cannot map to a class\n"
             )
             continue
-        found[title] = minimum
+        found[_alias_name(title)] = minimum
     return found
 
 

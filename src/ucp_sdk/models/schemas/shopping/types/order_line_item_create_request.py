@@ -22,28 +22,29 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import item_create_request, total_create_request
+from ...common.types import total_create_request
+from . import item_create_request
 
 
 class Quantity(BaseModel):
     """
-    Quantity tracking for the line item.
+    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    original: int | None = Field(None, ge=0)
+    original: int | None = Field(None, ge=0, le=9007199254740991)
     """
-    Quantity from the original checkout.
+    Quantity from the original checkout, expressed as an integer step count.
     """
-    total: int = Field(..., ge=0)
+    total: int = Field(..., ge=0, le=9007199254740991)
     """
-    Current total active quantity. May differ from original due to post-order modifications (e.g., returns or cancellations).
+    Current active quantity after returns, cancellations, or other order changes, expressed as an integer step count.
     """
-    fulfilled: int = Field(..., ge=0)
+    fulfilled: int = Field(..., ge=0, le=9007199254740991)
     """
-    Quantity fulfilled so far.
+    Quantity fulfilled so far, expressed as an integer step count.
     """
 
 
@@ -57,11 +58,11 @@ class OrderLineItemCreateRequest(BaseModel):
     """
     item: item_create_request.ItemCreateRequest
     """
-    Product data (id, title, price, image_url).
+    Purchased item data, including identity, price, and sale basis.
     """
     quantity: Quantity
     """
-    Quantity tracking for the line item.
+    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
     """
     totals: list[total_create_request.TotalCreateRequest]
     """

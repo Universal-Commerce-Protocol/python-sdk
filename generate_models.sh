@@ -27,13 +27,6 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-# Check if uv is installed before cloning or modifying generated files
-if ! command -v uv &> /dev/null; then
-    echo "Error: uv not found."
-    echo "Please install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    exit 1
-fi
-
 # UCP Version to use (if provided, use release/$1 branch; otherwise, use main)
 if [ -z "$1" ]; then
     BRANCH="main"
@@ -46,6 +39,7 @@ fi
 # Ensure ucp directory is clean before cloning
 rm -rf ucp
 git clone -b "$BRANCH" --depth 1 https://github.com/Universal-Commerce-Protocol/ucp ucp
+rm -rf ucp/.git
 
 # Output directory
 OUTPUT_DIR="src/ucp_sdk/models/schemas"
@@ -101,9 +95,19 @@ uv run \
 echo "Post-processing generated models (constraints the generator ignores)..."
 uv run python postprocess_models.py || exit 1
 
+# Normalize file endings (as pre-commit's end-of-file-fixer does)
+python3 - <<'PY'
+from pathlib import Path
+
+for path in Path("src/ucp_sdk/models/schemas").rglob("*.py"):
+    text = path.read_text(encoding="utf-8")
+    fixed = text.rstrip("\n") + "\n" if text.strip() else ""
+    if fixed != text:
+        path.write_text(fixed, encoding="utf-8")
+PY
+
 echo "Formatting generated models..."
 uv run ruff format
 uv run ruff check --fix "$OUTPUT_DIR"
-
 
 echo "Done. Models generated in $OUTPUT_DIR"

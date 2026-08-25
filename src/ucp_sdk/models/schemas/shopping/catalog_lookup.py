@@ -21,16 +21,17 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import ucp as ucp_1
+from ..common.types import actions as actions_1
+from ..common.types import context as context_1
+from ..common.types import message, policy
+from ..common.types import signals as signals_1
 from .types import attribution as attribution_1
-from .types import context as context_1
 from .types import (
     detail_option_value,
     input_correlation,
-    message,
     search_filters,
     selected_option,
 )
-from .types import signals as signals_1
 from .types.product import Product as Product_1
 from .types.variant import Variant
 
@@ -80,13 +81,6 @@ class LookupRequest(BaseModel):
     attribution: attribution_1.Attribution | None = None
 
 
-class Product(Product_1):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    variants: list[LookupVariant] | None = None
-
-
 class GetProductRequest(BaseModel):
     """
     Request body for single-product retrieval. Supports interactive variant narrowing via selected and preferences.
@@ -126,6 +120,36 @@ class Option(BaseModel):
     )
 
 
+class Product(Product_1):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    variants: list[LookupVariant] | None = None
+
+
+class LookupResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ucp_1.ResponseCatalogSchema
+    products: list[Product]
+    """
+    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
+    """
+    actions: actions_1.Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog lookup response.
+    """
+    messages: list[message.Message] | None = None
+    """
+    Errors, warnings, or informational messages about the requested items.
+    """
+    policies: list[policy.Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+
+
 class DetailProduct(Product_1):
     """
     A product in a get_product response, extended with effective selections and availability signals on option values.
@@ -144,21 +168,6 @@ class DetailProduct(Product_1):
     """
 
 
-class LookupResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: ucp_1.ResponseCatalogSchema
-    products: list[Product]
-    """
-    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
-    """
-    messages: list[message.Message] | None = None
-    """
-    Errors, warnings, or informational messages about the requested items.
-    """
-
-
 class GetProductResponse(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -168,7 +177,15 @@ class GetProductResponse(BaseModel):
     """
     The requested product with full detail. Singular — this is a single-resource operation.
     """
+    actions: actions_1.Actions | None = None
+    """
+    Outstanding extension-defined Actions for this product response.
+    """
     messages: list[message.Message] | None = None
     """
     Warnings or informational messages about the product (e.g., price recently changed, limited availability).
+    """
+    policies: list[policy.Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """

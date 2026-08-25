@@ -145,15 +145,15 @@ def _process_all_of_item(item, node, root, state):
 
     # Extract polymorphic branches (anyOf, oneOf) to keep the node flat
     for poly_key in ["anyOf", "oneOf"]:
-        if poly_key in item:
+        if poly_key in item and isinstance(item[poly_key], list):
             state["poly_branches"].setdefault(poly_key, []).extend(
                 item.pop(poly_key)
             )
 
     # Merge core property definitions and requirements
-    if "properties" in item:
+    if "properties" in item and isinstance(item["properties"], dict):
         state["merged_properties"].update(item["properties"])
-    if "required" in item:
+    if "required" in item and isinstance(item["required"], list):
         for req in item["required"]:
             if req not in state["merged_required"]:
                 state["merged_required"].append(req)
@@ -200,7 +200,7 @@ def merge_all_of_to_node(node, root):
     models if inheritance is flattened at the schema level rather than relying on
     complex 'allOf' chains which can lead to redundant intermediate classes.
     """
-    if "allOf" not in node:
+    if "allOf" not in node or not isinstance(node["allOf"], list):
         return
 
     all_of_sources = node.pop("allOf")
@@ -225,15 +225,19 @@ def distribute_properties_to_branches(node):
     model in Pydantic. Without this, a generated union model might miss required
     common fields if it's treated as a pure 'oneOf' alternative.
     """
-    if "properties" not in node:
+    if "properties" not in node or not isinstance(node["properties"], dict):
         return
 
     base_props = node["properties"]
-    base_req = node.get("required", [])
+    base_req = (
+        node.get("required", [])
+        if isinstance(node.get("required"), list)
+        else []
+    )
     base_type = node.get("type")
 
     for poly_key in ["anyOf", "oneOf"]:
-        if poly_key not in node:
+        if poly_key not in node or not isinstance(node[poly_key], list):
             continue
 
         updated_branches = []
@@ -267,7 +271,7 @@ def flatten_entity_reference(node, entity_definition):
     Replaces $ref to 'ucp.json#/$defs/entity' with actual logic.
     This effectively converts 'Entity' inheritance into direct 'BaseModel' fields.
     """
-    if "allOf" not in node:
+    if "allOf" not in node or not isinstance(node["allOf"], list):
         return
 
     filtered_all_of = []
@@ -295,6 +299,10 @@ def preprocess_full_schema(schema, entity_def=None):
     Main entry point for normalizing a single schema file.
     Uses bottom-up iteration to ensure nested structures are flat before parents process them.
     """
+    # Remove $id so datamodel-code-generator resolves relative $refs strictly
+    # via the local filesystem rather than attempting remote HTTP fetching.
+    schema.pop("$id", None)
+
     # 1. Discovery: find all dictionaries in the tree
     nodes = [n for n in iter_nodes(schema) if isinstance(n, dict)]
 

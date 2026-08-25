@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import price_filter
+from ...common.types import price_filter
 
 
 class SearchFilters(BaseModel):
