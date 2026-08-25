@@ -21,11 +21,10 @@ from __future__ import annotations
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
 from .. import ucp as ucp_1
-from ..common.types import message, policy
-from ..common.types import totals as totals_1
 from .types import adjustment
 from .types import attribution as attribution_1
-from .types import expectation, fulfillment_event, order_line_item
+from .types import expectation, fulfillment_event, message, order_line_item
+from .types import totals as totals_1
 
 
 class PlatformSchema(BaseModel):
@@ -104,10 +103,6 @@ class Order(BaseModel):
     totals: totals_1.Totals
     """
     Different totals for the order.
-    """
-    policies: list[policy.Policy] | None = None
-    """
-    Snapshot of the policies that applied to the items at checkout, captured on the order as a durable record. `applies_to` targets are relative to the response root.
     """
     messages: list[message.Message] | None = None
     """

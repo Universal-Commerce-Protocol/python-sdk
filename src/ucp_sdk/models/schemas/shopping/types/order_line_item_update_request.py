@@ -22,29 +22,28 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ...common.types import total_update_request
-from . import item_update_request
+from . import item_update_request, total_update_request
 
 
 class Quantity(BaseModel):
     """
-    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
+    Quantity tracking for the line item.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    original: int | None = Field(None, ge=0, le=9007199254740991)
+    original: int | None = Field(None, ge=0)
     """
-    Quantity from the original checkout, expressed as an integer step count.
+    Quantity from the original checkout.
     """
-    total: int = Field(..., ge=0, le=9007199254740991)
+    total: int = Field(..., ge=0)
     """
-    Current active quantity after returns, cancellations, or other order changes, expressed as an integer step count.
+    Current total active quantity. May differ from original due to post-order modifications (e.g., returns or cancellations).
     """
-    fulfilled: int = Field(..., ge=0, le=9007199254740991)
+    fulfilled: int = Field(..., ge=0)
     """
-    Quantity fulfilled so far, expressed as an integer step count.
+    Quantity fulfilled so far.
     """
 
 
@@ -58,11 +57,11 @@ class OrderLineItemUpdateRequest(BaseModel):
     """
     item: item_update_request.ItemUpdateRequest
     """
-    Purchased item data, including identity, price, and sale basis.
+    Product data (id, title, price, image_url).
     """
     quantity: Quantity
     """
-    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
+    Quantity tracking for the line item.
     """
     totals: list[total_update_request.TotalUpdateRequest]
     """

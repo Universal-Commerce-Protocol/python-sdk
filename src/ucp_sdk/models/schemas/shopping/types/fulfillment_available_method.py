@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -29,9 +31,9 @@ class FulfillmentAvailableMethod(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    type: str
+    type: Literal["shipping", "pickup"]
     """
-    Fulfillment method type this availability applies to. Well-known values: `shipping`, `pickup`; businesses MAY use additional values.
+    Fulfillment method type this availability applies to.
     """
     line_item_ids: list[str]
     """

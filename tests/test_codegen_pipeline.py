@@ -1686,7 +1686,8 @@ class ArrayContainsInjectorTest(unittest.TestCase):
         wrap the annotation onto multiple lines with a trailing comma; a
         naive "insert before the closing bracket" splice then lands after
         that comma and produces "Field(...),\\n, AfterValidator(...)]" -
-        two commas with nothing between them, a SyntaxError)."""
+        two commas with nothing between them, a SyntaxError).
+        """
         out = postprocess_models.inject_array_contains(
             self.MODULE_LINE_WRAPPED, "TotalsCreateRequest", self.GROUPS
         )

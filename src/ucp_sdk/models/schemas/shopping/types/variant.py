@@ -20,18 +20,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AnyUrl, BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
-from ...common.types import description as description_1
-from ...common.types import link
-from ...common.types import media as media_1
-from ...common.types import price as price_1
-from ...common.types import quantity_unit as quantity_unit_1
-from . import availability as availability_1
+from . import amount as amount_1
 from . import category
+from . import description as description_1
+from . import link
+from . import media as media_1
+from . import price as price_1
 from . import rating as rating_1
 from . import selected_option
-from . import unit_price as unit_price_1
 
 
 class Barcode(BaseModel):
@@ -45,6 +43,86 @@ class Barcode(BaseModel):
     value: str
     """
     Barcode value.
+    """
+
+
+class Measure(BaseModel):
+    """
+    Product quantity in packaging (e.g., 750ml bottle).
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    value: float
+    """
+    Package quantity.
+    """
+    unit: str
+    """
+    Unit of measurement.
+    """
+
+
+class Reference(BaseModel):
+    """
+    Denominator for unit price display (e.g., per 100ml, per 1kg).
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    value: int
+    """
+    Reference quantity.
+    """
+    unit: str
+    """
+    Unit of measurement.
+    """
+
+
+class UnitPrice(BaseModel):
+    """
+    Price per standard unit of measurement. MAY be omitted when unit pricing does not apply.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    amount: amount_1.Amount
+    """
+    Unit price in ISO 4217 minor units. Business MUST return precomputed unit price value: (variant.price / measure.value) * reference.value.
+    """
+    currency: str = Field(..., pattern="^[A-Z]{3}$")
+    """
+    ISO 4217 currency code.
+    """
+    measure: Measure
+    """
+    Product quantity in packaging (e.g., 750ml bottle).
+    """
+    reference: Reference
+    """
+    Denominator for unit price display (e.g., per 100ml, per 1kg).
+    """
+
+
+class Availability(BaseModel):
+    """
+    Variant availability for purchase.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    available: bool | None = None
+    """
+    Whether this variant can be purchased. See status for fulfillment details.
+    """
+    status: str | None = None
+    """
+    Qualifies available with fulfillment state. Well-known values: `in_stock`, `backorder`, `preorder`, `out_of_stock`, `discontinued`.
     """
 
 
@@ -108,21 +186,17 @@ class Variant(BaseModel):
     """
     price: price_1.Price
     """
-    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
-    """
-    quantity_unit: quantity_unit_1.QuantityUnit | None = None
-    """
-    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    Current selling price.
     """
     list_price: price_1.Price | None = None
     """
     List price before discounts (for strikethrough display).
     """
-    unit_price: unit_price_1.UnitPrice | None = None
+    unit_price: UnitPrice | None = None
     """
-    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    Price per standard unit of measurement. MAY be omitted when unit pricing does not apply.
     """
-    availability: availability_1.Availability | None = None
+    availability: Availability | None = None
     """
     Variant availability for purchase.
     """

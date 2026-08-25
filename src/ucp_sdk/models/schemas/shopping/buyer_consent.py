@@ -18,13 +18,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
-from ..common.types import link, reverse_domain_name
-from .cart import Cart as Cart_1
 from .checkout import Checkout as Checkout_1
 from .types.buyer import Buyer as Buyer_1
 
@@ -33,79 +31,39 @@ BuyerConsentExtension = TypeAliasType(
     Annotated[Any, Field(..., title="Buyer Consent Extension")],
 )
 """
-Extends the buyer object with per-purpose consent. Each purpose is keyed by a reverse-DNS identifier and carries the current `granted` state, the `source` of that state (business default or platform-captured buyer decision), a `description`, optional `links`, and optional `segments` for finer-grained channel, vendor, or program decisions scoped to that purpose.
+Extends Checkout with buyer consent tracking for privacy compliance via the buyer object.
 """
 
 
-class ConsentSegment(BaseModel):
+class Consent(BaseModel):
     """
-    A buyer's consent decision for a specific refinement of a parent purpose (e.g., email marketing under the marketing purpose). Overrides the parent's `granted` value for this scope. Segments do not nest further.
+    User consent states for data processing
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    granted: bool
+    analytics: bool | None = None
     """
-    Whether consent has been granted for this segment. Overrides the parent purpose's `granted` value for this specific scope.
+    Consent for analytics and performance tracking.
     """
-    source: Literal["business", "platform"]
+    preferences: bool | None = None
     """
-    Identifies the party that asserted the current `granted` value for this segment. `business` means the value reflects the business's default policy; `platform` means the value reflects an explicit buyer decision captured by the platform.
+    Consent for storing user preferences.
     """
-    description: str
+    marketing: bool | None = None
     """
-    Human-readable description of what the buyer is consenting to within this segment (e.g., 'Promotional emails and exclusive offers').
+    Consent for marketing communications.
     """
-    links: list[link.Link] | None = None
+    sale_of_data: bool | None = None
     """
-    Optional segment-specific links (e.g., channel terms or privacy disclosures).
+    Consent for selling data to third parties (CCPA).
     """
-
-
-class ConsentPurpose(BaseModel):
-    """
-    A buyer's consent decision for a purpose (e.g., marketing, analytics). Carries the current binary state, its source (business default or platform-captured buyer decision), human-readable context, and optional refinements scoping the decision to specific channels, vendors, or programs.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    granted: bool
-    """
-    Whether consent has been granted for this purpose. The `source` field identifies who asserted this state (business default or platform-captured buyer preference).
-    """
-    source: Literal["business", "platform"]
-    """
-    Identifies the party that asserted the current `granted` value. `business` means the value reflects the business's default policy; `platform` means the value reflects an explicit buyer decision captured by the platform.
-    """
-    description: str
-    """
-    Human-readable description of what the buyer is consenting to (e.g., 'Promotional communications across all channels').
-    """
-    links: list[link.Link] | None = None
-    """
-    Optional links providing context (e.g., privacy policy, terms).
-    """
-    segments: (
-        dict[reverse_domain_name.ReverseDomainName, ConsentSegment] | None
-    ) = None
-    """
-    Optional refinements scoping this purpose to specific channels, vendors, or programs. Keys are reverse-DNS identifiers. UCP currently defines two well-known segment identifiers under `dev.ucp.consent.marketing`: `dev.ucp.consent.marketing.email`, `dev.ucp.consent.marketing.sms`. Other segments follow vendor or merchant reverse-DNS conventions.
-    """
-
-
-Consent = TypeAliasType(
-    "Consent", dict[reverse_domain_name.ReverseDomainName, ConsentPurpose]
-)
-"""
-Per-purpose consent. Keys are reverse-DNS purpose identifiers. UCP defines four well-known purposes: `dev.ucp.consent.marketing`, `dev.ucp.consent.analytics`, `dev.ucp.consent.preferences`, `dev.ucp.consent.sale_or_sharing`. Vendors and merchants may define additional purposes under their own reverse-DNS namespace.
-"""
 
 
 class Buyer(Buyer_1):
     """
-    Buyer object extended with per-purpose consent.
+    Buyer object extended with consent tracking.
     """
 
     model_config = ConfigDict(
@@ -113,27 +71,13 @@ class Buyer(Buyer_1):
     )
     consent: Consent | None = None
     """
-    Per-purpose consent decisions and business-advertised consent options.
-    """
-
-
-class Cart(Cart_1):
-    """
-    Cart extended with buyer consent.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    buyer: Buyer | None = None
-    """
-    Buyer with consent tracking.
+    Consent tracking fields.
     """
 
 
 class Checkout(Checkout_1):
     """
-    Checkout extended with buyer consent.
+    Checkout extended with consent tracking via buyer object.
     """
 
     model_config = ConfigDict(

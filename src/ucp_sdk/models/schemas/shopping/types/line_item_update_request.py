@@ -33,9 +33,9 @@ class LineItemUpdateRequest(BaseModel):
     )
     id: str | None = None
     item: item_update_request.ItemUpdateRequest
-    quantity: int = Field(..., ge=1, le=9007199254740991)
+    quantity: int = Field(..., ge=1)
     """
-    Always an integer step count. On Platform requests, steps use the item's Business-authoritative sale basis; omitting `item.quantity_unit` makes no assertion and does not imply `each`. On Business responses, `item.quantity_unit` describes the basis; if absent, it encodes the `each` machine identity (`C62`, 0) and `quantity` counts whole items.
+    Quantity of the item being purchased.
     """
     parent_id: str | None = None
     """

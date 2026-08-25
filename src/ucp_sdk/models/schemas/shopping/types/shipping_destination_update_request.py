@@ -18,13 +18,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import ConfigDict
 
-from ...common.types.postal_address_update_request import (
-    PostalAddressUpdateRequest,
-)
+from .postal_address_update_request import PostalAddressUpdateRequest
 
 
 class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
@@ -38,8 +34,4 @@ class ShippingDestinationUpdateRequest(PostalAddressUpdateRequest):
     id: str | None = None
     """
     ID specific to this shipping destination.
-    """
-    type: Literal["shipping_address"] | None = None
-    """
-    Destination type discriminator.
     """

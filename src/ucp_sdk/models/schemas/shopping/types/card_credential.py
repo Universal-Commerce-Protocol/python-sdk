@@ -27,7 +27,7 @@ from .payment_credential import PaymentCredential
 
 class CardCredential(PaymentCredential):
     """
-    Deprecated: use PAN Credential (`pan_credential.json`) or Network Token Credential (`network_token_credential.json`). A card credential containing sensitive payment card details including raw Primary Account Numbers (PANs). This credential type MUST NOT be used for checkout, only with payment handlers that tokenize or encrypt credentials. CRITICAL: Both parties handling CardCredential (sender and receiver) MUST be PCI DSS compliant. Transmission MUST use HTTPS/TLS with strong cipher suites.
+    A card credential containing sensitive payment card details including raw Primary Account Numbers (PANs). This credential type MUST NOT be used for checkout, only with payment handlers that tokenize or encrypt credentials. CRITICAL: Both parties handling CardCredential (sender and receiver) MUST be PCI DSS compliant. Transmission MUST use HTTPS/TLS with strong cipher suites.
     """
 
     model_config = ConfigDict(
@@ -39,7 +39,7 @@ class CardCredential(PaymentCredential):
     """
     card_number_type: Literal["fpan", "network_token", "dpan"]
     """
-    Deprecated: the credential type now carries this distinction. The type of card number. Network tokens are preferred with fallback to FPAN. See PCI Scope for more details.
+    The type of card number. Network tokens are preferred with fallback to FPAN. See PCI Scope for more details.
     """
     number: str | None = Field(None, examples=["4242424242424242"])
     """

@@ -20,12 +20,13 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from ..common.types import context_create_request, signals_create_request
 from .checkout_create_request import CheckoutCreateRequest
 from .types import (
     attribution_create_request,
     buyer_create_request,
+    context_create_request,
     line_item_create_request,
+    signals_create_request,
 )
 
 

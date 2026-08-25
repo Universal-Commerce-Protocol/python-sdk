@@ -32,7 +32,7 @@ class LineItemCreateRequest(BaseModel):
         extra="allow",
     )
     item: item_create_request.ItemCreateRequest
-    quantity: int = Field(..., ge=1, le=9007199254740991)
+    quantity: int = Field(..., ge=1)
     """
-    Always an integer step count. On Platform requests, steps use the item's Business-authoritative sale basis; omitting `item.quantity_unit` makes no assertion and does not imply `each`. On Business responses, `item.quantity_unit` describes the basis; if absent, it encodes the `each` machine identity (`C62`, 0) and `quantity` counts whole items.
+    Quantity of the item being purchased.
     """

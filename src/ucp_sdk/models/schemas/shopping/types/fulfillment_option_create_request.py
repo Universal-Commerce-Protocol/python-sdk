@@ -18,16 +18,12 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
-
-from .fulfillment_option_base_create_request import (
-    FulfillmentOptionBaseCreateRequest,
-)
+from pydantic import BaseModel, ConfigDict
 
 
-class FulfillmentOptionCreateRequest(FulfillmentOptionBaseCreateRequest):
+class FulfillmentOptionCreateRequest(BaseModel):
     """
-    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15). Extends the fulfillment option base with cost and timing.
+    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
     """
 
     model_config = ConfigDict(

@@ -21,12 +21,13 @@ from __future__ import annotations
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
 from .. import ucp_create_request
-from ..common.types import message_create_request, totals_create_request
 from .types import (
     adjustment_create_request,
     expectation_create_request,
     fulfillment_event_create_request,
+    message_create_request,
     order_line_item_create_request,
+    totals_create_request,
 )
 
 

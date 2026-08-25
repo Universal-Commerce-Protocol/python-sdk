@@ -18,14 +18,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
-from . import fulfillment_group_update_request
+from . import (
+    fulfillment_destination_update_request,
+    fulfillment_group_update_request,
+)
 
 
 class FulfillmentMethodUpdateRequest(BaseModel):
     """
-    A fulfillment method with destinations and groups.
+    A fulfillment method (shipping or pickup) with destinations and groups.
     """
 
     model_config = ConfigDict(
@@ -35,17 +40,26 @@ class FulfillmentMethodUpdateRequest(BaseModel):
     """
     Unique fulfillment method identifier.
     """
-    type: str | None = None
+    type: Literal["shipping", "pickup"] | None = None
     """
-    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
+    Fulfillment method type.
     """
     line_item_ids: list[str]
     """
     Line item IDs fulfilled via this method.
     """
+    destinations: (
+        list[
+            fulfillment_destination_update_request.FulfillmentDestinationUpdateRequest
+        ]
+        | None
+    ) = None
+    """
+    Available destinations. For shipping: addresses. For pickup: retail locations.
+    """
     selected_destination_id: str | None = None
     """
-    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
+    ID of the selected destination.
     """
     groups: (
         list[fulfillment_group_update_request.FulfillmentGroupUpdateRequest]

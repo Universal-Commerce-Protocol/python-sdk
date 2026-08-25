@@ -18,11 +18,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import ConfigDict
 
-from ...common.types.postal_address import PostalAddress
+from .postal_address import PostalAddress
 
 
 class ShippingDestination(PostalAddress):
@@ -36,8 +34,4 @@ class ShippingDestination(PostalAddress):
     id: str
     """
     ID specific to this shipping destination.
-    """
-    type: Literal["shipping_address"]
-    """
-    Destination type discriminator.
     """

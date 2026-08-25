@@ -20,9 +20,7 @@ from __future__ import annotations
 
 from pydantic import AnyUrl, BaseModel, ConfigDict
 
-from ...common.types import amount
-from ...common.types import quantity_unit as quantity_unit_1
-from . import unit_price as unit_price_1
+from . import amount
 
 
 class Item(BaseModel):
@@ -39,15 +37,7 @@ class Item(BaseModel):
     """
     price: amount.Amount
     """
-    Unit price in ISO 4217 minor units. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`.
-    """
-    quantity_unit: quantity_unit_1.QuantityUnit | None = None
-    """
-    Sale basis this item's `quantity` is denominated in. On an authoritative Business response, absence encodes the default `each` machine identity (`C62`, 0); the Business MUST include this descriptor for every non-`each` response. On Platform requests, omission makes no assertion: the Business interprets `quantity` using the item's authoritative sale basis. If the Platform includes this descriptor, it asserts the unit-descriptor machine identity. The Business MUST compare that machine identity (`unit`, effective `scale`), ignore `display_text` and `increment`, and resolve a mismatch by conversion surfaced as a visible line revision with a warning, or by rejection with a recoverable business outcome; silent reinterpretation is forbidden. An explicit `C62` descriptor at effective scale 0 matches an authoritative basis represented by an absent descriptor.
-    """
-    unit_price: unit_price_1.UnitPrice | None = None
-    """
-    Pricing basis for this item. On an authoritative Business response, the Business MUST include `unit_price` on every line whose pricing basis differs from its sale basis (for example, priced per pound but sold per `each`); presence on a line marks the rate as transactional rather than display-only. When the pricing basis is the sale basis, `item.price` fully denominates the charge and this field MAY be omitted.
+    Unit price in ISO 4217 minor units.
     """
     image_url: AnyUrl | None = None
     """

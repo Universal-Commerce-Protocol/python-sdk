@@ -18,20 +18,31 @@
 
 from __future__ import annotations
 
-from pydantic import AwareDatetime, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from ...common.types import total
-from .fulfillment_option_base import FulfillmentOptionBase
+from . import total
 
 
-class FulfillmentOption(FulfillmentOptionBase):
+class FulfillmentOption(BaseModel):
     """
-    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15). Extends the fulfillment option base with cost and timing.
+    A fulfillment option within a group (e.g., Standard Shipping $5, Express $15).
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
+    id: str
+    """
+    Unique fulfillment option identifier.
+    """
+    title: str
+    """
+    Short label (e.g., 'Express Shipping', 'Curbside Pickup').
+    """
+    description: str | None = None
+    """
+    Complete context for buyer decision (e.g., 'Arrives Dec 12-15 via FedEx').
+    """
     carrier: str | None = None
     """
     Carrier name (for shipping).

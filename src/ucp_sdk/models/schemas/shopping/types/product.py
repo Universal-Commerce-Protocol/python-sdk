@@ -22,10 +22,11 @@ from typing import Any
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
-from ...common.types import description as description_1
-from ...common.types import media as media_1
-from ...common.types import price_range as price_range_1
-from . import category, product_option
+from . import category
+from . import description as description_1
+from . import media as media_1
+from . import price_range as price_range_1
+from . import product_option
 from . import rating as rating_1
 from . import variant
 
