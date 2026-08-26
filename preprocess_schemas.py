@@ -49,7 +49,11 @@ def iter_nodes(root):
         # Identify children for the next iteration
         children = []
         if isinstance(curr, dict):
-            children = curr.values()
+            for k, v in curr.items():
+                if k == "properties" and isinstance(v, dict):
+                    children.extend(v.values())
+                else:
+                    children.append(v)
         elif isinstance(curr, list):
             children = curr
 
