@@ -27,7 +27,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "datamodel-code-generator[http,ruff]>=0.50.0",
+    # Exact pins: the model-drift CI job regenerates the models against the
+    # pinned UCP spec and asserts byte-identical output, so the codegen
+    # toolchain must resolve reproducibly. Bump these pins and regenerate
+    # the models in the same PR.
+    "datamodel-code-generator[http]==0.71.0",
+    "ruff==0.16.1",
 ]
 
 [build-system]

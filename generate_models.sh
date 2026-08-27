@@ -27,6 +27,13 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
+# Check if uv is installed before cloning or modifying generated files
+if ! command -v uv &> /dev/null; then
+    echo "Error: uv not found."
+    echo "Please install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
+fi
+
 # UCP Version to use (if provided, use release/$1 branch; otherwise, use main)
 if [ -z "$1" ]; then
     BRANCH="main"
