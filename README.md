@@ -42,7 +42,8 @@ UCP schema:
 
 | SDK Version       | UCP Schema Version |
 | ----------------- | ------------------ |
-| **`0.4.x`**       | **`2026-04-08`**   |
+| **`0.5.x`**       | **`2026-08-25`**   |
+| `0.4.x`           | `2026-04-08`       |
 | `0.3.x`           | `2026-01-23`       |
 | `0.2.x` / `0.1.x` | `2026-01-11`       |
 
@@ -71,20 +72,22 @@ from ucp_sdk.models.schemas.shopping.checkout import Checkout
 checkout = Checkout.model_validate(checkout_data)
 
 # Access typed fields
-print(checkout.status)  # "incomplete" | "ready_for_complete" | ...
-print(checkout.currency)  # ISO 4217 currency code
+print(checkout.status)       # "incomplete" | "ready_for_complete" | ...
+print(checkout.currency)     # ISO 4217 currency code
 for item in checkout.line_items:
     print(f"{item.item.title}: {item.quantity}")
 ```
 
 ### Available model packages
 
-| Package                                 | Description                                         |
-| --------------------------------------- | --------------------------------------------------- |
-| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, payment models      |
-| `ucp_sdk.models.schemas.shopping.types` | Line items, totals, buyer, fulfillment, signals     |
-| `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings           |
-| `ucp_sdk.models.schemas`                | Service definitions, capabilities, payment handlers |
+| Package                                 | Description                                                       |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `ucp_sdk.models.schemas.common`         | Location search/lookup, identity linking, loyalty, payment terms  |
+| `ucp_sdk.models.schemas.common.types`   | Shared primitives (amounts, prices, totals, postal address, etc.) |
+| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, buyer consent, permalink models   |
+| `ucp_sdk.models.schemas.shopping.types` | Line items, adjustments, fulfillments, destinations, attribution  |
+| `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings                         |
+| `ucp_sdk.models.schemas`                | Service definitions, capabilities, profile, payment handlers      |
 
 ### Validation
 
@@ -133,7 +136,7 @@ uv sync
 ```
 
 Where `<version>` is the version of the UCP specification to use (for example,
-"2026-04-08").
+"2026-08-25").
 
 If no version is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.

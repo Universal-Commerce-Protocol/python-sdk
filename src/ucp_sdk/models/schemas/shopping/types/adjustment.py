@@ -20,9 +20,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from . import total
+from ...common.types import measure as measure_1
+from ...common.types import total
 
 
 class LineItem(BaseModel):
@@ -33,9 +34,13 @@ class LineItem(BaseModel):
     """
     Line item ID reference.
     """
-    quantity: int
+    quantity: int = Field(..., ge=-9007199254740991, le=9007199254740991)
     """
-    Signed quantity affected by this adjustment. Negative values represent reductions (e.g. returns); positive values represent additions (e.g. exchanges).
+    Signed integer count of steps of the referenced line item's `quantity_unit` (`10^-scale` × `unit`); when `quantity_unit` is absent, it counts whole items (`each`). Negative values represent reductions (e.g. returns); positive values represent additions (e.g. exchanges).
+    """
+    measure: measure_1.Measure | None = None
+    """
+    The settled measurement this adjustment reconciles (for example, actual picked weight), present when the line's price settles by measurement. Its unit identity MUST match the line's pricing basis (`item.unit_price` measure/reference unit); no unit conversion. A pure price settlement uses `quantity: 0` together with `measure` and a totals delta.
     """
 
 

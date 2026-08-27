@@ -23,7 +23,7 @@ from typing import Annotated, Any
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
-from .shopping.types import available_payment_instrument
+from .common.types import available_payment_instrument
 
 PaymentHandler = TypeAliasType(
     "PaymentHandler", Annotated[Any, Field(..., title="Payment Handler")]

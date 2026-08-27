@@ -18,26 +18,16 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
 
-class AllowsMultiDestination(BaseModel):
-    """
-    Permits multiple destinations per method type.
-    """
-
+class MultiDestinationItem(BaseModel):
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
-    shipping: bool | None = None
+    method: str
     """
-    Multiple shipping destinations allowed.
-    """
-    pickup: bool | None = None
-    """
-    Multiple pickup locations allowed.
+    Fulfillment method type (e.g. `shipping`, `pickup`). Optional per-method constraints MAY be added alongside.
     """
 
 
@@ -49,13 +39,11 @@ class BusinessFulfillmentConfig(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    allows_multi_destination: AllowsMultiDestination | None = None
+    multi_destination: list[MultiDestinationItem] | None = None
     """
-    Permits multiple destinations per method type.
+    Method types that permit multiple destinations within one cart (e.g. split shipping across addresses). Listing a method permits it; an omitted method does not. Open — businesses MAY list any method type.
     """
-    allows_method_combinations: (
-        list[list[Literal["shipping", "pickup"]]] | None
-    ) = None
+    method_combinations: list[list[str]] | None = None
     """
-    Allowed method type combinations.
+    Method-type combinations the business permits within one cart. Each inner array is a permitted set of method `type` values (e.g. shipping + pickup).
     """

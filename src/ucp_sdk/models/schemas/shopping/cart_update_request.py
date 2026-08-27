@@ -20,13 +20,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from ..common.types import context_update_request, signals_update_request
 from .checkout_update_request import CheckoutUpdateRequest
 from .types import (
     attribution_update_request,
     buyer_update_request,
-    context_update_request,
     line_item_update_request,
-    signals_update_request,
 )
 
 
@@ -38,10 +37,6 @@ class CartUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
-    """
-    Unique cart identifier.
-    """
     line_items: list[line_item_update_request.LineItemUpdateRequest]
     """
     Cart line items. Same structure as checkout. Full replacement on update.

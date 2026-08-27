@@ -20,13 +20,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from . import payment_create_request
+from ..common.types import (
+    context_create_request,
+    payment_create_request,
+    signals_create_request,
+)
 from .types import (
     attribution_create_request,
     buyer_create_request,
-    context_create_request,
     line_item_create_request,
-    signals_create_request,
 )
 
 

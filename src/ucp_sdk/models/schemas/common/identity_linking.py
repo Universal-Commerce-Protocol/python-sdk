@@ -23,7 +23,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
-from ..shopping.types import description as description_1
+from .types import description as description_1
 
 IdentityLinking = TypeAliasType(
     "IdentityLinking", Annotated[Any, Field(..., title="Identity Linking")]
@@ -53,13 +53,27 @@ ScopeToken = TypeAliasType(
         str,
         Field(
             ...,
-            pattern="^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_]*)+:[a-z][a-z0-9_]*$",
+            pattern="^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+:[a-z][a-z0-9_]*$",
         ),
     ],
 )
 """
 OAuth scope string formed by joining a capability name and a scope name with a colon: '{capability}:{scope}', e.g. 'dev.ucp.shopping.order:read'. Capability names use reverse-DNS naming; scope names denote the permission granted, defined by each capability's spec (e.g. 'read', 'manage', 'create'). Platforms request these strings verbatim in OAuth 'scope' parameters; issued tokens carry them in the 'scope' claim.
 """
+
+
+class Provider(BaseModel):
+    """
+    A trusted identity provider for delegated authentication, keyed by the 'type' discriminator. 'oauth2' denotes an OAuth 2.0 / OIDC authorization server. Future versions MAY define additional types (e.g. wallet attestation) as non-breaking extensions; platforms MUST treat entries whose 'type' they do not support as filtered out (see Provider Selection).
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
+    Provider mechanism discriminator. 'oauth2' for OAuth 2.0 / OIDC authorization servers. Additional values MAY be defined by future versions; the value is an open string, not a closed enum, so unrecognized types remain valid and are filtered at runtime.
+    """
 
 
 IdentityLinking1 = TypeAliasType("IdentityLinking1", Any)
