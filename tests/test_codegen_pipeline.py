@@ -1247,6 +1247,75 @@ class ConditionalRequiredInjectorTest(unittest.TestCase):
             found = postprocess_models.find_conditional_required(Path(tmp))
         self.assertEqual(found, {})
 
+    def test_schema_scan_threads_enclosing_scope_into_titled_allof_branch(
+        self,
+    ):
+        """An allOf branch with neither its own `properties` nor a type
+        title of its own is invisible today: the scan only looks at
+        `node.get("properties")` on the branch itself, so a branch that
+        relies on the enclosing object's properties (JWK's five if/then
+        rules, none of which repeat `properties`) is silently dropped with
+        no warning. And when the branch DOES carry a human-readable
+        documentation `title` (JWK's branches are each titled, e.g. "EC
+        keys carry crv, x, y"), the current code adopts that title as the
+        class name via `_alias_name`, misattributing the rule to a
+        nonexistent class instead of the enclosing `JwkPublicKey`. This
+        mirrors profile.json's jwk_public_key def exactly.
+        """
+        schema = {
+            "$defs": {
+                "jwk_public_key": {
+                    "type": "object",
+                    "required": ["kid", "kty"],
+                    "properties": {
+                        "kid": {"type": "string"},
+                        "kty": {"type": "string"},
+                        "crv": {"type": "string"},
+                        "x": {"type": "string"},
+                        "y": {"type": "string"},
+                    },
+                    "allOf": [
+                        {
+                            "title": "EC keys carry crv, x, y",
+                            "if": {
+                                "properties": {"kty": {"const": "EC"}},
+                                "required": ["kty"],
+                            },
+                            "then": {"required": ["crv", "x", "y"]},
+                        },
+                        {
+                            "title": "OKP keys carry crv, x",
+                            "if": {
+                                "properties": {"kty": {"const": "OKP"}},
+                                "required": ["kty"],
+                            },
+                            "then": {"required": ["crv", "x"]},
+                        },
+                    ],
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "profile.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_required(Path(tmp))
+        self.assertEqual(
+            found,
+            {
+                "JwkPublicKey": [
+                    {
+                        "discriminator": "kty",
+                        "values": ["EC"],
+                        "required": ["crv", "x", "y"],
+                    },
+                    {
+                        "discriminator": "kty",
+                        "values": ["OKP"],
+                        "required": ["crv", "x"],
+                    },
+                ]
+            },
+        )
+
     def test_injection_is_idempotent(self):
         once = postprocess_models.inject_conditional_required(
             self.MODULE, "Response", self.RULES
@@ -1356,6 +1425,97 @@ class ConditionalBoundsInjectorTest(unittest.TestCase):
         self.assertEqual(found, {"Total": [self.RULES[1]]})
         self.assertIn("unsupported", stderr.getvalue())
 
+    def test_schema_scan_recognizes_const_pinning(self):
+        """A `then.properties.<field>.const` pin is dropped today: describe()
+        only accepts the four numeric bound keywords in _BOUND_KEYWORDS, so
+        `set(constraint) - set(_BOUND_KEYWORDS)` is non-empty for a bare
+        `{"const": ...}` constraint and the whole rule returns None. This
+        mirrors unit.json exactly: when unit is C62, scale must be exactly
+        0. The branch carries no title of its own (unlike the JWK case
+        below), isolating bug (b) from bug (c).
+        """
+        schema = {
+            "title": "Unit",
+            "type": "object",
+            "properties": {
+                "unit": {"type": "string"},
+                "scale": {"type": "integer"},
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"unit": {"const": "C62"}},
+                        "required": ["unit"],
+                    },
+                    "then": {"properties": {"scale": {"const": 0}}},
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "unit.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_bounds(Path(tmp))
+        self.assertEqual(
+            found,
+            {
+                "Unit": [
+                    {
+                        "discriminator": "unit",
+                        "values": ["C62"],
+                        "bounds": {"scale": {"const": 0}},
+                    }
+                ]
+            },
+        )
+
+    def test_schema_scan_recognizes_const_pinning_in_titled_allof_branch(
+        self,
+    ):
+        """profile.json's JWK curve/algorithm pairing rules combine both
+        gaps at once: `then.properties.alg.const` (bug b, see above) inside
+        a branch that carries its own documentation `title` (bug c, see
+        ConditionalRequiredInjectorTest) which must not overwrite the
+        enclosing `JwkPublicKey` class name.
+        """
+        schema = {
+            "$defs": {
+                "jwk_public_key": {
+                    "type": "object",
+                    "required": ["kid", "kty"],
+                    "properties": {
+                        "kid": {"type": "string"},
+                        "kty": {"type": "string"},
+                        "crv": {"type": "string"},
+                        "alg": {"type": "string"},
+                    },
+                    "allOf": [
+                        {
+                            "title": "P-256 pairs with ES256",
+                            "if": {
+                                "properties": {"crv": {"const": "P-256"}},
+                                "required": ["crv"],
+                            },
+                            "then": {"properties": {"alg": {"const": "ES256"}}},
+                        }
+                    ],
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "profile.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_bounds(Path(tmp))
+        self.assertEqual(
+            found,
+            {
+                "JwkPublicKey": [
+                    {
+                        "discriminator": "crv",
+                        "values": ["P-256"],
+                        "bounds": {"alg": {"const": "ES256"}},
+                    }
+                ]
+            },
+        )
+
     def test_injection_is_idempotent(self):
         once = postprocess_models.inject_conditional_bounds(
             self.MODULE, "Total", self.RULES
@@ -1364,6 +1524,39 @@ class ConditionalBoundsInjectorTest(unittest.TestCase):
             once, "Total", self.RULES
         )
         self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_const_pinning(self):
+        module = (
+            "from __future__ import annotations\n"
+            "\n"
+            "from pydantic import BaseModel, ConfigDict\n"
+            "\n"
+            "\n"
+            "class Unit(BaseModel):\n"
+            '    model_config = ConfigDict(extra="allow")\n'
+            "    unit: str\n"
+            "    scale: int | None = 0\n"
+        )
+        rules = [
+            {
+                "discriminator": "unit",
+                "values": ["C62"],
+                "bounds": {"scale": {"const": 0}},
+            }
+        ]
+        out = postprocess_models.inject_conditional_bounds(
+            module, "Unit", rules
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        unit = namespace["Unit"]
+        with self.assertRaises(ValidationError):
+            unit(unit="C62", scale=5)
+        unit(unit="C62", scale=0)
+        unit(unit="C62")
+        # A unit outside the pinned vocabulary is unconstrained.
+        unit(unit="KGM", scale=3)
 
     @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
     def test_injected_validator_enforces_conditional_bounds(self):
@@ -2170,6 +2363,115 @@ class EntityVersionValidationSemanticTest(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             Base.model_validate({"version": {"not": "a version"}})
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class JwkConditionalRulesSemanticTest(unittest.TestCase):
+    """profile.json's jwk_public_key carries five if/then rules, all five
+    dropped by the generator today: two conditional-required rules (an EC
+    key needs crv/x/y, an OKP key needs crv/x) and three conditional
+    const-pin rules pairing a curve with its algorithm (P-256/ES256,
+    P-384/ES384, Ed25519/EdDSA). Security-adjacent: a profile publishing an
+    EC key with no curve, or an algorithm that does not match its curve,
+    currently passes SDK validation and would only fail (or silently
+    misverify) downstream at signature-verification time.
+    """
+
+    def _jwk(self):
+        from ucp_sdk.models.schemas.profile import JwkPublicKey
+
+        return JwkPublicKey
+
+    def test_ec_key_without_curve_and_coordinates_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._jwk()(kid="k1", kty="EC")
+
+    def test_ec_key_with_curve_and_coordinates_accepted(self):
+        key = self._jwk()(
+            kid="k1", kty="EC", crv="P-256", x="AA", y="BB", alg="ES256"
+        )
+        self.assertEqual(key.crv, "P-256")
+
+    def test_okp_key_without_curve_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._jwk()(kid="k2", kty="OKP")
+
+    def test_okp_key_with_curve_accepted(self):
+        key = self._jwk()(kid="k2", kty="OKP", crv="Ed25519", x="AA")
+        self.assertEqual(key.crv, "Ed25519")
+
+    def test_p256_with_mismatched_algorithm_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._jwk()(
+                kid="k3", kty="EC", crv="P-256", x="AA", y="BB", alg="EdDSA"
+            )
+
+    def test_p256_with_matching_algorithm_accepted(self):
+        self._jwk()(
+            kid="k3", kty="EC", crv="P-256", x="AA", y="BB", alg="ES256"
+        )
+
+    def test_p384_with_mismatched_algorithm_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._jwk()(
+                kid="k4", kty="EC", crv="P-384", x="AA", y="BB", alg="ES256"
+            )
+
+    def test_p384_with_matching_algorithm_accepted(self):
+        self._jwk()(
+            kid="k4", kty="EC", crv="P-384", x="AA", y="BB", alg="ES384"
+        )
+
+    def test_ed25519_with_mismatched_algorithm_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._jwk()(kid="k5", kty="OKP", crv="Ed25519", x="AA", alg="ES256")
+
+    def test_ed25519_with_matching_algorithm_accepted(self):
+        self._jwk()(kid="k5", kty="OKP", crv="Ed25519", x="AA", alg="EdDSA")
+
+    def test_algorithm_omitted_is_unconstrained(self):
+        # alg is optional; verifiers derive it from crv when absent.
+        self._jwk()(kid="k6", kty="EC", crv="P-256", x="AA", y="BB")
+
+    def test_unrecognized_curve_is_unconstrained(self):
+        # The crv/kty/alg vocabularies are open (see the schema
+        # description); a curve outside the three well-known pairings
+        # carries no algorithm rule.
+        self._jwk()(
+            kid="k7", kty="EC", crv="secp256k1", x="AA", y="BB", alg="ES256K"
+        )
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class UnitScaleSemanticTest(unittest.TestCase):
+    """unit.json: when unit is C62, scale (if present) MUST be 0."""
+
+    def _unit(self):
+        from ucp_sdk.models.schemas.common.types.unit import Unit
+
+        return Unit
+
+    def test_c62_with_nonzero_scale_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._unit()(unit="C62", scale=5, display_text="pieces")
+
+    def test_c62_with_zero_scale_accepted(self):
+        unit = self._unit()(unit="C62", scale=0, display_text="pieces")
+        self.assertEqual(unit.scale, 0)
+
+    def test_c62_with_scale_omitted_defaults_to_zero(self):
+        # scale defaults to 0, which already satisfies the C62 pin.
+        unit = self._unit()(unit="C62", display_text="pieces")
+        self.assertEqual(unit.scale, 0)
+
+    def test_other_unit_with_nonzero_scale_accepted(self):
+        # The pin is C62-specific; any other unit is unconstrained.
+        unit = self._unit()(unit="GRM", scale=3, display_text="grams")
+        self.assertEqual(unit.scale, 3)
 
 
 if __name__ == "__main__":
