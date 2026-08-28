@@ -84,3 +84,14 @@ class LocationServesUpdateRequest(BaseModel):
                 "At least 1 property must be provided (schema minProperties=1)"
             )
         return self
+
+    @model_validator(mode="after")
+    def _enforce_max_properties(self):
+        """JSON Schema maxProperties: allow at most 1
+        provided property."""
+        provided = self.model_fields_set | set(self.model_extra or {})
+        if len(provided) > 1:
+            raise ValueError(
+                "At most 1 property may be provided (schema maxProperties=1)"
+            )
+        return self
