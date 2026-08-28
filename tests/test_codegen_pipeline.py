@@ -1576,6 +1576,268 @@ class ConditionalBoundsInjectorTest(unittest.TestCase):
         total(type="total", amount=-5)
 
 
+class ConditionalArrayRetypingInjectorTest(unittest.TestCase):
+    """A discriminator retyping an array property's items to a different
+    referenced schema file is a third if/then shape, distinct from
+    conditional-required and conditional-bounds above. This mirrors
+    fulfillment_method.json: the base `destinations` property is typed via
+    `items.$ref` to fulfillment_destination.json, but a `shipping` method's
+    destinations should really be shipping_destination.json items (postal
+    address fields, `type` const `shipping_address`) and a `pickup`
+    method's should really be location_destination.json items (`type`
+    const `business_location`). The generator drops both retyping branches
+    entirely -- no scanner in this module ever looked for this shape.
+    """
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "from . import destination\n"
+        "\n"
+        "\n"
+        "class Method(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    type: str\n"
+        "    destinations: list[destination.Destination] | None = None\n"
+    )
+    RULES = [
+        {
+            "discriminator": "type",
+            "values": ["shipping"],
+            "field": "destinations",
+            "required": ["id", "type"],
+            "consts": {"type": "shipping_address"},
+        },
+        {
+            "discriminator": "type",
+            "values": ["pickup"],
+            "field": "destinations",
+            "required": ["type"],
+            "consts": {"type": "business_location"},
+        },
+    ]
+
+    def _schema(self):
+        return {
+            "title": "Method",
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "destinations": {
+                    "type": "array",
+                    "items": {"$ref": "destination.json"},
+                },
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"type": {"const": "shipping"}},
+                        "required": ["type"],
+                    },
+                    "then": {
+                        "properties": {
+                            "destinations": {
+                                "type": "array",
+                                "items": {"$ref": "shipping_destination.json"},
+                            }
+                        }
+                    },
+                },
+                {
+                    "if": {
+                        "properties": {"type": {"const": "pickup"}},
+                        "required": ["type"],
+                    },
+                    "then": {
+                        "properties": {
+                            "destinations": {
+                                "type": "array",
+                                "items": {"$ref": "location_destination.json"},
+                            }
+                        }
+                    },
+                },
+            ],
+        }
+
+    def _write_schema_tree(self, tmp):
+        Path(tmp, "method.json").write_text(json.dumps(self._schema()))
+        Path(tmp, "destination.json").write_text(
+            json.dumps(
+                {
+                    "title": "Destination",
+                    "type": "object",
+                    "required": ["id", "type"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "type": {"type": "string"},
+                    },
+                }
+            )
+        )
+        Path(tmp, "shipping_destination.json").write_text(
+            json.dumps(
+                {
+                    "title": "Shipping Destination",
+                    "type": "object",
+                    "required": ["id", "type"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "type": {"type": "string", "const": "shipping_address"},
+                    },
+                    "allOf": [{"$ref": "postal_address.json"}],
+                }
+            )
+        )
+        Path(tmp, "location_destination.json").write_text(
+            json.dumps(
+                {
+                    "title": "Business Location Destination",
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                        "type": {"type": "string", "const": "business_location"}
+                    },
+                    "allOf": [{"$ref": "location_summary.json"}],
+                }
+            )
+        )
+
+    def test_schema_scan_reads_both_retyping_branches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_schema_tree(tmp)
+            found = postprocess_models.find_conditional_array_retyping(
+                Path(tmp)
+            )
+        self.assertEqual(found, {"Method": self.RULES})
+
+    def test_schema_scan_ignores_branch_matching_the_base_ref(self):
+        # A then.properties.<field>.items.$ref identical to the base ref is
+        # not a retype -- nothing to approximate. The sibling pickup branch
+        # (still a genuine retype) is unaffected.
+        schema = self._schema()
+        schema["allOf"][0]["then"]["properties"]["destinations"]["items"][
+            "$ref"
+        ] = "destination.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_schema_tree(tmp)
+            Path(tmp, "method.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_conditional_array_retyping(
+                Path(tmp)
+            )
+        self.assertEqual(found, {"Method": [self.RULES[1]]})
+
+    def test_schema_scan_skips_rule_whose_field_was_stripped(self):
+        # A request variant that omits `destinations` entirely (as
+        # fulfillment_method_create_request.json does) makes the rule
+        # inapplicable, not malformed -- no warning, and no rule recorded
+        # for the variant's own class.
+        schema = self._schema()
+        schema["title"] = "Method Create Request"
+        del schema["properties"]["destinations"]
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_schema_tree(tmp)
+            Path(tmp, "method_create_request.json").write_text(
+                json.dumps(schema)
+            )
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                found = postprocess_models.find_conditional_array_retyping(
+                    Path(tmp)
+                )
+        self.assertNotIn("MethodCreateRequest", found)
+        self.assertEqual(found, {"Method": self.RULES})
+        self.assertNotIn("unsupported", stderr.getvalue())
+
+    def test_schema_scan_warns_when_retyped_ref_cannot_be_loaded(self):
+        schema = self._schema()
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "method.json").write_text(json.dumps(schema))
+            Path(tmp, "destination.json").write_text(
+                json.dumps({"title": "Destination", "type": "object"})
+            )
+            # shipping_destination.json / location_destination.json are
+            # deliberately absent.
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                found = postprocess_models.find_conditional_array_retyping(
+                    Path(tmp)
+                )
+        self.assertEqual(found, {})
+        self.assertIn("could not be loaded", stderr.getvalue())
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_conditional_array_retyping(
+            self.MODULE, "Method", self.RULES
+        )
+        twice = postprocess_models.inject_conditional_array_retyping(
+            once, "Method", self.RULES
+        )
+        self.assertEqual(once, twice)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_retyping(self):
+        module = (
+            "from __future__ import annotations\n"
+            "\n"
+            "from pydantic import BaseModel, ConfigDict\n"
+            "\n"
+            "\n"
+            "class Destination(BaseModel):\n"
+            '    model_config = ConfigDict(extra="allow")\n'
+            "    type: str\n"
+            "    id: str\n"
+            "\n"
+            "\n"
+            "class Method(BaseModel):\n"
+            '    model_config = ConfigDict(extra="allow")\n'
+            "    type: str\n"
+            "    destinations: list[Destination] | None = None\n"
+        )
+        out = postprocess_models.inject_conditional_array_retyping(
+            module, "Method", self.RULES
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        # Forward reference (from __future__ import annotations): Method's
+        # "destinations: list[Destination]" annotation resolves once both
+        # classes exist in the exec'd namespace.
+        namespace["Method"].model_rebuild(_types_namespace=namespace)
+        method_cls = namespace["Method"]
+        destination_cls = namespace["Destination"]
+        with self.assertRaises(ValidationError):
+            method_cls(
+                type="shipping",
+                destinations=[
+                    destination_cls(type="business_location", id="d1")
+                ],
+            )
+        with self.assertRaises(ValidationError):
+            method_cls(
+                type="pickup",
+                destinations=[
+                    destination_cls(type="shipping_address", id="d1")
+                ],
+            )
+        method_cls(
+            type="shipping",
+            destinations=[destination_cls(type="shipping_address", id="d1")],
+        )
+        method_cls(
+            type="pickup",
+            destinations=[destination_cls(type="business_location", id="d1")],
+        )
+        # A type carrying no rule is unconstrained (open vocabulary).
+        method_cls(
+            type="courier",
+            destinations=[destination_cls(type="anything", id="d1")],
+        )
+        # No destinations at all is unconstrained regardless of type.
+        method_cls(type="shipping")
+
+
 class InjectorTest(unittest.TestCase):
     """The post-generation injector's own behavior."""
 
@@ -2642,6 +2904,98 @@ class UnitScaleSemanticTest(unittest.TestCase):
         # The pin is C62-specific; any other unit is unconstrained.
         unit = self._unit()(unit="GRM", scale=3, display_text="grams")
         self.assertEqual(unit.scale, 3)
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class FulfillmentMethodDestinationRetypingSemanticTest(unittest.TestCase):
+    """fulfillment_method.json retypes `destinations` per `type`: a
+    `shipping` method's destinations are shipping_destination.json items
+    (`type` const `shipping_address`), a `pickup` method's are
+    location_destination.json items (`type` const `business_location`).
+    The committed FulfillmentMethod model, before this fix, accepted any
+    FulfillmentDestination (bare `type: str`, `id: str`) regardless of the
+    method's own type, so a `shipping` method could list a
+    `business_location` destination and it would validate.
+    """
+
+    def _method(self):
+        from ucp_sdk.models.schemas.shopping.types.fulfillment_method import (
+            FulfillmentMethod,
+        )
+
+        return FulfillmentMethod
+
+    def _destination(self):
+        from ucp_sdk.models.schemas.shopping.types.fulfillment_destination import (
+            FulfillmentDestination,
+        )
+
+        return FulfillmentDestination
+
+    def test_shipping_method_with_business_location_destination_rejected(
+        self,
+    ):
+        with self.assertRaises(ValidationError):
+            self._method()(
+                id="m1",
+                type="shipping",
+                line_item_ids=["li1"],
+                destinations=[
+                    self._destination()(type="business_location", id="d1")
+                ],
+            )
+
+    def test_pickup_method_with_shipping_address_destination_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._method()(
+                id="m2",
+                type="pickup",
+                line_item_ids=["li1"],
+                destinations=[
+                    self._destination()(type="shipping_address", id="d1")
+                ],
+            )
+
+    def test_shipping_method_with_shipping_address_destination_accepted(
+        self,
+    ):
+        method = self._method()(
+            id="m1",
+            type="shipping",
+            line_item_ids=["li1"],
+            destinations=[
+                self._destination()(type="shipping_address", id="d1")
+            ],
+        )
+        self.assertEqual(method.destinations[0].type, "shipping_address")
+
+    def test_pickup_method_with_business_location_destination_accepted(self):
+        method = self._method()(
+            id="m2",
+            type="pickup",
+            line_item_ids=["li1"],
+            destinations=[
+                self._destination()(type="business_location", id="d1")
+            ],
+        )
+        self.assertEqual(method.destinations[0].type, "business_location")
+
+    def test_method_type_outside_the_pinned_vocabulary_is_unconstrained(
+        self,
+    ):
+        # type is an open vocabulary ("Businesses MAY use additional
+        # values"); only shipping/pickup carry a retyping rule.
+        self._method()(
+            id="m3",
+            type="curbside",
+            line_item_ids=["li1"],
+            destinations=[self._destination()(type="anything", id="d1")],
+        )
+
+    def test_method_without_destinations_is_unconstrained(self):
+        self._method()(id="m4", type="shipping", line_item_ids=["li1"])
 
 
 if __name__ == "__main__":
