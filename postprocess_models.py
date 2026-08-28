@@ -14,16 +14,23 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Seven constraint families are handled:
+Eight constraint families are handled:
 
-* ``minProperties`` on an object schema WITH declared properties is dropped by
-  the generator (issue #49): every field is optional, so an empty instance
-  passes validation in violation of the schema. (``minProperties`` on a
-  free-form object property is already handled natively — the generator maps it
-  to ``Field(min_length=...)`` on the dict field.) The script scans the
-  preprocessed schemas for root-level ``minProperties`` constraints and injects
-  a ``model_validator(mode="after")`` into the matching generated classes.
-  JSON Schema counts the keys present on the object, so the validator counts
+* ``minProperties`` / ``maxProperties`` on an object schema WITH declared
+  properties are dropped by the generator: every field is optional, so an
+  empty instance (or, for ``maxProperties``, an over-full one) passes
+  validation in violation of the schema. ``minProperties`` support (issue
+  #49, PR #55) never grew a ``maxProperties`` counterpart, so
+  ``location_serves.json``'s ``maxProperties: 1`` ("the Platform MUST
+  supply exactly one target form") went unenforced even though its sibling
+  ``minProperties: 1`` on the same schema was already caught. (Either bound
+  on a free-form object property is already handled natively — the
+  generator maps it to ``Field(min_length=..., max_length=...)`` on the
+  dict field.) The script scans the preprocessed schemas for root-level
+  ``minProperties``/``maxProperties`` constraints and injects a
+  ``model_validator(mode="after")`` into the matching generated classes,
+  one validator per bound so both can coexist on the same class. JSON
+  Schema counts the keys present on the object, so the validator counts
   provided fields (``model_fields_set``) unioned with extra keys
   (``model_extra``) — an explicit null is a present key, and unknown keys on
   ``extra="allow"`` models count too.
@@ -127,6 +134,22 @@ _VALIDATOR_TEMPLATE = '''
             raise ValueError(
                 "At least {minimum} {properties_noun} must be provided "
                 "(schema minProperties={minimum})"
+            )
+        return self
+'''
+
+_MAX_MARKER = "_enforce_max_properties"
+
+_MAX_VALIDATOR_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema maxProperties: allow at most {maximum}
+        provided {properties_noun}."""
+        provided = self.model_fields_set | set(self.model_extra or {{}})
+        if len(provided) > {maximum}:
+            raise ValueError(
+                "At most {maximum} {properties_noun} may be provided "
+                "(schema maxProperties={maximum})"
             )
         return self
 '''
@@ -250,6 +273,41 @@ def find_root_min_properties(schema_dir):
             )
             continue
         found[_alias_name(title)] = minimum
+    return found
+
+
+def find_root_max_properties(schema_dir):
+    """Map schema title -> maxProperties for root-level object constraints.
+
+    Symmetric twin of find_root_min_properties (see #49/#55, which added
+    minProperties support but never a maxProperties counterpart):
+    maxProperties on an object schema WITH declared properties is dropped by
+    the generator the same way minProperties is, so
+    location_serves.json's maxProperties: 1 ("the Platform MUST supply
+    exactly one target form") was silently unenforced. As with the min
+    side, maxProperties on a free-form object property (no named
+    properties) is already handled natively by the generator
+    (Field(max_length=...) on the dict field), so it is out of scope here.
+    """
+    found = {}
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        maximum = schema.get("maxProperties")
+        if not isinstance(maximum, int) or not schema.get("properties"):
+            continue
+        title = schema.get("title")
+        if not title:
+            sys.stderr.write(
+                f"  ! {path}: root maxProperties but no title; "
+                "cannot map to a class\n"
+            )
+            continue
+        found[_alias_name(title)] = maximum
     return found
 
 
@@ -431,6 +489,35 @@ def inject_min_properties(source, class_name, minimum):
         marker=_MARKER,
         minimum=minimum,
         properties_noun="property" if minimum == 1 else "properties",
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
+def inject_max_properties(source, class_name, maximum):
+    """Inject the maxProperties validator at the end of ``class_name``.
+
+    Symmetric twin of inject_min_properties; both validators can be
+    injected into the same class (location_serves.json declares both
+    minProperties: 1 and maxProperties: 1), each guarded by its own marker
+    so neither injection clobbers the other or re-runs on a second pass.
+    """
+    if f"def {_MAX_MARKER}(" in source:
+        return source
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    # The class body ends at the next top-level statement or EOF.
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    method = _MAX_VALIDATOR_TEMPLATE.format(
+        marker=_MAX_MARKER,
+        maximum=maximum,
+        properties_noun="property" if maximum == 1 else "properties",
     )
     body = source[:end].rstrip("\n")
     rest = source[end:]
@@ -1195,6 +1282,37 @@ def _patch_min_properties():
     return patched, 0
 
 
+def _patch_max_properties():
+    """Inject maxProperties validators; return (patched_count, exit_code)."""
+    constraints = find_root_max_properties(SCHEMA_DIR)
+    if not constraints:
+        sys.stdout.write(
+            "postprocess: no root-level maxProperties constraints found\n"
+        )
+        return 0, 0
+    patched = 0
+    for title, maximum in sorted(constraints.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(rf"^class {re.escape(title)}\(", source, re.M):
+                continue
+            updated = inject_max_properties(source, title, maximum)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = ", ".join(str(h) for h in hits) or "NO GENERATED CLASS FOUND"
+        sys.stdout.write(f"  maxProperties={maximum} on '{title}' -> {label}\n")
+        if not hits:
+            sys.stderr.write(
+                f"  ! '{title}' has no generated class; "
+                "constraint not enforced\n"
+            )
+            return patched, 1
+    return patched, 0
+
+
 def _array_contains_targets():
     """Resolve ``title -> groups`` for every model needing a contains bound.
 
@@ -1514,6 +1632,7 @@ def _patch_extra_forbid():
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
+    patched_xp, rc_xp = _patch_max_properties()
     patched_pn, rc_pn = _patch_property_names()
     patched_ac, rc_ac = _patch_array_contains()
     patched_cr, rc_cr = _patch_conditional_required()
@@ -1522,6 +1641,7 @@ def main():
     patched_ef, rc_ef = _patch_extra_forbid()
     total = (
         patched_mp
+        + patched_xp
         + patched_pn
         + patched_ac
         + patched_cr
@@ -1530,7 +1650,7 @@ def main():
         + patched_ef
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef
+    return rc_mp or rc_xp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef
 
 
 if __name__ == "__main__":
