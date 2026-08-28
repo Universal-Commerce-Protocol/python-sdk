@@ -18,7 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+import operator
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Unit(BaseModel):
@@ -41,3 +43,37 @@ class Unit(BaseModel):
     """
     Required printable unit label provided by the Business. The Platform MUST use it when it does not recognize `unit`; for a recognized UN/CEFACT Rec 20 Common Code, the Platform MAY substitute its own localized label. It does not participate in unit identity or mismatch comparison.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_bounds(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = [
+            {
+                "discriminator": "unit",
+                "values": ["C62"],
+                "bounds": {"scale": {"const": 0}},
+            }
+        ]
+        checks = {
+            "minimum": (">=", "lt"),
+            "maximum": ("<=", "gt"),
+            "exclusiveMinimum": (">", "le"),
+            "exclusiveMaximum": ("<", "ge"),
+            "const": ("==", "ne"),
+        }
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for field, bounds in rule["bounds"].items():
+                value = getattr(self, field, None)
+                if value is None:
+                    continue
+                for keyword, limit in bounds.items():
+                    symbol, op_name = checks[keyword]
+                    if getattr(operator, op_name)(value, limit):
+                        raise ValueError(
+                            f"Field {field!r} must be {symbol} {limit} "
+                            f"when {rule['discriminator']} is {actual!r}"
+                        )
+        return self
