@@ -31,12 +31,19 @@ import preprocess_schemas
 try:
     from pydantic import TypeAdapter, ValidationError
 
-    from ucp_sdk.models.schemas.shopping.types.description import Description
-    from ucp_sdk.models.schemas.shopping.types.totals import Totals
-    from ucp_sdk.models.schemas.shopping.types.totals_create_request import (
+    # NOTE(root-cause-0): these paths moved from shopping.types to
+    # common.types when #87 (2026-08-25 UCP release regen) restructured the
+    # schema tree. The old paths silently raise ModuleNotFoundError here,
+    # which the except clause below swallows as HAVE_SDK = False -- so every
+    # semantic test gated on HAVE_SDK skips instead of running, and CI is
+    # green on a suite that mostly never executed. See the sibling fixes to
+    # the other stale shopping.types.* imports later in this file.
+    from ucp_sdk.models.schemas.common.types.description import Description
+    from ucp_sdk.models.schemas.common.types.totals import Totals
+    from ucp_sdk.models.schemas.common.types.totals_create_request import (
         TotalsCreateRequest,
     )
-    from ucp_sdk.models.schemas.shopping.types.totals_update_request import (
+    from ucp_sdk.models.schemas.common.types.totals_update_request import (
         TotalsUpdateRequest,
     )
 
@@ -1014,7 +1021,7 @@ class SignalsPropertyNamesTest(unittest.TestCase):
     """
 
     def _signals(self):
-        from ucp_sdk.models.schemas.shopping.types.signals import Signals
+        from ucp_sdk.models.schemas.common.types.signals import Signals
 
         return Signals
 
@@ -1053,13 +1060,13 @@ class SignalsPropertyNamesTest(unittest.TestCase):
 
     def test_request_variants_enforce_property_names(self):
         # The gap and its fix travel to the generated request variants too.
-        from ucp_sdk.models.schemas.shopping.types.signals_complete_request import (
+        from ucp_sdk.models.schemas.common.types.signals_complete_request import (
             SignalsCompleteRequest,
         )
-        from ucp_sdk.models.schemas.shopping.types.signals_create_request import (
+        from ucp_sdk.models.schemas.common.types.signals_create_request import (
             SignalsCreateRequest,
         )
-        from ucp_sdk.models.schemas.shopping.types.signals_update_request import (
+        from ucp_sdk.models.schemas.common.types.signals_update_request import (
             SignalsUpdateRequest,
         )
 
@@ -1870,18 +1877,41 @@ class UniqueItemsInjectorTest(unittest.TestCase):
 class UniqueItemsSemanticTest(unittest.TestCase):
     """Committed models enforce uniqueItems on declared array fields."""
 
+    # NOTE(root-cause-0): card_payment_instrument.json no longer declares a
+    # Constraints.brands field (uniqueItems) as of the pinned 2026-08-25 UCP
+    # schema -- the module now generates only Display, ConstraintTarget and
+    # CardPaymentInstrument (verified against
+    # src/ucp_sdk/models/schemas/common/types/card_payment_instrument.py).
+    # These two tests exercised a schema shape that no longer exists; the
+    # HAVE_SDK import gate bug (see the top of this file) had been hiding
+    # that they could not pass, not just that they were unrelated to SDK
+    # availability. Documented skip rather than silent deletion: the
+    # uniqueItems mechanism itself stays covered by UniqueItemsInjectorTest
+    # (injector unit tests) and by other committed models with uniqueItems
+    # fields (e.g. common.types.constraint_expression, context,
+    # location_filter, request_constraints).
+    @unittest.skip(
+        "card_payment_instrument.Constraints.brands (uniqueItems) was "
+        "removed from the schema before the pinned 2026-08-25 UCP release; "
+        "no current committed model at this path carries a brands field"
+    )
     def test_brands_rejects_duplicates(self) -> None:
         """card_payment_instrument brands rejects duplicate entries."""
-        from ucp_sdk.models.schemas.shopping.types.card_payment_instrument import (
+        from ucp_sdk.models.schemas.common.types.card_payment_instrument import (
             Constraints,
         )
 
         with self.assertRaisesRegex(ValidationError, "[Uu]nique"):
             Constraints(brands=["visa", "visa"])
 
+    @unittest.skip(
+        "card_payment_instrument.Constraints.brands (uniqueItems) was "
+        "removed from the schema before the pinned 2026-08-25 UCP release; "
+        "no current committed model at this path carries a brands field"
+    )
     def test_brands_accepts_unique_and_none(self) -> None:
         """Unique lists and missing values are accepted."""
-        from ucp_sdk.models.schemas.shopping.types.card_payment_instrument import (
+        from ucp_sdk.models.schemas.common.types.card_payment_instrument import (
             Constraints,
         )
 
@@ -2024,7 +2054,7 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
     """Committed models reject unknown keys on additionalProperties:false."""
 
     def test_error_response_rejects_unknown_keys(self) -> None:
-        from ucp_sdk.models.schemas.shopping.types.error_response import (
+        from ucp_sdk.models.schemas.common.types.error_response import (
             ErrorResponse,
         )
 
@@ -2045,7 +2075,7 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
             )
 
     def test_error_response_accepts_declared_fields(self) -> None:
-        from ucp_sdk.models.schemas.shopping.types.error_response import (
+        from ucp_sdk.models.schemas.common.types.error_response import (
             ErrorResponse,
         )
 
@@ -2064,8 +2094,29 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
         )
         self.assertEqual(obj.messages[0].content, "boom")
 
+    # NOTE(root-cause-0): merchant_fulfillment_config.json was renamed and
+    # restructured to business_fulfillment_config.json before the pinned
+    # 2026-08-25 UCP release. The nested additionalProperties:false object
+    # these tests targeted (allows_multi_destination -> AllowsMultiDestination)
+    # is gone; the current schema's multi_destination field is a list of
+    # MultiDestinationItem (extra="allow", no nested forbid object) --
+    # verified against
+    # src/ucp_sdk/models/schemas/shopping/types/business_fulfillment_config.py.
+    # The HAVE_SDK import gate bug (see the top of this file) had been
+    # hiding that these two tests could not pass at all, not just that they
+    # were unrelated to SDK availability. Documented skip rather than silent
+    # deletion: the additionalProperties:false -> extra="forbid" mechanism
+    # itself stays covered by test_error_response_rejects_unknown_keys above
+    # and by AdditionalPropertiesForbidInjectorTest/FinderTest.
+    @unittest.skip(
+        "merchant_fulfillment_config.AllowsMultiDestination was removed "
+        "when the schema was restructured to "
+        "business_fulfillment_config.MultiDestinationItem before the "
+        "pinned 2026-08-25 UCP release; no current committed model at "
+        "this path carries a nested additionalProperties:false object"
+    )
     def test_allows_multi_destination_rejects_unknown_keys(self) -> None:
-        from ucp_sdk.models.schemas.shopping.types.merchant_fulfillment_config import (
+        from ucp_sdk.models.schemas.shopping.types.business_fulfillment_config import (
             AllowsMultiDestination,
         )
 
@@ -2074,12 +2125,19 @@ class AdditionalPropertiesForbidSemanticTest(unittest.TestCase):
                 {"shipping": True, "bogus": "x"}
             )
 
+    @unittest.skip(
+        "merchant_fulfillment_config.MerchantFulfillmentConfig was renamed "
+        "and restructured to business_fulfillment_config."
+        "BusinessFulfillmentConfig before the pinned 2026-08-25 UCP "
+        "release; see test_allows_multi_destination_rejects_unknown_keys "
+        "above"
+    )
     def test_sibling_config_keeps_extra_allow(self) -> None:
-        from ucp_sdk.models.schemas.shopping.types.merchant_fulfillment_config import (
-            MerchantFulfillmentConfig,
+        from ucp_sdk.models.schemas.shopping.types.business_fulfillment_config import (
+            BusinessFulfillmentConfig,
         )
 
-        config = MerchantFulfillmentConfig.model_validate({"bogus": "x"})
+        config = BusinessFulfillmentConfig.model_validate({"bogus": "x"})
         self.assertEqual(config.model_extra, {"bogus": "x"})
 
 
