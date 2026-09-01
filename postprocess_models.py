@@ -72,16 +72,27 @@ Seven constraint families are handled:
   always treats it as optional. The script accepts only an unambiguous single
   required discriminator using ``const``/``enum`` and a ``then.required`` list,
   then injects a ``model_validator(mode="after")``. More complex conditions are
-  skipped rather than approximated.
+  skipped rather than approximated. These rules are commonly carried as
+  ``allOf`` branches with no sibling ``properties`` of their own (every
+  conditional rule in ``profile.json``'s ``jwk_public_key`` is this shape), so
+  the scan validates them against the enclosing object's property set, the
+  same threading ``find_conditional_bounds`` (below) already used. A branch's
+  own documentation ``title`` (some carry one purely as rule prose, e.g. "EC
+  keys carry crv, x, y") is never adopted as the enclosing class name; see
+  ``_is_bare_conditional_branch``.
 
-* Conditional numeric bounds are dropped for the same reason: ``total.json``
-  requires a ``discount`` amount to be negative and a ``tax`` amount to be
-  non-negative via if/then branches, but the generated ``Total`` carries no
-  validator, so a positive discount validates. These rules are carried as
-  ``allOf`` branches, which have no sibling ``properties`` of their own, so the
-  scan validates them against the enclosing object's property set. A rule whose
-  fields were stripped by request-variant projection is inapplicable rather than
-  malformed and is skipped silently.
+* Conditional numeric bounds, and conditional exact-value (``const``) pins,
+  are dropped for the same reason: ``total.json`` requires a ``discount``
+  amount to be negative and a ``tax`` amount to be non-negative via if/then
+  branches, and ``unit.json`` pins ``scale`` to exactly 0 when ``unit`` is
+  ``C62``, but the generated ``Total``/``Unit`` carry no validator, so a
+  positive discount or a nonzero C62 scale both validate. These rules are
+  carried as ``allOf`` branches, which have no sibling ``properties`` of
+  their own, so the scan validates them against the enclosing object's
+  property set. A rule whose fields were stripped by request-variant
+  projection is inapplicable rather than malformed and is skipped silently.
+  As with conditional required rules above, a branch's own documentation
+  ``title`` is never adopted as the enclosing class name.
 
 * ``additionalProperties: false`` on an object schema with named properties is
   normally overridden by the generator's ``--extra-fields=allow`` flag. The
@@ -166,11 +177,15 @@ _RULE_NOT_APPLICABLE = object()
 
 # Keyword -> (comparison rendered in the message, python operator name). The
 # operator is applied as "value <op> limit" and a true result is a violation.
+# "const" pins the field to an exact value (e.g. unit.json: scale must be
+# exactly 0 when unit is C62) rather than bounding a range; it reuses the
+# same "value <op> limit -> violation" shape with not-equal as the operator.
 _BOUND_KEYWORDS = {
     "minimum": (">=", "lt"),
     "maximum": ("<=", "gt"),
     "exclusiveMinimum": (">", "le"),
     "exclusiveMaximum": ("<", "ge"),
+    "const": ("==", "ne"),
 }
 
 _CONDITIONAL_BOUNDS_TEMPLATE = '''
@@ -553,6 +568,27 @@ def _alias_name(title):
     return "".join(title.split())
 
 
+def _is_bare_conditional_branch(node):
+    """True when ``node`` is an if/then rule wrapper with no type of its own.
+
+    UCP schemas sometimes give an allOf if/then branch its own human-readable
+    ``title`` purely as rule documentation (e.g. profile.json's jwk_public_key:
+    "EC keys carry crv, x, y", "P-256 pairs with ES256"). Such a branch has no
+    ``properties`` of its own -- it constrains the *enclosing* object -- so its
+    title never names a generated class. Adopting it as ``current_class_name``
+    (the same code path real class-defining titles use) misattributes the
+    rule to a nonexistent class instead of the enclosing one. A node that
+    carries both an if/then rule AND its own ``properties`` is a genuine
+    titled type that happens to declare an inline conditional, and keeps
+    adopting its title as before.
+    """
+    return (
+        isinstance(node.get("if"), dict)
+        and isinstance(node.get("then"), dict)
+        and not isinstance(node.get("properties"), dict)
+    )
+
+
 def _to_camel_case(string):
     """Convert a string (snake, kebab, space-separated) to CamelCase."""
     parts = re.split(r"[^a-zA-Z0-9]", string)
@@ -754,21 +790,32 @@ def find_conditional_required(schema_dir):
             "required": sorted(consequence_required),
         }
 
-    def walk(node, current_class_name, path_str):
+    def walk(node, current_class_name, path_str, enclosing_properties=None):
         if not isinstance(node, dict):
             return
-        if isinstance(node.get("title"), str):
+        if isinstance(
+            node.get("title"), str
+        ) and not _is_bare_conditional_branch(node):
             current_class_name = _alias_name(node["title"])
         properties = node.get("properties")
+        # An if/then pair carried as an allOf branch has no sibling
+        # properties of its own (every JWK required-field rule is exactly
+        # this shape): the object it constrains is the enclosing schema, so
+        # its property set is what the rule must be validated against. This
+        # mirrors find_conditional_bounds's existing enclosing_properties
+        # threading.
+        scope = (
+            properties if isinstance(properties, dict) else enclosing_properties
+        )
         then = node.get("then")
         is_required_rule = isinstance(then, dict) and "required" in then
-        if isinstance(properties, dict) and is_required_rule:
+        if isinstance(scope, dict) and is_required_rule:
             if "else" in node:
                 rule = None
             else:
                 rule = describe(
                     {key: node[key] for key in ("if", "then") if key in node},
-                    properties,
+                    scope,
                 )
             if rule is None:
                 sys.stderr.write(
@@ -786,7 +833,7 @@ def find_conditional_required(schema_dir):
         for key in ("allOf", "anyOf", "oneOf"):
             if isinstance(node.get(key), list):
                 for item in node[key]:
-                    walk(item, current_class_name, path_str)
+                    walk(item, current_class_name, path_str, scope)
 
     for path in sorted(Path(schema_dir).rglob("*.json")):
         try:
@@ -886,11 +933,20 @@ def find_conditional_bounds(schema_dir):
                 or set(constraint) - set(_BOUND_KEYWORDS)
             ):
                 return None
-            if any(
-                not isinstance(limit, (int, float)) or isinstance(limit, bool)
-                for limit in constraint.values()
-            ):
-                return None
+            # "const" pins an exact value and may legitimately be a string
+            # (unit.json's C62 pin is an int; JWK's algorithm pins are
+            # strings), so it is checked against the same scalar types
+            # already accepted for the discriminator's own const/enum
+            # values above. The numeric bound keywords keep their existing,
+            # narrower int/float (non-bool) requirement.
+            for keyword, limit in constraint.items():
+                if keyword == "const":
+                    if not isinstance(limit, (str, int, float, bool)):
+                        return None
+                elif not isinstance(limit, (int, float)) or isinstance(
+                    limit, bool
+                ):
+                    return None
             bounds[name] = dict(constraint)
         # A request variant strips the fields a platform must not send, so a
         # rule naming one is inapplicable to that class rather than malformed.
@@ -907,7 +963,9 @@ def find_conditional_bounds(schema_dir):
     def walk(node, current_class_name, path_str, enclosing_properties=None):
         if not isinstance(node, dict):
             return
-        if isinstance(node.get("title"), str):
+        if isinstance(
+            node.get("title"), str
+        ) and not _is_bare_conditional_branch(node):
             current_class_name = _alias_name(node["title"])
         properties = node.get("properties")
         # An if/then pair carried as an allOf branch has no sibling properties:

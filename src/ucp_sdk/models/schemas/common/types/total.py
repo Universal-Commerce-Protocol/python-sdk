@@ -63,6 +63,7 @@ class Total(BaseModel):
             "maximum": ("<=", "gt"),
             "exclusiveMinimum": (">", "le"),
             "exclusiveMaximum": ("<", "ge"),
+            "const": ("==", "ne"),
         }
         for rule in rules:
             actual = getattr(self, rule["discriminator"], None)

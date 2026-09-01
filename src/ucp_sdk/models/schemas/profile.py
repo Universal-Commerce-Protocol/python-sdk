@@ -18,7 +18,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+import operator
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import ucp as ucp_1
 
@@ -59,6 +61,75 @@ class JwkPublicKey(BaseModel):
     """
     JWK public key use. UCP examples use sig for signatures.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_required(self):
+        """JSON Schema if/then: enforce conditionally required fields."""
+        rules = [
+            {
+                "discriminator": "kty",
+                "values": ["EC"],
+                "required": ["crv", "x", "y"],
+            },
+            {
+                "discriminator": "kty",
+                "values": ["OKP"],
+                "required": ["crv", "x"],
+            },
+        ]
+        for rule in rules:
+            if getattr(self, rule["discriminator"], None) not in rule["values"]:
+                continue
+            for field in rule["required"]:
+                if field not in self.model_fields_set:
+                    raise ValueError(
+                        f"Field {field!r} is required by a schema condition"
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_conditional_bounds(self):
+        """JSON Schema if/then: enforce conditional numeric bounds."""
+        rules = [
+            {
+                "discriminator": "crv",
+                "values": ["P-256"],
+                "bounds": {"alg": {"const": "ES256"}},
+            },
+            {
+                "discriminator": "crv",
+                "values": ["P-384"],
+                "bounds": {"alg": {"const": "ES384"}},
+            },
+            {
+                "discriminator": "crv",
+                "values": ["Ed25519"],
+                "bounds": {"alg": {"const": "EdDSA"}},
+            },
+        ]
+        checks = {
+            "minimum": (">=", "lt"),
+            "maximum": ("<=", "gt"),
+            "exclusiveMinimum": (">", "le"),
+            "exclusiveMaximum": ("<", "ge"),
+            "const": ("==", "ne"),
+        }
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for field, bounds in rule["bounds"].items():
+                value = getattr(self, field, None)
+                if value is None:
+                    continue
+                for keyword, limit in bounds.items():
+                    symbol, op_name = checks[keyword]
+                    if getattr(operator, op_name)(value, limit):
+                        raise ValueError(
+                            f"Field {field!r} must be {symbol} {limit} "
+                            f"when {rule['discriminator']} is {actual!r}"
+                        )
+        return self
 
 
 class UcpProfileDocument(BaseModel):
