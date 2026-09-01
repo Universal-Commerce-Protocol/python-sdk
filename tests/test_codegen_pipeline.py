@@ -1638,6 +1638,176 @@ class InjectorTest(unittest.TestCase):
         self.assertEqual(found, {"Sample": 2})
 
 
+class MaxPropertiesInjectorTest(unittest.TestCase):
+    """maxProperties is the symmetric twin of minProperties (see #49/#55),
+    but only minProperties was ever scanned: find_root_min_properties reads
+    schema.get("minProperties") and there is no find_root_max_properties at
+    all, so location_serves.json's maxProperties: 1 -- "the Platform MUST
+    supply exactly one target form" -- is silently dropped. This mirrors
+    InjectorTest above one for one, for the max side.
+    """
+
+    SCHEMA = {
+        "title": "Sample",
+        "type": "object",
+        "maxProperties": 1,
+        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+    }
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class Sample(BaseModel):\n"
+        '    """A sample."""\n'
+        "\n"
+        "    model_config = ConfigDict(\n"
+        '        extra="allow",\n'
+        "    )\n"
+        "    a: str | None = None\n"
+        "    b: str | None = None\n"
+    )
+
+    def test_injects_validator_with_declared_maximum(self):
+        out = postprocess_models.inject_max_properties(self.MODULE, "Sample", 1)
+        self.assertIn("model_validator", out)
+        self.assertIn("at most 1", out.lower())
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_count(self):
+        out = postprocess_models.inject_max_properties(self.MODULE, "Sample", 1)
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        sample_cls = namespace["Sample"]
+        with self.assertRaises(ValidationError):
+            sample_cls(a="one", b="two")
+        sample_cls(a="only-one")
+        sample_cls()
+
+    def test_injection_is_idempotent(self):
+        once = postprocess_models.inject_max_properties(
+            self.MODULE, "Sample", 1
+        )
+        twice = postprocess_models.inject_max_properties(once, "Sample", 1)
+        self.assertEqual(once, twice)
+
+    def test_schema_scan_finds_root_constraints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = Path(tmp) / "sub"
+            sub.mkdir()
+            (sub / "sample.json").write_text(json.dumps(self.SCHEMA))
+            (sub / "plain.json").write_text(
+                json.dumps(
+                    {"title": "Plain", "type": "object", "properties": {}}
+                )
+            )
+            found = postprocess_models.find_root_max_properties(Path(tmp))
+        self.assertEqual(found, {"Sample": 1})
+
+    def test_schema_scan_ignores_object_without_declared_properties(self):
+        # Mirrors find_root_min_properties: maxProperties on a free-form
+        # object property (no named properties) is already handled natively
+        # by the generator (Field(max_length=...) on the dict field), so a
+        # bare maxProperties with no properties is out of scope here.
+        schema = {
+            "title": "OpenMap",
+            "type": "object",
+            "maxProperties": 3,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "open_map.json").write_text(json.dumps(schema))
+            found = postprocess_models.find_root_max_properties(Path(tmp))
+        self.assertEqual(found, {})
+
+    def test_both_bounds_coexist_on_the_same_class(self):
+        """location_serves.json declares both minProperties: 1 AND
+        maxProperties: 1 on the same object; both validators must be
+        injectable into the same class without clobbering each other."""
+        module = postprocess_models.inject_min_properties(
+            self.MODULE, "Sample", 1
+        )
+        module = postprocess_models.inject_max_properties(module, "Sample", 1)
+        self.assertIn("_enforce_min_properties", module)
+        self.assertIn("_enforce_max_properties", module)
+        if HAVE_SDK:
+            namespace: dict = {}
+            exec(compile(module, "<injected>", "exec"), namespace)  # noqa: S102
+            sample_cls = namespace["Sample"]
+            with self.assertRaises(ValidationError):
+                sample_cls()
+            with self.assertRaises(ValidationError):
+                sample_cls(a="one", b="two")
+            sample_cls(a="only-one")
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class LocationServesMaxPropertiesSemanticTest(unittest.TestCase):
+    """location_serves.json: "The Platform MUST supply exactly one target
+    form" -- minProperties: 1 AND maxProperties: 1 together. Only the
+    minimum was ever enforced (see MaxPropertiesInjectorTest above), so a
+    map naming both point and address currently validates in violation of
+    the schema.
+    """
+
+    def _location_serves(self):
+        from ucp_sdk.models.schemas.common.types.location_serves import (
+            LocationServes,
+        )
+
+        return LocationServes
+
+    def _geo(self):
+        from ucp_sdk.models.schemas.common.types.geo import Geo
+
+        return Geo
+
+    def _address(self):
+        from ucp_sdk.models.schemas.common.types.location_serves import (
+            Address,
+        )
+
+        return Address
+
+    def test_both_point_and_address_rejected(self):
+        with self.assertRaises(ValidationError):
+            self._location_serves()(
+                point=self._geo()(latitude=1.0, longitude=2.0),
+                address=self._address()(address_country="US"),
+            )
+
+    def test_point_only_accepted(self):
+        location = self._location_serves()(
+            point=self._geo()(latitude=1.0, longitude=2.0)
+        )
+        self.assertIsNotNone(location.point)
+
+    def test_address_only_accepted(self):
+        location = self._location_serves()(
+            address=self._address()(address_country="US")
+        )
+        self.assertIsNotNone(location.address)
+
+    def test_empty_still_rejected_by_the_existing_minimum(self):
+        # Unaffected by this fix; confirms minProperties: 1 still holds.
+        with self.assertRaises(ValidationError):
+            self._location_serves()()
+
+    def test_extension_key_alongside_point_rejected(self):
+        # extra="allow": an extension form key still counts toward the
+        # maxProperties=1 total per JSON Schema's key-counting semantics.
+        with self.assertRaises(ValidationError):
+            self._location_serves().model_validate(
+                {
+                    "point": {"latitude": 1.0, "longitude": 2.0},
+                    "dev.example.custom_target": {"foo": "bar"},
+                }
+            )
+
+
 @unittest.skipUnless(
     HAVE_SDK, "requires the installed package (pip install -e .)"
 )
