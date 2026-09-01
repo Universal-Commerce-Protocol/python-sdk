@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Eight constraint families are handled:
+Nine constraint families are handled:
 
 * ``minProperties`` / ``maxProperties`` on an object schema WITH declared
   properties are dropped by the generator: every field is optional, so an
@@ -100,6 +100,24 @@ Eight constraint families are handled:
   projection is inapplicable rather than malformed and is skipped silently.
   As with conditional required rules above, a branch's own documentation
   ``title`` is never adopted as the enclosing class name.
+
+* A discriminator retyping an array PROPERTY's items to a schema file
+  different from the property's own base ``$ref`` is dropped entirely, a
+  third if/then shape distinct from the required-fields and numeric-bounds
+  families above. ``fulfillment_method.json``'s ``destinations`` stays typed
+  to the base ``FulfillmentDestination`` regardless of ``type``, even though
+  a `shipping` method's destinations are really ``ShippingDestination``
+  (postal address fields, `type` const `shipping_address`) and a `pickup`
+  method's are really ``LocationDestination`` (`type` const
+  `business_location`) — so a `shipping` method can currently list a
+  destination typed `business_location` and it validates. Pydantic has no
+  clean way to retype a field's item type from a source-text splice, so
+  this is enforced with a runtime check instead of a static type change:
+  each item is checked against the referenced schema's own (root-level,
+  post-merge) required keys and const-pinned properties — an approximation,
+  not a full re-derivation of the retyped type (a schema the retyped file
+  itself ``allOf``-references, e.g. ``postal_address.json``, is not
+  inspected).
 
 * ``additionalProperties: false`` on an object schema with named properties is
   normally overridden by the generator's ``--extra-fields=allow`` flag. The
@@ -230,6 +248,47 @@ _CONDITIONAL_BOUNDS_TEMPLATE = '''
                     if getattr(operator, op_name)(value, limit):
                         raise ValueError(
                             f"Field {{field!r}} must be {{symbol}} {{limit}} "
+                            f"when {{rule['discriminator']}} is {{actual!r}}"
+                        )
+        return self
+'''
+
+_RETYPE_MARKER = "_enforce_conditional_item_retyping"
+
+_RETYPE_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema if/then: approximate a discriminator's array-item
+        retyping to a different referenced schema, via that schema's own
+        required keys and const-pinned fields."""
+        rules = {rules!r}
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for _item in getattr(self, rule["field"], None) or []:
+                _provided = (
+                    set(_item.keys())
+                    if isinstance(_item, dict)
+                    else _item.model_fields_set | set(_item.model_extra or {{}})
+                )
+                for _required in rule["required"]:
+                    if _required not in _provided:
+                        raise ValueError(
+                            f"Field {{_required!r}} is required for "
+                            f"{{rule['field']}} items when "
+                            f"{{rule['discriminator']}} is {{actual!r}}"
+                        )
+                for _const_field, _const_value in rule["consts"].items():
+                    _actual_value = (
+                        _item.get(_const_field)
+                        if isinstance(_item, dict)
+                        else getattr(_item, _const_field, None)
+                    )
+                    if _actual_value != _const_value:
+                        raise ValueError(
+                            f"Field {{_const_field!r}} must equal "
+                            f"{{_const_value!r}} for {{rule['field']}} items "
                             f"when {{rule['discriminator']}} is {{actual!r}}"
                         )
         return self
@@ -1132,6 +1191,207 @@ def inject_conditional_bounds(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def _resolve_referenced_shape(ref, schema_path):
+    """Load ``ref`` (relative to ``schema_path``) and return its own
+    (root-level, post-merge) required keys and const-pinned properties.
+
+    Returns ``None`` if the file cannot be loaded. Deliberately shallow: it
+    reads only the referenced schema's own ``required``/``properties``, not
+    anything it in turn ``allOf``-references (e.g. shipping_destination.json
+    ``allOf``-refs postal_address.json, whose fields are not inspected) --
+    an approximation, not a full re-derivation of the retyped shape.
+    """
+    file_part = ref.split("#", 1)[0]
+    if not file_part:
+        return None
+    target_path = (Path(schema_path).parent / file_part).resolve()
+    try:
+        referenced = json.loads(target_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        sys.stderr.write(
+            f"  ! {schema_path}: retyped $ref {ref!r} could not be loaded; "
+            "rule skipped\n"
+        )
+        return None
+    if not isinstance(referenced, dict):
+        return None
+    required = sorted(
+        name for name in referenced.get("required", []) if isinstance(name, str)
+    )
+    consts = {
+        name: prop["const"]
+        for name, prop in (referenced.get("properties") or {}).items()
+        if isinstance(prop, dict) and "const" in prop
+    }
+    return {"required": required, "consts": consts}
+
+
+def _is_ref_array(node):
+    """True when ``node`` is an array property typed via ``items.$ref``."""
+    return (
+        isinstance(node, dict)
+        and node.get("type") == "array"
+        and isinstance(node.get("items"), dict)
+        and isinstance(node["items"].get("$ref"), str)
+    )
+
+
+def _describe_retyping_branch(branch, properties, schema_path):
+    """Describe one allOf if/then branch that retypes an array property's
+    items to a schema file different from the property's own base ``$ref``.
+
+    Mechanical and narrow by design, mirroring the other conditional
+    scanners in this module: a single-key ``const``/``enum`` discriminator
+    naming a property present on the enclosing object, and a ``then`` that
+    narrows exactly one array property (also present on the enclosing
+    object) to a different ``items.$ref``. Anything else -- multiple
+    discriminators, a non-array or non-$ref field, a `then` naming a field
+    absent from the enclosing object (a request variant that omits it, as
+    fulfillment_method_create_request.json does for ``destinations``) --
+    returns ``None`` silently: those are either a different rule shape
+    (left to find_conditional_required/find_conditional_bounds, which scan
+    the same branches) or legitimately inapplicable, not malformed.
+    """
+    if not isinstance(branch, dict) or set(branch) != {"if", "then"}:
+        return None
+    condition = branch["if"]
+    consequence = branch["then"]
+    if (
+        not isinstance(condition, dict)
+        or set(condition) != {"properties", "required"}
+        or not isinstance(consequence, dict)
+        or set(consequence) != {"properties"}
+    ):
+        return None
+    condition_props = condition["properties"]
+    condition_required = condition["required"]
+    if (
+        not isinstance(condition_props, dict)
+        or len(condition_props) != 1
+        or not isinstance(condition_required, list)
+        or len(condition_required) != 1
+    ):
+        return None
+    discriminator, predicate = next(iter(condition_props.items()))
+    if condition_required != [discriminator] or not isinstance(predicate, dict):
+        return None
+    if set(predicate) == {"const"}:
+        values = [predicate["const"]]
+    elif (
+        set(predicate) == {"enum"}
+        and isinstance(predicate["enum"], list)
+        and predicate["enum"]
+    ):
+        values = predicate["enum"]
+    else:
+        return None
+    if discriminator not in properties or any(
+        not isinstance(value, (str, int, float, bool)) for value in values
+    ):
+        return None
+    consequence_props = consequence["properties"]
+    if not isinstance(consequence_props, dict) or len(consequence_props) != 1:
+        return None
+    field, field_schema = next(iter(consequence_props.items()))
+    if field not in properties or not _is_ref_array(field_schema):
+        return None
+    base_field_schema = properties[field]
+    if not _is_ref_array(base_field_schema):
+        return None
+    base_ref = base_field_schema["items"]["$ref"]
+    new_ref = field_schema["items"]["$ref"]
+    if new_ref == base_ref:
+        return None
+    target = _resolve_referenced_shape(new_ref, schema_path)
+    if target is None:
+        return None
+    return {
+        "discriminator": discriminator,
+        "values": values,
+        "field": field,
+        "required": target["required"],
+        "consts": target["consts"],
+    }
+
+
+def find_conditional_array_retyping(schema_dir):
+    """Map generated class names to array-item retyping rules.
+
+    Complements find_conditional_required/find_conditional_bounds, which
+    only handle a ``then`` that adds required fields or narrows a numeric
+    range. A ``then`` that instead retypes an array PROPERTY's items to a
+    schema file different from the property's own base ``$ref`` is a third
+    shape the generator drops entirely: fulfillment_method.json's
+    ``destinations`` stays typed to the base FulfillmentDestination
+    regardless of ``type``, even though a `shipping` method's destinations
+    are really ShippingDestination (postal address fields, `type` const
+    `shipping_address`) and a `pickup` method's are really
+    LocationDestination (`type` const `business_location`). Pydantic has no
+    clean way to retype a field's item type from a source-text splice, so
+    this is enforced with a runtime check instead of a static type change:
+    each item is checked against the referenced schema's own required keys
+    and const-pinned fields (see _resolve_referenced_shape), an
+    approximation rather than a full re-derivation of the retyped type.
+    """
+    rules_by_class = {}
+
+    def walk(node, current_class_name, schema_path):
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+        properties = node.get("properties")
+        allof = node.get("allOf")
+        if isinstance(properties, dict) and isinstance(allof, list):
+            for branch in allof:
+                rule = _describe_retyping_branch(
+                    branch, properties, schema_path
+                )
+                if rule is not None and current_class_name is not None:
+                    rules_by_class.setdefault(current_class_name, []).append(
+                        rule
+                    )
+        if isinstance(properties, dict):
+            for name, prop in properties.items():
+                walk(prop, _to_camel_case(name), schema_path)
+        defs = node.get("$defs")
+        if isinstance(defs, dict):
+            for def_name, def_node in defs.items():
+                walk(def_node, _to_camel_case(def_name), schema_path)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class, path)
+    return rules_by_class
+
+
+def inject_conditional_array_retyping(source, class_name, rules):
+    """Inject array-item retyping checks into one generated class."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    if f"def {_RETYPE_MARKER}(" in source[match.start() : end]:
+        return source
+    method = _RETYPE_TEMPLATE.format(marker=_RETYPE_MARKER, rules=rules)
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -1496,6 +1756,41 @@ def _patch_conditional_bounds():
     return patched, 0
 
 
+def _patch_conditional_array_retyping():
+    """Inject array-item retyping checks; return counts and status."""
+    rules_by_class = find_conditional_array_retyping(SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write(
+            "postprocess: no conditional array-item retyping rules found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name, rules in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_conditional_array_retyping(
+                source, class_name, rules
+            )
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = (
+            ", ".join(str(path) for path in hits) or "NO GENERATED CLASS FOUND"
+        )
+        sys.stdout.write(
+            f"  conditional array-item retyping on '{class_name}' -> {label}\n"
+        )
+        if not hits:
+            return patched, 1
+    return patched, 0
+
+
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
     unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
@@ -1637,6 +1932,7 @@ def main():
     patched_ac, rc_ac = _patch_array_contains()
     patched_cr, rc_cr = _patch_conditional_required()
     patched_cb, rc_cb = _patch_conditional_bounds()
+    patched_rt, rc_rt = _patch_conditional_array_retyping()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
     total = (
@@ -1646,11 +1942,22 @@ def main():
         + patched_ac
         + patched_cr
         + patched_cb
+        + patched_rt
         + patched_ui
         + patched_ef
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
-    return rc_mp or rc_xp or rc_pn or rc_ac or rc_cr or rc_cb or rc_ui or rc_ef
+    return (
+        rc_mp
+        or rc_xp
+        or rc_pn
+        or rc_ac
+        or rc_cr
+        or rc_cb
+        or rc_rt
+        or rc_ui
+        or rc_ef
+    )
 
 
 if __name__ == "__main__":

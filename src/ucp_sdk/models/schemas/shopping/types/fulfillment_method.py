@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from . import fulfillment_destination, fulfillment_group
 
@@ -57,3 +57,55 @@ class FulfillmentMethod(BaseModel):
     """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
+
+    @model_validator(mode="after")
+    def _enforce_conditional_item_retyping(self):
+        """JSON Schema if/then: approximate a discriminator's array-item
+        retyping to a different referenced schema, via that schema's own
+        required keys and const-pinned fields."""
+        rules = [
+            {
+                "discriminator": "type",
+                "values": ["shipping"],
+                "field": "destinations",
+                "required": ["id", "type"],
+                "consts": {"type": "shipping_address"},
+            },
+            {
+                "discriminator": "type",
+                "values": ["pickup"],
+                "field": "destinations",
+                "required": ["type"],
+                "consts": {"type": "business_location"},
+            },
+        ]
+        for rule in rules:
+            actual = getattr(self, rule["discriminator"], None)
+            if actual not in rule["values"]:
+                continue
+            for _item in getattr(self, rule["field"], None) or []:
+                _provided = (
+                    set(_item.keys())
+                    if isinstance(_item, dict)
+                    else _item.model_fields_set | set(_item.model_extra or {})
+                )
+                for _required in rule["required"]:
+                    if _required not in _provided:
+                        raise ValueError(
+                            f"Field {_required!r} is required for "
+                            f"{rule['field']} items when "
+                            f"{rule['discriminator']} is {actual!r}"
+                        )
+                for _const_field, _const_value in rule["consts"].items():
+                    _actual_value = (
+                        _item.get(_const_field)
+                        if isinstance(_item, dict)
+                        else getattr(_item, _const_field, None)
+                    )
+                    if _actual_value != _const_value:
+                        raise ValueError(
+                            f"Field {_const_field!r} must equal "
+                            f"{_const_value!r} for {rule['field']} items "
+                            f"when {rule['discriminator']} is {actual!r}"
+                        )
+        return self
