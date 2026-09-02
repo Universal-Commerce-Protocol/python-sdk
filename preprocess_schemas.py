@@ -317,6 +317,19 @@ def preprocess_full_schema(schema, entity_def=None):
 # --- Dotted $defs Flattening ---
 
 
+def _rewrite_defs_ref_path(rest, rename_map):
+    """Returns the rewritten $defs fragment path when a renamed target matches."""
+    for old, new in sorted(
+        rename_map.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        if rest == old:
+            return new
+        prefix = old + "/"
+        if rest.startswith(prefix):
+            return new + rest[len(old) :]
+    return None
+
+
 def _rewrite_local_defs_refs(node, rename_map):
     """Walks a schema tree and rewrites local $defs refs whose target was renamed."""
     prefix = "#/$defs/"
@@ -327,9 +340,9 @@ def _rewrite_local_defs_refs(node, rename_map):
         if not isinstance(ref, str) or not ref.startswith(prefix):
             continue
         rest = ref[len(prefix) :]
-        name, sep, tail = rest.partition("/")
-        if name in rename_map:
-            n["$ref"] = prefix + rename_map[name] + (sep + tail if sep else "")
+        rewritten = _rewrite_defs_ref_path(rest, rename_map)
+        if rewritten is not None:
+            n["$ref"] = prefix + rewritten
 
 
 def _rewrite_external_defs_refs(schema_path, schema, global_rename_maps):
@@ -362,11 +375,9 @@ def _rewrite_external_defs_refs(schema_path, schema, global_rename_maps):
         rename_map = global_rename_maps[target_path_str]
 
         rest = fragment_part[len(prefix) :]
-        name, sep, tail = rest.partition("/")
-        if name in rename_map:
-            new_name = rename_map[name]
-            new_fragment = prefix + new_name + (sep + tail if sep else "")
-            n["$ref"] = file_part + "#" + new_fragment
+        rewritten = _rewrite_defs_ref_path(rest, rename_map)
+        if rewritten is not None:
+            n["$ref"] = file_part + "#" + prefix + rewritten
 
 
 def flatten_dotted_defs(schema):
@@ -384,6 +395,13 @@ def flatten_dotted_defs(schema):
     class name like 'Checkout'); fall back to dot-replaced-with-underscore
     (e.g. 'DevUcpShoppingFulfillment') if the bare tail would collide with
     an existing def in the same file.
+
+    Capability role containers: a dotted def whose value holds exactly the
+    'platform_schema' and 'business_schema' keys is not a schema itself but the
+    mount point where a capability contributes its two role schemas. Renaming it
+    whole would only produce a meaningless Any alias, so it is split into two
+    generatable defs ('<tail>_platform_schema' / '<tail>_business_schema');
+    refs into the container ('.../<role>') are remapped to the split defs.
     """
     defs = schema.get("$defs")
     if not isinstance(defs, dict):
@@ -391,8 +409,29 @@ def flatten_dotted_defs(schema):
 
     existing = set(defs.keys())
     rename_map = {}
+    split_map = {}
     for old in list(defs.keys()):
         if "." not in old:
+            continue
+        value = defs[old]
+        if isinstance(value, dict) and set(value.keys()) == {
+            "platform_schema",
+            "business_schema",
+        }:
+            tail = old.rsplit(".", 1)[-1]
+            platform_key = tail + "_platform_schema"
+            business_key = tail + "_business_schema"
+            if platform_key in existing or business_key in existing:
+                # Both split candidates collide; leave as-is rather than
+                # risk corruption.
+                continue
+            defs[platform_key] = value["platform_schema"]
+            defs[business_key] = value["business_schema"]
+            del defs[old]
+            existing.discard(old)
+            existing.update([platform_key, business_key])
+            split_map[old + "/platform_schema"] = platform_key
+            split_map[old + "/business_schema"] = business_key
             continue
         tail = old.rsplit(".", 1)[-1]
         if tail and tail not in existing:
@@ -406,11 +445,12 @@ def flatten_dotted_defs(schema):
         existing.discard(old)
         existing.add(new)
 
-    if not rename_map:
+    if not rename_map and not split_map:
         return {}
 
     for old, new in rename_map.items():
         defs[new] = defs.pop(old)
+    rename_map.update(split_map)
     _rewrite_local_defs_refs(schema, rename_map)
     return rename_map
 

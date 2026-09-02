@@ -298,6 +298,58 @@ class SchemaNormalizationTest(unittest.TestCase):
             "#/$defs/dev_ucp_shopping_checkout",
         )
 
+    def test_flatten_dotted_defs_splits_capability_role_containers(
+        self,
+    ) -> None:
+        """Role containers split into two defs and refs into them follow."""
+        role_platform = {"title": "Platform", "allOf": [{"type": "object"}]}
+        role_business = {"title": "Business", "allOf": [{"type": "object"}]}
+        schema = {
+            "$defs": {
+                "dev.ucp.common.identity_linking": {
+                    "platform_schema": role_platform,
+                    "business_schema": role_business,
+                },
+            },
+            "properties": {
+                "platform": {
+                    "$ref": "#/$defs/dev.ucp.common.identity_linking/platform_schema"
+                },
+                "business": {
+                    "$ref": "#/$defs/dev.ucp.common.identity_linking/business_schema"
+                },
+            },
+        }
+
+        rename_map = preprocess_schemas.flatten_dotted_defs(schema)
+
+        self.assertEqual(
+            rename_map,
+            {
+                "dev.ucp.common.identity_linking/platform_schema": (
+                    "identity_linking_platform_schema"
+                ),
+                "dev.ucp.common.identity_linking/business_schema": (
+                    "identity_linking_business_schema"
+                ),
+            },
+        )
+        self.assertEqual(
+            schema["$defs"],
+            {
+                "identity_linking_platform_schema": role_platform,
+                "identity_linking_business_schema": role_business,
+            },
+        )
+        self.assertEqual(
+            schema["properties"]["platform"]["$ref"],
+            "#/$defs/identity_linking_platform_schema",
+        )
+        self.assertEqual(
+            schema["properties"]["business"]["$ref"],
+            "#/$defs/identity_linking_business_schema",
+        )
+
     def test_rewrite_external_defs_refs_uses_target_rename_map(self) -> None:
         """External references follow renames made in the target schema."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1082,6 +1134,73 @@ class SignalsPropertyNamesTest(unittest.TestCase):
                     cls.model_validate({"com.example.k": "v"}).model_extra,
                     {"com.example.k": "v"},
                 )
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class IdentityLinkingRoleSchemaTest(unittest.TestCase):
+    """identity_linking.json keeps its role schemas instead of Any aliases.
+
+    The dotted 'dev.ucp.common.identity_linking' def is a capability role
+    container. Flattening must split it into two generatable defs so the
+    business role keeps the upstream contract: 'config.scopes' required with
+    OAuth scope-token keys.
+    """
+
+    def _business(self):
+        from ucp_sdk.models.schemas.common.identity_linking import (
+            IdentityLinkingBusinessSchema,
+        )
+
+        return IdentityLinkingBusinessSchema
+
+    def _base(self):
+        return {
+            "version": "2026-08-25",
+            "schema": "https://ucp.dev/2026-08-25/schemas/common/identity_linking",
+        }
+
+    def test_platform_role_schema_exists(self):
+        from ucp_sdk.models.schemas.common.identity_linking import (
+            IdentityLinkingPlatformSchema,
+        )
+
+        IdentityLinkingPlatformSchema(
+            version="2026-08-25",
+            **{
+                "schema": "https://ucp.dev/2026-08-25/schemas/common/identity_linking"
+            },
+            spec="https://ucp.dev/specification/common/identity-linking",
+        )
+
+    def test_business_config_with_scopes_accepted(self):
+        obj = self._business().model_validate(
+            {
+                **self._base(),
+                "config": {"scopes": {"dev.ucp.shopping.order:read": {}}},
+            }
+        )
+        self.assertEqual(
+            list(obj.config.scopes), ["dev.ucp.shopping.order:read"]
+        )
+        self.assertIsNone(
+            obj.config.scopes["dev.ucp.shopping.order:read"].description
+        )
+
+    def test_missing_config_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "config"):
+            self._business().model_validate(self._base())
+
+    def test_config_without_scopes_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "scopes"):
+            self._business().model_validate({**self._base(), "config": {}})
+
+    def test_malformed_scope_key_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "pattern"):
+            self._business().model_validate(
+                {**self._base(), "config": {"scopes": {"BAD": {}}}}
+            )
 
 
 class PropertyNamesInjectorTest(unittest.TestCase):

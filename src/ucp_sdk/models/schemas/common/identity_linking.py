@@ -23,7 +23,9 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
+from ..capability import BusinessSchema, PlatformSchema
 from .types import description as description_1
+from .types import reverse_domain_name
 
 IdentityLinking = TypeAliasType(
     "IdentityLinking", Annotated[Any, Field(..., title="Identity Linking")]
@@ -76,4 +78,38 @@ class Provider(BaseModel):
     """
 
 
-IdentityLinking1 = TypeAliasType("IdentityLinking1", Any)
+class Config(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    providers: (
+        dict[reverse_domain_name.ReverseDomainName, list[Provider]] | None
+    ) = None
+    """
+    Map of trusted external identity providers keyed by reverse-domain identifier. Each key maps to an array of mechanism entries — an IdP namespace MAY offer multiple token acquisition mechanisms. Declares which upstream IdPs the business will accept JWT bearer assertions from for the Accelerated IdP Flow (chaining via RFC 8693 + RFC 7523). This field is additive: direct OAuth against the business domain via RFC 8414 discovery is always available regardless of 'providers' content. Businesses MUST NOT list their own authorization server here — chaining-to-self is degenerate, and direct OAuth covers that path. When absent, empty, or when no listed mechanism is supported by the platform, platforms run direct OAuth on the business domain.
+    """
+    scopes: dict[ScopeToken, ScopePolicy]
+    """
+    Map of user-authenticated scopes offered by this business. Each key is an OAuth scope string formed as '{capability}:{scope}' (e.g. 'dev.ucp.shopping.order:read'). Scope presence in this map declares that the corresponding operations require a user identity token. Operations not gated by any listed scope operate at whatever access level the business permits; UCP does not prescribe a default. Each value is a per-scope policy object (empty object means user auth required with no additional policy).
+    """
+
+
+class IdentityLinkingPlatformSchema(PlatformSchema):
+    """
+    Platform-level identity linking capability declaration. Platforms advertise support for identity linking; no auth-specific config is required.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+
+
+class IdentityLinkingBusinessSchema(BusinessSchema):
+    """
+    Business-level identity linking configuration. Businesses declare the user-authenticated scopes they offer in 'config.scopes'.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    config: Config
