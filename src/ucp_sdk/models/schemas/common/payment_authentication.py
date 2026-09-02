@@ -55,7 +55,7 @@ class DevUcpCommonPaymentDeviceDataCollectionItem(BaseModel):
     config: Config
 
 
-class Config1(BaseModel):
+class Config2(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
@@ -73,7 +73,7 @@ class DevUcpCommonPaymentThreeDsChallengeItem(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    config: Config1
+    config: Config2
 
 
 class Actions(BaseModel):

@@ -23,6 +23,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
+from ..capability import BusinessSchema, PlatformSchema
 from ..common.types import description as description_1
 from .catalog_lookup import DetailProduct
 from .catalog_lookup import GetProductRequest as GetProductRequest_1
@@ -34,6 +35,7 @@ from .catalog_search import SearchRequest as SearchRequest_1
 from .catalog_search import SearchResponse as SearchResponse_1
 from .checkout import Checkout as Checkout_1
 from .types import availability as availability_1
+from .types import business_fulfillment_config
 from .types import fulfillment as fulfillment_1
 from .types import (
     fulfillment_available_method,
@@ -42,6 +44,7 @@ from .types import (
     fulfillment_method,
     fulfillment_option,
     fulfillment_option_base,
+    platform_fulfillment_config,
 )
 from .types.product import Product
 from .types.search_filters import SearchFilters
@@ -54,9 +57,6 @@ FulfillmentExtension = TypeAliasType(
 """
 Extends Catalog with fulfillment discovery and Checkout with hierarchical fulfillment.
 """
-
-
-DevUcpShoppingFulfillment = TypeAliasType("DevUcpShoppingFulfillment", Any)
 
 
 FulfillmentAvailableMethod = TypeAliasType(
@@ -106,6 +106,34 @@ class CatalogFulfillment(BaseModel):
     methods: list[CatalogFulfillmentMethod] | None = None
     """
     Fulfillment methods for this variant.
+    """
+
+
+class FulfillmentPlatformSchema(PlatformSchema):
+    """
+    Platform-level fulfillment capability configuration
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    config: platform_fulfillment_config.PlatformFulfillmentConfig | None = None
+    """
+    Platform fulfillment configuration
+    """
+
+
+class FulfillmentBusinessSchema(BusinessSchema):
+    """
+    Business-level fulfillment capability configuration
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    config: business_fulfillment_config.BusinessFulfillmentConfig | None = None
+    """
+    Business fulfillment configuration
     """
 
 
