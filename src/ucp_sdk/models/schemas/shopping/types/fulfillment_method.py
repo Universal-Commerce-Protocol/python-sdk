@@ -109,3 +109,19 @@ class FulfillmentMethod(BaseModel):
                             f"when {rule['discriminator']} is {actual!r}"
                         )
         return self
+
+    @model_validator(mode="after")
+    def _enforce_dependent_required(self):
+        """JSON Schema dependentRequired: enforce dependent fields."""
+        rules = {"destinations": ["type"]}
+        provided = self.model_fields_set | set(self.model_extra or {})
+        for field, required_fields in rules.items():
+            if field not in provided:
+                continue
+            for required in required_fields:
+                if required not in provided:
+                    raise ValueError(
+                        f"Field {required!r} is required when {field!r} "
+                        "is provided (schema dependentRequired)"
+                    )
+        return self

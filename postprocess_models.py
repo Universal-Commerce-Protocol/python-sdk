@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Nine constraint families are handled:
+Ten constraint families are handled:
 
 * ``minProperties`` / ``maxProperties`` on an object schema WITH declared
   properties are dropped by the generator: every field is optional, so an
@@ -119,6 +119,15 @@ Nine constraint families are handled:
   itself ``allOf``-references, e.g. ``postal_address.json``, is not
   inspected).
 
+* ``dependentRequired`` on an object is dropped entirely by the generator. For
+  example, ``time_interval.json`` allows an empty fragment but requires ``opens``
+  and ``closes`` to appear together; the generated ``TimeInterval`` instead
+  accepts either field alone. The script scans root object schemas for valid
+  dependent-field maps and injects a ``model_validator(mode="after")`` that uses
+  property presence (``model_fields_set`` plus extra keys), not value truthiness.
+  A rule naming a field absent from a projected generated class is skipped rather
+  than approximated.
+
 * ``additionalProperties: false`` on an object schema with named properties is
   normally overridden by the generator's ``--extra-fields=allow`` flag. The
   script detects schemas with ``additionalProperties: false`` and flips their
@@ -186,6 +195,26 @@ _PROPNAMES_VALIDATOR_TEMPLATE = '''
                     f"Property name {{key!r}} does not match the schema "
                     f"propertyNames pattern {{pattern}}"
                 )
+        return self
+'''
+
+_DEPENDENT_REQUIRED_MARKER = "_enforce_dependent_required"
+
+_DEPENDENT_REQUIRED_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema dependentRequired: enforce dependent fields."""
+        rules = {rules!r}
+        provided = self.model_fields_set | set(self.model_extra or {{}})
+        for field, required_fields in rules.items():
+            if field not in provided:
+                continue
+            for required in required_fields:
+                if required not in provided:
+                    raise ValueError(
+                        f"Field {{required!r}} is required when {{field!r}} "
+                        "is provided (schema dependentRequired)"
+                    )
         return self
 '''
 
@@ -1392,6 +1421,98 @@ def inject_conditional_array_retyping(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def find_root_dependent_required(schema_dir):
+    """Map generated class names to root-level dependentRequired rules.
+
+    Only complete rules over declared properties are returned. Request variants
+    can project either side out; those rules are inapplicable to that generated
+    class and are skipped by ``inject_dependent_required``.
+    """
+    found = {}
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        properties = schema.get("properties")
+        rules = schema.get("dependentRequired")
+        title = schema.get("title")
+        if (
+            not isinstance(properties, dict)
+            or not properties
+            or not isinstance(rules, dict)
+            or not rules
+        ):
+            continue
+        normalized = {}
+        malformed = False
+        for field, required in rules.items():
+            if (
+                not isinstance(field, str)
+                or not isinstance(required, list)
+                or not required
+                or not all(isinstance(name, str) for name in required)
+            ):
+                malformed = True
+                break
+            # Request variants may project either side out. Such a rule no
+            # longer applies to that generated class and is skipped silently.
+            if field in properties and all(
+                name in properties for name in required
+            ):
+                normalized[field] = required
+        if malformed:
+            sys.stderr.write(
+                f"  ! {path}: unsupported dependentRequired rule; skipped\n"
+            )
+            continue
+        if not normalized:
+            continue
+        if not isinstance(title, str) or not title:
+            sys.stderr.write(
+                f"  ! {path}: root dependentRequired but no title; "
+                "cannot map to a class\n"
+            )
+            continue
+        found[_alias_name(title)] = normalized
+    return found
+
+
+def inject_dependent_required(source, class_name, rules):
+    """Inject root dependentRequired checks into one generated class."""
+    class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
+    match = class_re.search(source)
+    if not match:
+        return source
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    class_body = source[match.start() : end]
+    if f"def {_DEPENDENT_REQUIRED_MARKER}(" in class_body:
+        return source
+    declared = {
+        field.group(1)
+        for field in re.finditer(r"^    (\w+): [^\n]+", class_body, re.M)
+    }
+    applicable = {
+        field: required
+        for field, required in rules.items()
+        if field in declared and all(name in declared for name in required)
+    }
+    if not applicable:
+        return source
+    method = _DEPENDENT_REQUIRED_TEMPLATE.format(
+        marker=_DEPENDENT_REQUIRED_MARKER,
+        rules=applicable,
+    )
+    body = source[:end].rstrip("\n")
+    rest = source[end:]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -1791,6 +1912,48 @@ def _patch_conditional_array_retyping():
     return patched, 0
 
 
+def _patch_dependent_required():
+    """Inject dependentRequired validators; return counts and status."""
+    rules_by_class = find_root_dependent_required(SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write(
+            "postprocess: no dependentRequired constraints found\n"
+        )
+        return 0, 0
+    patched = 0
+    for class_name, rules in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            match = re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            )
+            if match is None:
+                continue
+            tail = re.compile(r"^\S", re.M)
+            end_match = tail.search(source, match.end())
+            end = end_match.start() if end_match else len(source)
+            if (
+                f"def {_DEPENDENT_REQUIRED_MARKER}("
+                in source[match.start() : end]
+            ):
+                hits.append(path)
+                continue
+            updated = inject_dependent_required(source, class_name, rules)
+            if updated == source:
+                continue
+            path.write_text(updated, encoding="utf-8")
+            patched += 1
+            hits.append(path)
+        label = (
+            ", ".join(str(path) for path in hits) or "NO APPLICABLE CLASS FOUND"
+        )
+        sys.stdout.write(f"  dependentRequired on '{class_name}' -> {label}\n")
+        if not hits:
+            return patched, 1
+    return patched, 0
+
+
 def _patch_unique_items():
     """Inject uniqueItems validators; return (patched_count, exit_code)."""
     unique_fields_by_class = find_unique_items_fields(SCHEMA_DIR)
@@ -1933,6 +2096,7 @@ def main():
     patched_cr, rc_cr = _patch_conditional_required()
     patched_cb, rc_cb = _patch_conditional_bounds()
     patched_rt, rc_rt = _patch_conditional_array_retyping()
+    patched_dr, rc_dr = _patch_dependent_required()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
     total = (
@@ -1943,6 +2107,7 @@ def main():
         + patched_cr
         + patched_cb
         + patched_rt
+        + patched_dr
         + patched_ui
         + patched_ef
     )
@@ -1955,6 +2120,7 @@ def main():
         or rc_cr
         or rc_cb
         or rc_rt
+        or rc_dr
         or rc_ui
         or rc_ef
     )
