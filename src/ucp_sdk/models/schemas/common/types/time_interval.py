@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TimeInterval(BaseModel):
@@ -37,3 +37,19 @@ class TimeInterval(BaseModel):
     """
     Closing time in 24-hour HH:MM format.
     """
+
+    @model_validator(mode="after")
+    def _enforce_dependent_required(self):
+        """JSON Schema dependentRequired: enforce dependent fields."""
+        rules = {"opens": ["closes"], "closes": ["opens"]}
+        provided = self.model_fields_set | set(self.model_extra or {})
+        for field, required_fields in rules.items():
+            if field not in provided:
+                continue
+            for required in required_fields:
+                if required not in provided:
+                    raise ValueError(
+                        f"Field {required!r} is required when {field!r} "
+                        "is provided (schema dependentRequired)"
+                    )
+        return self

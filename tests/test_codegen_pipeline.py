@@ -1957,6 +1957,100 @@ class ConditionalArrayRetypingInjectorTest(unittest.TestCase):
         method_cls(type="shipping")
 
 
+class DependentRequiredInjectorTest(unittest.TestCase):
+    """The dependentRequired post-generation injector's behavior."""
+
+    SCHEMA = {
+        "title": "Time Interval",
+        "type": "object",
+        "properties": {
+            "opens": {"type": "string"},
+            "closes": {"type": "string"},
+        },
+        "dependentRequired": {
+            "opens": ["closes"],
+            "closes": ["opens"],
+        },
+    }
+
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import BaseModel, ConfigDict\n"
+        "\n"
+        "\n"
+        "class TimeInterval(BaseModel):\n"
+        '    model_config = ConfigDict(extra="allow")\n'
+        "    opens: str | None = None\n"
+        "    closes: str | None = None\n"
+    )
+
+    def test_schema_scan_finds_root_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "time_interval.json").write_text(
+                json.dumps(self.SCHEMA), encoding="utf-8"
+            )
+            found = postprocess_models.find_root_dependent_required(Path(tmp))
+        self.assertEqual(
+            found,
+            {
+                "TimeInterval": {
+                    "opens": ["closes"],
+                    "closes": ["opens"],
+                }
+            },
+        )
+
+    def test_schema_scan_filters_rules_outside_declared_properties(self):
+        schema = copy.deepcopy(self.SCHEMA)
+        schema["dependentRequired"]["opens"] = ["timezone"]
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "time_interval.json").write_text(
+                json.dumps(schema), encoding="utf-8"
+            )
+            found = postprocess_models.find_root_dependent_required(Path(tmp))
+        self.assertEqual(found, {"TimeInterval": {"closes": ["opens"]}})
+
+    def test_injection_is_idempotent(self):
+        rules = {"opens": ["closes"], "closes": ["opens"]}
+        once = postprocess_models.inject_dependent_required(
+            self.MODULE, "TimeInterval", rules
+        )
+        twice = postprocess_models.inject_dependent_required(
+            once, "TimeInterval", rules
+        )
+        self.assertEqual(once, twice)
+
+    def test_injection_skips_rules_for_projected_out_fields(self):
+        projected = self.MODULE.replace("    closes: str | None = None\n", "")
+        out = postprocess_models.inject_dependent_required(
+            projected,
+            "TimeInterval",
+            {"opens": ["closes"], "closes": ["opens"]},
+        )
+        self.assertEqual(out, projected)
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_uses_property_presence(self):
+        rules = {"opens": ["closes"], "closes": ["opens"]}
+        out = postprocess_models.inject_dependent_required(
+            self.MODULE, "TimeInterval", rules
+        )
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        interval = namespace["TimeInterval"]
+
+        interval()
+        interval(opens="09:00", closes="17:00")
+        interval(opens=None, closes=None)
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            interval(opens="09:00")
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            interval(closes="17:00")
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            interval(opens=None)
+
+
 class InjectorTest(unittest.TestCase):
     """The post-generation injector's own behavior."""
 
@@ -3023,6 +3117,60 @@ class UnitScaleSemanticTest(unittest.TestCase):
         # The pin is C62-specific; any other unit is unconstrained.
         unit = self._unit()(unit="GRM", scale=3, display_text="grams")
         self.assertEqual(unit.scale, 3)
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class TimeIntervalDependentRequiredSemanticTest(unittest.TestCase):
+    """TimeInterval requires opens and closes to be provided together."""
+
+    def _interval(self):
+        from ucp_sdk.models.schemas.common.types.time_interval import (
+            TimeInterval,
+        )
+
+        return TimeInterval
+
+    def _exception_hour(self):
+        from ucp_sdk.models.schemas.common.types.exception_hour import (
+            ExceptionHour,
+        )
+
+        return ExceptionHour
+
+    def test_single_opening_time_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            self._interval()(opens="09:00")
+
+    def test_single_closing_time_rejected(self):
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            self._interval()(closes="17:00")
+
+    def test_empty_and_complete_intervals_accepted(self):
+        self._interval()()
+        interval = self._interval()(opens="09:00", closes="17:00")
+        self.assertEqual((interval.opens, interval.closes), ("09:00", "17:00"))
+
+    def test_explicit_null_still_counts_as_present(self):
+        interval = self._interval()(opens=None, closes=None)
+        self.assertEqual(interval.model_fields_set, {"opens", "closes"})
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            self._interval()(opens=None)
+
+    def test_inherited_interval_rule_is_enforced(self):
+        with self.assertRaisesRegex(ValidationError, "dependentRequired"):
+            self._exception_hour()(
+                valid_from="2026-01-01",
+                valid_through="2026-01-02",
+                opens="09:00",
+            )
+        self._exception_hour()(
+            valid_from="2026-01-01",
+            valid_through="2026-01-02",
+            opens="09:00",
+            closes="17:00",
+        )
 
 
 @unittest.skipUnless(
