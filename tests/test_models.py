@@ -25,12 +25,12 @@ from ucp_sdk.models import (
     Order,
 )
 from ucp_sdk.models.schemas.common.types.amount import Price
-from ucp_sdk.models.schemas.common.types.card_payment_instrument import (
-    AvailablePaymentInstrument,
-    CardPaymentInstrument,
-    PaymentInstrument,
-)
 from ucp_sdk.models.schemas.common.types.payment import Payment
+from ucp_sdk.models.schemas.common.types.payment_instrument import (
+    AvailablePaymentInstrument,
+    PaymentInstrument,
+    SelectedPaymentInstrument,
+)
 from ucp_sdk.models.schemas.common.types.totals import (
     Total,
 )
@@ -70,9 +70,6 @@ class TestModelImportParity(unittest.TestCase):
         self.assertIs(Checkout, ModularCheckout)
         self.assertIs(Cart, ModularCart)
         self.assertIs(Order, ModularOrder)
-
-    def test_compatibility_aliases(self) -> None:
-        self.assertIs(CardPaymentInstrument, PaymentInstrument)
 
 
 class TestPolymorphicFulfillmentDestination(unittest.TestCase):
@@ -280,9 +277,16 @@ class TestCommonTypes(unittest.TestCase):
         )
         self.assertEqual(inst.type, "card")
 
+        pi = PaymentInstrument(id="pi_1", handler_id="ph_stripe", type="card")
+        self.assertEqual(pi.type, "card")
+        self.assertEqual(pi.id, "pi_1")
+        self.assertEqual(pi.handler_id, "ph_stripe")
 
-if __name__ == "__main__":
-    unittest.main()
+        spi = SelectedPaymentInstrument(
+            id="pi_2", handler_id="ph_stripe", type="card", selected=True
+        )
+        self.assertEqual(spi.id, "pi_2")
+        self.assertTrue(spi.selected)
 
 
 class TestValidationInvariants(unittest.TestCase):
@@ -337,3 +341,7 @@ class TestValidationInvariants(unittest.TestCase):
         self.assertEqual(len(resp.messages), 1)
         self.assertEqual(resp.messages[0].code, "invalid_request")
         self.assertEqual(resp.messages[0].content, "Malformed payload")
+
+
+if __name__ == "__main__":
+    unittest.main()

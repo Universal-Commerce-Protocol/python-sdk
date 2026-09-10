@@ -346,15 +346,6 @@ from ...models import Description
 
 __all__ = ["Description"]
 """,
-    "common/types/card_payment_instrument.py": """\"\"\"Card payment instrument models.\"\"\"
-from __future__ import annotations
-
-from ...models import AvailablePaymentInstrument, PaymentInstrument
-
-CardPaymentInstrument = PaymentInstrument
-
-__all__ = ["CardPaymentInstrument", "AvailablePaymentInstrument", "PaymentInstrument"]
-""",
     "common/types/payment_instrument.py": """\"\"\"Payment instrument models.\"\"\"
 from __future__ import annotations
 
@@ -427,7 +418,6 @@ from .amount import *  # noqa: F403
 from .unit import *  # noqa: F403
 from .signals import *  # noqa: F403
 from .description import *  # noqa: F403
-from .card_payment_instrument import *  # noqa: F403
 from .payment_instrument import *  # noqa: F403
 from .error_response import *  # noqa: F403
 from .postal_address import *  # noqa: F403
@@ -457,13 +447,11 @@ from .models import (
     CapabilityResponseSchema,
 )
 
-Base = CapabilityBase
 __all__ = [
     "CapabilityBase",
     "CapabilityBusinessSchema",
     "CapabilityPlatformSchema",
     "CapabilityResponseSchema",
-    "Base",
 ]
 """,
     "service.py": """\"\"\"Service models.\"\"\"
@@ -476,13 +464,11 @@ from .models import (
     ServiceResponseSchema,
 )
 
-Base = ServiceBase
 __all__ = [
     "ServiceBase",
     "ServiceBusinessSchema",
     "ServicePlatformSchema",
     "ServiceResponseSchema",
-    "Base",
 ]
 """,
     "payment_handler.py": """\"\"\"Payment handler models.\"\"\"
@@ -495,13 +481,11 @@ from .models import (
     PaymentHandlerResponseSchema,
 )
 
-Base = PaymentHandlerBase
 __all__ = [
     "PaymentHandlerBase",
     "PaymentHandlerBusinessSchema",
     "PaymentHandlerPlatformSchema",
     "PaymentHandlerResponseSchema",
-    "Base",
 ]
 """,
     "ucp.py": """\"\"\"UCP core models.\"\"\"

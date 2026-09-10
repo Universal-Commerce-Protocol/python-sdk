@@ -9,11 +9,9 @@ from .models import (
     PaymentHandlerResponseSchema,
 )
 
-Base = PaymentHandlerBase
 __all__ = [
     "PaymentHandlerBase",
     "PaymentHandlerBusinessSchema",
     "PaymentHandlerPlatformSchema",
     "PaymentHandlerResponseSchema",
-    "Base",
 ]

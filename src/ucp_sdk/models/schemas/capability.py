@@ -9,11 +9,9 @@ from .models import (
     CapabilityResponseSchema,
 )
 
-Base = CapabilityBase
 __all__ = [
     "CapabilityBase",
     "CapabilityBusinessSchema",
     "CapabilityPlatformSchema",
     "CapabilityResponseSchema",
-    "Base",
 ]

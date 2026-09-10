@@ -5,7 +5,6 @@ from .amount import *  # noqa: F403
 from .unit import *  # noqa: F403
 from .signals import *  # noqa: F403
 from .description import *  # noqa: F403
-from .card_payment_instrument import *  # noqa: F403
 from .payment_instrument import *  # noqa: F403
 from .error_response import *  # noqa: F403
 from .postal_address import *  # noqa: F403

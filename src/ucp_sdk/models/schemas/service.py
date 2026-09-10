@@ -9,11 +9,9 @@ from .models import (
     ServiceResponseSchema,
 )
 
-Base = ServiceBase
 __all__ = [
     "ServiceBase",
     "ServiceBusinessSchema",
     "ServicePlatformSchema",
     "ServiceResponseSchema",
-    "Base",
 ]
