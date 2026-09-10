@@ -13,3 +13,8 @@
 # limitations under the License.
 
 """UCP models."""
+
+from .schemas import models
+from .schemas.models import *  # noqa: F403
+
+__all__ = ["models"]
