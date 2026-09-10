@@ -17,20 +17,4 @@
 from .schemas import models
 from .schemas.models import *  # noqa: F403
 
-# Compatibility aliases for unannotated request types & models
-PaymentCreateRequest = models.Payment
-PaymentUpdateRequest = models.Payment
-PaymentCompleteRequest = models.Payment
-OrderUpdateRequest = models.Order
-AttributionCreateRequest = models.Attribution
-AttributionUpdateRequest = models.Attribution
-AttributionCompleteRequest = models.Attribution
-BuyerCreateRequest = models.Buyer
-BuyerUpdateRequest = models.Buyer
-LocalityCreateRequest = models.Locality
-LocalityUpdateRequest = models.Locality
-ContextCreateRequest = models.Context
-ContextUpdateRequest = models.Context
-LineItemModel = models.LineItem
-
 __all__ = ["models"]

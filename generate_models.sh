@@ -89,24 +89,8 @@ cat << 'PY' > "$OUTPUT_DIR/__init__.py"
 
 """UCP schema models."""
 
-from .models import *  # noqa: F403
 from . import models
-
-# Compatibility aliases for unannotated request types & models
-PaymentCreateRequest = models.Payment
-PaymentUpdateRequest = models.Payment
-PaymentCompleteRequest = models.Payment
-OrderUpdateRequest = models.Order
-AttributionCreateRequest = models.Attribution
-AttributionUpdateRequest = models.Attribution
-AttributionCompleteRequest = models.Attribution
-BuyerCreateRequest = models.Buyer
-BuyerUpdateRequest = models.Buyer
-LocalityCreateRequest = models.Locality
-LocalityUpdateRequest = models.Locality
-ContextCreateRequest = models.Context
-ContextUpdateRequest = models.Context
-LineItemModel = models.LineItem
+from .models import *  # noqa: F403
 
 __all__ = ["models"]
 PY
@@ -130,22 +114,6 @@ cat << 'PY' > "src/ucp_sdk/models/__init__.py"
 
 from .schemas import models
 from .schemas.models import *  # noqa: F403
-
-# Compatibility aliases for unannotated request types & models
-PaymentCreateRequest = models.Payment
-PaymentUpdateRequest = models.Payment
-PaymentCompleteRequest = models.Payment
-OrderUpdateRequest = models.Order
-AttributionCreateRequest = models.Attribution
-AttributionUpdateRequest = models.Attribution
-AttributionCompleteRequest = models.Attribution
-BuyerCreateRequest = models.Buyer
-BuyerUpdateRequest = models.Buyer
-LocalityCreateRequest = models.Locality
-LocalityUpdateRequest = models.Locality
-ContextCreateRequest = models.Context
-ContextUpdateRequest = models.Context
-LineItemModel = models.LineItem
 
 __all__ = ["models"]
 PY
