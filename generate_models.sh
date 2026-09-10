@@ -29,17 +29,19 @@ if ! command -v uv &> /dev/null; then
 fi
 
 # Input OpenAPI Specification (default: embedded shopping.openapi.json)
-OPENAPI_SPEC="${1:-shopping.openapi.json}"
+INPUT_ARG="${1:-shopping.openapi.json}"
 
-if [ ! -f "$OPENAPI_SPEC" ]; then
-    if [ -f "../ucp-schema/dist/shopping.openapi.json" ]; then
-        OPENAPI_SPEC="../ucp-schema/dist/shopping.openapi.json"
-    elif [ -f "dist/shopping.openapi.json" ]; then
-        OPENAPI_SPEC="dist/shopping.openapi.json"
-    else
-        echo "Error: OpenAPI spec not found at $OPENAPI_SPEC"
-        exit 1
-    fi
+if [ -f "$INPUT_ARG" ]; then
+    OPENAPI_SPEC="$INPUT_ARG"
+elif [ -f "shopping.openapi.json" ]; then
+    OPENAPI_SPEC="shopping.openapi.json"
+elif [ -f "../ucp-schema/dist/shopping.openapi.json" ]; then
+    OPENAPI_SPEC="../ucp-schema/dist/shopping.openapi.json"
+elif [ -f "dist/shopping.openapi.json" ]; then
+    OPENAPI_SPEC="dist/shopping.openapi.json"
+else
+    echo "Error: OpenAPI spec not found at $INPUT_ARG"
+    exit 1
 fi
 
 # Output directory and target models file

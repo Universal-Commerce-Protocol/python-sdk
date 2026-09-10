@@ -10,9 +10,7 @@
         "operationId": "getMerchantProfile",
         "summary": "Get Merchant Profile",
         "description": "Fetch the merchant discovery profile and advertised capabilities.",
-        "tags": [
-          "Discovery"
-        ],
+        "tags": ["Discovery"],
         "parameters": [],
         "responses": {
           "200": {
@@ -33,9 +31,7 @@
         "operationId": "createCart",
         "summary": "Create a new Cart resource",
         "description": "Create a new Cart session or resource.",
-        "tags": [
-          "Cart"
-        ],
+        "tags": ["Cart"],
         "parameters": [
           {
             "$ref": "#/components/parameters/UcpAgent"
@@ -104,9 +100,7 @@
         "operationId": "getCart",
         "summary": "Get Cart by ID",
         "description": "Retrieve an existing Cart by its identifier.",
-        "tags": [
-          "Cart"
-        ],
+        "tags": ["Cart"],
         "parameters": [
           {
             "name": "id",
@@ -161,9 +155,7 @@
         "operationId": "updateCart",
         "summary": "Update existing Cart",
         "description": "Update an active Cart session or resource.",
-        "tags": [
-          "Cart"
-        ],
+        "tags": ["Cart"],
         "parameters": [
           {
             "name": "id",
@@ -244,9 +236,7 @@
         "operationId": "cancelCart",
         "summary": "Cancel Cart Session",
         "description": "Cancel an active cart session.",
-        "tags": [
-          "Cart"
-        ],
+        "tags": ["Cart"],
         "parameters": [
           {
             "name": "id",
@@ -316,9 +306,7 @@
         "operationId": "lookupCatalog",
         "summary": "Lookup Catalog",
         "description": "Request body for catalog lookup.",
-        "tags": [
-          "Catalog"
-        ],
+        "tags": ["Catalog"],
         "parameters": [
           {
             "$ref": "#/components/parameters/UcpAgent"
@@ -371,9 +359,7 @@
         "operationId": "getCatalogProduct",
         "summary": "Get Product Details",
         "description": "Request body for single-product retrieval. Supports interactive variant narrowing via selected and preferences.",
-        "tags": [
-          "Catalog"
-        ],
+        "tags": ["Catalog"],
         "parameters": [
           {
             "name": "id",
@@ -424,9 +410,7 @@
         "operationId": "searchCatalog",
         "summary": "Search Catalog",
         "description": "Execute search operation on catalog.",
-        "tags": [
-          "Catalog"
-        ],
+        "tags": ["Catalog"],
         "parameters": [
           {
             "$ref": "#/components/parameters/UcpAgent"
@@ -479,9 +463,7 @@
         "operationId": "createCheckout",
         "summary": "Create a new Checkout resource",
         "description": "Create a new Checkout session or resource.",
-        "tags": [
-          "Checkout"
-        ],
+        "tags": ["Checkout"],
         "parameters": [
           {
             "$ref": "#/components/parameters/UcpAgent"
@@ -550,9 +532,7 @@
         "operationId": "getCheckout",
         "summary": "Get Checkout by ID",
         "description": "Retrieve an existing Checkout by its identifier.",
-        "tags": [
-          "Checkout"
-        ],
+        "tags": ["Checkout"],
         "parameters": [
           {
             "name": "id",
@@ -607,9 +587,7 @@
         "operationId": "updateCheckout",
         "summary": "Update existing Checkout",
         "description": "Update an active Checkout session or resource.",
-        "tags": [
-          "Checkout"
-        ],
+        "tags": ["Checkout"],
         "parameters": [
           {
             "name": "id",
@@ -690,9 +668,7 @@
         "operationId": "cancelCheckout",
         "summary": "Cancel Checkout Session",
         "description": "Cancel an active checkout session.",
-        "tags": [
-          "Checkout"
-        ],
+        "tags": ["Checkout"],
         "parameters": [
           {
             "name": "id",
@@ -762,9 +738,7 @@
         "operationId": "completeCheckout",
         "summary": "Complete Checkout Session",
         "description": "Finalize and complete an active checkout session.",
-        "tags": [
-          "Checkout"
-        ],
+        "tags": ["Checkout"],
         "parameters": [
           {
             "name": "id",
@@ -845,9 +819,7 @@
         "operationId": "createOrder",
         "summary": "Create a new Order resource",
         "description": "Create a new Order session or resource.",
-        "tags": [
-          "Order"
-        ],
+        "tags": ["Order"],
         "parameters": [
           {
             "$ref": "#/components/parameters/UcpAgent"
@@ -916,9 +888,7 @@
         "operationId": "getOrder",
         "summary": "Get Order by ID",
         "description": "Retrieve an existing Order by its identifier.",
-        "tags": [
-          "Order"
-        ],
+        "tags": ["Order"],
         "parameters": [
           {
             "name": "id",
@@ -973,9 +943,7 @@
         "operationId": "updateOrder",
         "summary": "Update existing Order",
         "description": "Update an active Order session or resource.",
-        "tags": [
-          "Order"
-        ],
+        "tags": ["Order"],
         "parameters": [
           {
             "name": "id",
@@ -1087,21 +1055,14 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "completed",
-              "failed"
-            ],
+            "enum": ["pending", "completed", "failed"],
             "description": "Adjustment status."
           },
           "line_items": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "id",
-                "quantity"
-              ],
+              "required": ["id", "quantity"],
               "properties": {
                 "id": {
                   "type": "string",
@@ -1133,12 +1094,7 @@
             "description": "Human-readable reason or description (e.g., 'Defective item', 'Customer requested')."
           }
         },
-        "required": [
-          "id",
-          "type",
-          "occurred_at",
-          "status"
-        ],
+        "required": ["id", "type", "occurred_at", "status"],
         "title": "Adjustment",
         "description": "Post-order event that exists independently of fulfillment. Typically represents money movements but can be any post-order change. Polymorphic type that can optionally reference line items.",
         "type": "object"
@@ -1146,10 +1102,7 @@
       "Allocation": {
         "type": "object",
         "description": "Breakdown of how a discount amount was allocated to a specific target.",
-        "required": [
-          "path",
-          "amount"
-        ],
+        "required": ["path", "amount"],
         "properties": {
           "path": {
             "type": "string",
@@ -1171,10 +1124,7 @@
       "AppliedDiscount": {
         "type": "object",
         "description": "A discount that was successfully applied.",
-        "required": [
-          "title",
-          "amount"
-        ],
+        "required": ["title", "amount"],
         "properties": {
           "code": {
             "type": "string",
@@ -1195,10 +1145,7 @@
           },
           "method": {
             "type": "string",
-            "enum": [
-              "each",
-              "across"
-            ],
+            "enum": ["each", "across"],
             "description": "Allocation method. 'each' = applied independently per item. 'across' = split proportionally by value."
           },
           "priority": {
@@ -1259,9 +1206,7 @@
             "description": "A Constraint Expression describing the instrument this entry makes available. Keys in `properties` name members of the `constraint_target` declared by the instrument schema for this `type`. Requirements on submitted request data belong in `ucp.request_constraints` instead."
           }
         },
-        "required": [
-          "type"
-        ],
+        "required": ["type"],
         "title": "Available Payment Instrument",
         "description": "An instrument type available from a payment handler with optional constraints.",
         "type": "object"
@@ -1273,9 +1218,7 @@
             "description": "Method types that permit multiple destinations within one cart (e.g. split shipping across addresses). Listing a method permits it; an omitted method does not. Open — businesses MAY list any method type.",
             "items": {
               "type": "object",
-              "required": [
-                "method"
-              ],
+              "required": ["method"],
               "additionalProperties": true,
               "properties": {
                 "method": {
@@ -1355,9 +1298,7 @@
             "$ref": "#/components/schemas/CapabilityBase"
           },
           {
-            "required": [
-              "schema"
-            ]
+            "required": ["schema"]
           }
         ]
       },
@@ -1369,10 +1310,7 @@
             "$ref": "#/components/schemas/CapabilityBase"
           },
           {
-            "required": [
-              "spec",
-              "schema"
-            ]
+            "required": ["spec", "schema"]
           }
         ]
       },
@@ -1386,13 +1324,7 @@
         ]
       },
       "Cart": {
-        "required": [
-          "ucp",
-          "id",
-          "line_items",
-          "currency",
-          "totals"
-        ],
+        "required": ["ucp", "id", "line_items", "currency", "totals"],
         "additionalProperties": true,
         "type": "object",
         "title": "Cart",
@@ -1475,9 +1407,7 @@
         }
       },
       "CartCreateRequest": {
-        "required": [
-          "line_items"
-        ],
+        "required": ["line_items"],
         "additionalProperties": true,
         "type": "object",
         "title": "CartCreateRequest",
@@ -1510,9 +1440,7 @@
         }
       },
       "CartUpdateRequest": {
-        "required": [
-          "line_items"
-        ],
+        "required": ["line_items"],
         "additionalProperties": true,
         "type": "object",
         "title": "CartUpdateRequest",
@@ -1564,9 +1492,7 @@
         "description": "A fulfillment method on a catalog variant: how the variant can be fulfilled, and its availability.",
         "type": "object",
         "additionalProperties": true,
-        "required": [
-          "type"
-        ],
+        "required": ["type"],
         "properties": {
           "type": {
             "type": "string",
@@ -1604,9 +1530,7 @@
             "description": "Source taxonomy. Well-known values: `google_product_category`, `shopify`, `merchant`."
           }
         },
-        "required": [
-          "value"
-        ],
+        "required": ["value"],
         "title": "Category",
         "description": "A product category with optional taxonomy identifier.",
         "type": "object"
@@ -1725,9 +1649,7 @@
         "type": "object"
       },
       "CheckoutCompleteRequest": {
-        "required": [
-          "payment"
-        ],
+        "required": ["payment"],
         "properties": {
           "buyer": {
             "$ref": "#/components/schemas/Buyer",
@@ -1749,9 +1671,7 @@
         "type": "object"
       },
       "CheckoutCreateRequest": {
-        "required": [
-          "line_items"
-        ],
+        "required": ["line_items"],
         "properties": {
           "line_items": {
             "type": "array",
@@ -1790,9 +1710,7 @@
         "type": "object"
       },
       "CheckoutUpdateRequest": {
-        "required": [
-          "line_items"
-        ],
+        "required": ["line_items"],
         "properties": {
           "line_items": {
             "type": "array",
@@ -1833,9 +1751,7 @@
       "Config": {
         "type": "object",
         "description": "Business browser endpoint configuration for shopping permalinks.",
-        "required": [
-          "endpoint"
-        ],
+        "required": ["endpoint"],
         "properties": {
           "endpoint": {
             "$ref": "#/components/schemas/Endpoint"
@@ -1856,11 +1772,7 @@
       "ConsentPurpose": {
         "type": "object",
         "description": "A buyer's consent decision for a purpose (e.g., marketing, analytics). Carries the current binary state, its source (business default or platform-captured buyer decision), human-readable context, and optional refinements scoping the decision to specific channels, vendors, or programs.",
-        "required": [
-          "granted",
-          "source",
-          "description"
-        ],
+        "required": ["granted", "source", "description"],
         "properties": {
           "granted": {
             "type": "boolean",
@@ -1868,10 +1780,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "business",
-              "platform"
-            ],
+            "enum": ["business", "platform"],
             "description": "Identifies the party that asserted the current `granted` value. `business` means the value reflects the business's default policy; `platform` means the value reflects an explicit buyer decision captured by the platform."
           },
           "description": {
@@ -1900,11 +1809,7 @@
       "ConsentSegment": {
         "type": "object",
         "description": "A buyer's consent decision for a specific refinement of a parent purpose (e.g., email marketing under the marketing purpose). Overrides the parent's `granted` value for this scope. Segments do not nest further.",
-        "required": [
-          "granted",
-          "source",
-          "description"
-        ],
+        "required": ["granted", "source", "description"],
         "properties": {
           "granted": {
             "type": "boolean",
@@ -1912,10 +1817,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "business",
-              "platform"
-            ],
+            "enum": ["business", "platform"],
             "description": "Identifies the party that asserted the current `granted` value for this segment. `business` means the value reflects the business's default policy; `platform` means the value reflects an explicit buyer decision captured by the platform."
           },
           "description": {
@@ -2010,9 +1912,7 @@
                 "description": "Buyer-preferred payment handlers in priority order (most preferred first). Each entry names a handler advertised in the Business profile's `ucp.payment_handlers`, optionally narrowed to preferred instrument types. The Business SHOULD use it to preselect or prioritize the handler (and type, when given) and MAY ignore unavailable or ineligible entries; unrecognized values MUST be ignored without error.",
                 "items": {
                   "type": "object",
-                  "required": [
-                    "handler"
-                  ],
+                  "required": ["handler"],
                   "properties": {
                     "handler": {
                       "$ref": "#/components/schemas/ReverseDomainName",
@@ -2096,10 +1996,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "name",
-                "values"
-              ],
+              "required": ["name", "values"],
               "properties": {
                 "name": {
                   "type": "string"
@@ -2154,10 +2051,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "light",
-                "dark"
-              ]
+              "enum": ["light", "dark"]
             },
             "description": "Color schemes the business supports. Hosts use ec_color_scheme query parameter to request a scheme from this list."
           }
@@ -2186,9 +2080,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           }
         ]
       },
@@ -2231,10 +2123,7 @@
         "title": "Error Response",
         "description": "Generic error response when business logic prevents resource creation or failed to retrieve resource. Used when no valid resource can be established.",
         "type": "object",
-        "required": [
-          "ucp",
-          "messages"
-        ]
+        "required": ["ucp", "messages"]
       },
       "Expectation": {
         "properties": {
@@ -2246,10 +2135,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "id",
-                "quantity"
-              ],
+              "required": ["id", "quantity"],
               "properties": {
                 "id": {
                   "type": "string",
@@ -2282,12 +2168,7 @@
             "description": "When this expectation can be fulfilled: 'now' or ISO 8601 timestamp for future date (backorder, pre-order)."
           }
         },
-        "required": [
-          "id",
-          "line_items",
-          "method_type",
-          "destination"
-        ],
+        "required": ["id", "line_items", "method_type", "destination"],
         "title": "Expectation",
         "description": "Buyer-facing fulfillment expectation representing logical groupings of items (e.g., 'package'). Can be split, merged, or adjusted post-order to set buyer expectations for when/how items arrive.",
         "type": "object"
@@ -2314,10 +2195,7 @@
         "description": "Container for fulfillment methods and availability."
       },
       "FulfillmentAvailableMethod": {
-        "required": [
-          "type",
-          "line_item_ids"
-        ],
+        "required": ["type", "line_item_ids"],
         "properties": {
           "type": {
             "type": "string",
@@ -2331,10 +2209,7 @@
             }
           },
           "fulfillable_on": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "'now' for immediate availability, or ISO 8601 date for future (preorders, transfers)."
           },
           "description": {
@@ -2480,10 +2355,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "id",
-                "quantity"
-              ],
+              "required": ["id", "quantity"],
               "properties": {
                 "id": {
                   "type": "string",
@@ -2517,12 +2389,7 @@
             "description": "Human-readable description of the shipment status or delivery information (e.g., 'Delivered to front door', 'Out for delivery')."
           }
         },
-        "required": [
-          "id",
-          "occurred_at",
-          "type",
-          "line_items"
-        ],
+        "required": ["id", "occurred_at", "type", "line_items"],
         "title": "Fulfillment Event",
         "description": "Append-only fulfillment event representing an actual shipment. References line items by ID.",
         "type": "object"
@@ -2558,10 +2425,7 @@
         ]
       },
       "FulfillmentGroup": {
-        "required": [
-          "id",
-          "line_item_ids"
-        ],
+        "required": ["id", "line_item_ids"],
         "properties": {
           "id": {
             "type": "string",
@@ -2582,10 +2446,7 @@
             }
           },
           "selected_option_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected fulfillment option for this group."
           }
         },
@@ -2598,10 +2459,7 @@
         "additionalProperties": true,
         "properties": {
           "selected_option_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected fulfillment option for this group."
           }
         },
@@ -2610,19 +2468,14 @@
         "type": "object"
       },
       "FulfillmentGroupUpdateRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
             "description": "Group identifier for referencing merchant-generated groups in updates."
           },
           "selected_option_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected fulfillment option for this group."
           }
         },
@@ -2700,15 +2553,9 @@
         ]
       },
       "FulfillmentMethod": {
-        "required": [
-          "id",
-          "type",
-          "line_item_ids"
-        ],
+        "required": ["id", "type", "line_item_ids"],
         "dependentRequired": {
-          "destinations": [
-            "type"
-          ]
+          "destinations": ["type"]
         },
         "title": "Fulfillment Method",
         "description": "A fulfillment method with destinations and groups.",
@@ -2737,10 +2584,7 @@
             }
           },
           "selected_destination_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`."
           },
           "groups": {
@@ -2761,9 +2605,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -2786,9 +2628,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -2805,13 +2645,9 @@
         ]
       },
       "FulfillmentMethodCreateRequest": {
-        "required": [
-          "type"
-        ],
+        "required": ["type"],
         "dependentRequired": {
-          "destinations": [
-            "type"
-          ]
+          "destinations": ["type"]
         },
         "title": "FulfillmentMethodCreateRequest",
         "description": "Request payload to create a new FulfillmentMethod. A fulfillment method with destinations and groups.",
@@ -2822,10 +2658,7 @@
             "description": "Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values."
           },
           "selected_destination_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`."
           },
           "groups": {
@@ -2846,9 +2679,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -2871,9 +2702,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {}
@@ -2882,13 +2711,9 @@
         ]
       },
       "FulfillmentMethodUpdateRequest": {
-        "required": [
-          "line_item_ids"
-        ],
+        "required": ["line_item_ids"],
         "dependentRequired": {
-          "destinations": [
-            "type"
-          ]
+          "destinations": ["type"]
         },
         "title": "FulfillmentMethodUpdateRequest",
         "description": "Request payload to update an existing FulfillmentMethod. A fulfillment method with destinations and groups.",
@@ -2910,10 +2735,7 @@
             }
           },
           "selected_destination_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`."
           },
           "groups": {
@@ -2934,9 +2756,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -2959,9 +2779,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {}
@@ -3000,9 +2818,7 @@
                 "description": "Fulfillment option totals breakdown."
               }
             },
-            "required": [
-              "totals"
-            ]
+            "required": ["totals"]
           }
         ],
         "type": "object",
@@ -3010,10 +2826,7 @@
         "description": "A fulfillment option within a group (e.g., Standard Shipping $5, Express $15). Extends the fulfillment option base with cost and timing."
       },
       "FulfillmentOptionBase": {
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "properties": {
           "id": {
             "type": "string",
@@ -3172,9 +2985,7 @@
       "GetProductRequest": {
         "type": "object",
         "description": "Request body for single-product retrieval. Supports interactive variant narrowing via selected and preferences.",
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
@@ -3211,10 +3022,7 @@
       },
       "GetProductResponse": {
         "type": "object",
-        "required": [
-          "ucp",
-          "product"
-        ],
+        "required": ["ucp", "product"],
         "properties": {
           "ucp": {
             "$ref": "#/components/schemas/ResponseCatalogSchema"
@@ -3263,15 +3071,10 @@
           "match": {
             "type": "string",
             "description": "How the request identifier resolved to this variant. Well-known values: `exact` (input directly identifies this variant, e.g., variant ID, SKU), `featured` (server selected this variant as representative, e.g., product ID resolved to best match). Businesses MAY implement and provide additional resolution strategies.",
-            "examples": [
-              "exact",
-              "featured"
-            ]
+            "examples": ["exact", "featured"]
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "title": "Input Correlation",
         "description": "Maps a request identifier to the variant it resolved to, with match semantics.",
         "type": "object"
@@ -3279,9 +3082,7 @@
       "Instance": {
         "type": "object",
         "description": "Common fields for one outstanding Action instance are id and optional config. The extension declaring the Action type defines type-specific processing data under config. Additional properties are permitted for forward compatibility.",
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": true,
         "properties": {
           "id": {
@@ -3297,11 +3098,7 @@
         }
       },
       "Item": {
-        "required": [
-          "id",
-          "title",
-          "price"
-        ],
+        "required": ["id", "title", "price"],
         "properties": {
           "id": {
             "type": "string",
@@ -3333,9 +3130,7 @@
         "type": "object"
       },
       "ItemCreateRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
@@ -3351,9 +3146,7 @@
         "description": "Request payload to create a new Item."
       },
       "ItemUpdateRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
@@ -3371,10 +3164,7 @@
       "JwkPublicKey": {
         "type": "object",
         "description": "Public JSON Web Key used for HTTP Message Signatures and signed webhook verification. UCP profiles publish public keys only; private key material MUST NOT appear in a profile. Well-known key types: EC (ECDSA P-256, P-384) and OKP (EdDSA Ed25519); OKP keys are RECOMMENDED for signers opting into Web Bot Auth (WBA) interop on HTTP transport. A single profile MAY publish keys of either or both types; consumers select keys by kid. The kty, crv, and alg vocabularies are OPEN: verifiers MUST tolerate key types, curves, and algorithms they do not recognize, selecting keys by kid at verification time. An unsupported key affects only the signature that references it (algorithm_unsupported) and MUST NOT cause whole-profile rejection. Additional public JWK members are permitted; consumers ignore unknown members.",
-        "required": [
-          "kid",
-          "kty"
-        ],
+        "required": ["kid", "kty"],
         "properties": {
           "kid": {
             "type": "string",
@@ -3382,19 +3172,12 @@
           },
           "kty": {
             "type": "string",
-            "examples": [
-              "EC",
-              "OKP"
-            ],
+            "examples": ["EC", "OKP"],
             "description": "JWK key type. Well-known values: EC for ECDSA (P-256, P-384); OKP for EdDSA (Ed25519). Open vocabulary; verifiers tolerate unrecognized types and select keys by kid."
           },
           "crv": {
             "type": "string",
-            "examples": [
-              "P-256",
-              "P-384",
-              "Ed25519"
-            ],
+            "examples": ["P-256", "P-384", "Ed25519"],
             "description": "Curve name. Well-known values: P-256, P-384 (EC); Ed25519 (OKP). Open vocabulary."
           },
           "x": {
@@ -3407,11 +3190,7 @@
           },
           "alg": {
             "type": "string",
-            "examples": [
-              "ES256",
-              "ES384",
-              "EdDSA"
-            ],
+            "examples": ["ES256", "ES384", "EdDSA"],
             "description": "JWA algorithm associated with this public key. Optional; verifiers derive the algorithm from crv when alg is omitted. When present for a well-known curve it MUST match: ES256 with P-256, ES384 with P-384, EdDSA with Ed25519."
           },
           "use": {
@@ -3430,16 +3209,10 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "kty"
-              ]
+              "required": ["kty"]
             },
             "then": {
-              "required": [
-                "crv",
-                "x",
-                "y"
-              ]
+              "required": ["crv", "x", "y"]
             }
           },
           {
@@ -3452,15 +3225,10 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "kty"
-              ]
+              "required": ["kty"]
             },
             "then": {
-              "required": [
-                "crv",
-                "x"
-              ]
+              "required": ["crv", "x"]
             }
           },
           {
@@ -3473,9 +3241,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "crv"
-              ]
+              "required": ["crv"]
             },
             "then": {
               "properties": {
@@ -3497,9 +3263,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "crv"
-              ]
+              "required": ["crv"]
             },
             "then": {
               "properties": {
@@ -3521,9 +3285,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "crv"
-              ]
+              "required": ["crv"]
             },
             "then": {
               "properties": {
@@ -3539,56 +3301,35 @@
         "not": {
           "anyOf": [
             {
-              "required": [
-                "d"
-              ]
+              "required": ["d"]
             },
             {
-              "required": [
-                "p"
-              ]
+              "required": ["p"]
             },
             {
-              "required": [
-                "q"
-              ]
+              "required": ["q"]
             },
             {
-              "required": [
-                "dp"
-              ]
+              "required": ["dp"]
             },
             {
-              "required": [
-                "dq"
-              ]
+              "required": ["dq"]
             },
             {
-              "required": [
-                "qi"
-              ]
+              "required": ["qi"]
             },
             {
-              "required": [
-                "oth"
-              ]
+              "required": ["oth"]
             },
             {
-              "required": [
-                "k"
-              ]
+              "required": ["k"]
             }
           ]
         },
         "additionalProperties": true
       },
       "LineItem": {
-        "required": [
-          "id",
-          "item",
-          "quantity",
-          "totals"
-        ],
+        "required": ["id", "item", "quantity", "totals"],
         "properties": {
           "id": {
             "type": "string"
@@ -3619,10 +3360,7 @@
         "description": "Line item object. Expected to use the currency of the parent object."
       },
       "LineItemCreateRequest": {
-        "required": [
-          "item",
-          "quantity"
-        ],
+        "required": ["item", "quantity"],
         "properties": {
           "item": {
             "$ref": "#/components/schemas/ItemCreateRequest"
@@ -3639,10 +3377,7 @@
         "description": "Request payload to create a new LineItem. Line item object. Expected to use the currency of the parent object."
       },
       "LineItemUpdateRequest": {
-        "required": [
-          "item",
-          "quantity"
-        ],
+        "required": ["item", "quantity"],
         "properties": {
           "id": {
             "type": "string"
@@ -3681,10 +3416,7 @@
             "description": "Optional display text for the link. When provided, use this instead of generating from type."
           }
         },
-        "required": [
-          "type",
-          "url"
-        ],
+        "required": ["type", "url"],
         "title": "Link",
         "type": "object"
       },
@@ -3723,9 +3455,7 @@
                 "default": "business_location"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           }
         ],
         "type": "object",
@@ -3761,10 +3491,7 @@
         "description": "Request payload to update an existing LocationDestination. A business location fulfillment destination. Business-authored and response-only: the Platform selects a location via `selected_destination_id` rather than writing destinations."
       },
       "LocationSummary": {
-        "required": [
-          "id",
-          "name"
-        ],
+        "required": ["id", "name"],
         "properties": {
           "id": {
             "type": "string",
@@ -3785,9 +3512,7 @@
         "additionalProperties": true
       },
       "LocationSummaryCreateRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
@@ -3800,9 +3525,7 @@
         "additionalProperties": true
       },
       "LocationSummaryUpdateRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "properties": {
           "id": {
             "type": "string",
@@ -3817,9 +3540,7 @@
       "LookupRequest": {
         "type": "object",
         "description": "Request body for catalog lookup.",
-        "required": [
-          "ids"
-        ],
+        "required": ["ids"],
         "properties": {
           "ids": {
             "type": "array",
@@ -3846,10 +3567,7 @@
       },
       "LookupResponse": {
         "type": "object",
-        "required": [
-          "ucp",
-          "products"
-        ],
+        "required": ["ucp", "products"],
         "properties": {
           "ucp": {
             "$ref": "#/components/schemas/ResponseCatalogSchema"
@@ -3901,9 +3619,7 @@
             "$ref": "#/components/schemas/Variant"
           },
           {
-            "required": [
-              "inputs"
-            ],
+            "required": ["inputs"],
             "properties": {
               "inputs": {
                 "type": "array",
@@ -3934,9 +3650,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "value"
-            ],
+            "required": ["value"],
             "properties": {
               "value": {
                 "type": "integer",
@@ -3976,10 +3690,7 @@
             "description": "Height in pixels (for images/video)."
           }
         },
-        "required": [
-          "type",
-          "url"
-        ],
+        "required": ["type", "url"],
         "title": "Media",
         "description": "Media item (image, video, etc.).",
         "type": "object"
@@ -4038,10 +3749,7 @@
           },
           "content_type": {
             "type": "string",
-            "enum": [
-              "plain",
-              "markdown"
-            ],
+            "enum": ["plain", "markdown"],
             "default": "plain",
             "description": "Content format, default = plain."
           },
@@ -4060,12 +3768,7 @@
             "description": "Reflects the resource state and recommended action. 'recoverable': platform can resolve the condition in band, for example by modifying inputs or processing a related Action, and submit a new operation when needed. 'requires_buyer_input': merchant requires information their API doesn't support collecting programmatically (checkout incomplete). 'requires_buyer_review': buyer must authorize before order placement due to policy, regulatory, or entitlement rules. 'unrecoverable': no valid resource exists to act on, retry with new resource or inputs. Errors with 'requires_*' severity contribute to 'status: requires_escalation'."
           }
         },
-        "required": [
-          "type",
-          "code",
-          "content",
-          "severity"
-        ],
+        "required": ["type", "code", "content", "severity"],
         "title": "Message Error",
         "type": "object"
       },
@@ -4086,10 +3789,7 @@
           },
           "content_type": {
             "type": "string",
-            "enum": [
-              "plain",
-              "markdown"
-            ],
+            "enum": ["plain", "markdown"],
             "default": "plain",
             "description": "Content format, default = plain."
           },
@@ -4098,10 +3798,7 @@
             "description": "Human-readable message."
           }
         },
-        "required": [
-          "type",
-          "content"
-        ],
+        "required": ["type", "content"],
         "title": "Message Info",
         "type": "object"
       },
@@ -4126,10 +3823,7 @@
           },
           "content_type": {
             "type": "string",
-            "enum": [
-              "plain",
-              "markdown"
-            ],
+            "enum": ["plain", "markdown"],
             "default": "plain",
             "description": "Content format, default = plain."
           },
@@ -4149,11 +3843,7 @@
             "description": "Reference URL for more information (e.g., regulatory site, registry entry, policy page)."
           }
         },
-        "required": [
-          "type",
-          "code",
-          "content"
-        ],
+        "required": ["type", "code", "content"],
         "title": "Message Warning",
         "type": "object"
       },
@@ -4168,9 +3858,7 @@
             "description": "Display text for this option value (e.g., 'Small', 'Blue')."
           }
         },
-        "required": [
-          "label"
-        ],
+        "required": ["label"],
         "title": "Option Value",
         "description": "A selectable value for a product option.",
         "type": "object"
@@ -4288,10 +3976,7 @@
             "description": "Permalink to access the order on merchant site."
           }
         },
-        "required": [
-          "id",
-          "permalink_url"
-        ],
+        "required": ["id", "permalink_url"],
         "title": "Order Confirmation",
         "description": "Order details available at the time of checkout completion.",
         "type": "object"
@@ -4389,10 +4074,7 @@
           },
           "quantity": {
             "type": "object",
-            "required": [
-              "total",
-              "fulfilled"
-            ],
+            "required": ["total", "fulfilled"],
             "properties": {
               "original": {
                 "type": "integer",
@@ -4424,12 +4106,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "processing",
-              "partial",
-              "fulfilled",
-              "removed"
-            ],
+            "enum": ["processing", "partial", "fulfilled", "removed"],
             "description": "Derived status: removed if quantity.total == 0, fulfilled if quantity.total > 0 and quantity.fulfilled == quantity.total, partial if quantity.total > 0 and quantity.fulfilled > 0, otherwise processing."
           },
           "parent_id": {
@@ -4437,13 +4114,7 @@
             "description": "Parent line item identifier for any nested structures."
           }
         },
-        "required": [
-          "id",
-          "item",
-          "quantity",
-          "totals",
-          "status"
-        ],
+        "required": ["id", "item", "quantity", "totals", "status"],
         "title": "Order Line Item",
         "type": "object"
       },
@@ -4451,9 +4122,7 @@
         "title": "Platform Order Schema",
         "description": "Platform's order capability configuration.",
         "type": "object",
-        "required": [
-          "webhook_url"
-        ],
+        "required": ["webhook_url"],
         "properties": {
           "webhook_url": {
             "type": "string",
@@ -4568,9 +4237,7 @@
         "title": "Payment Credential",
         "description": "The base definition for any payment credential. Handlers define specific credential types.",
         "type": "object",
-        "required": [
-          "type"
-        ]
+        "required": ["type"]
       },
       "PaymentHandlerBase": {
         "allOf": [
@@ -4579,9 +4246,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "id"
-            ]
+            "required": ["id"]
           },
           {
             "type": "object",
@@ -4615,10 +4280,7 @@
             "$ref": "#/components/schemas/PaymentHandlerBase"
           },
           {
-            "required": [
-              "spec",
-              "schema"
-            ]
+            "required": ["spec", "schema"]
           }
         ]
       },
@@ -4661,11 +4323,7 @@
         "title": "Payment Instrument",
         "description": "The base definition for any payment instrument. It links the instrument to a specific payment handler.",
         "type": "object",
-        "required": [
-          "id",
-          "handler_id",
-          "type"
-        ]
+        "required": ["id", "handler_id", "type"]
       },
       "PlatformFulfillmentConfig": {
         "properties": {
@@ -4706,10 +4364,7 @@
         "title": "Policy",
         "description": "A durable business rule about the items in a response — return/refund terms, warranty, and the like — at the time of purchase. Every policy carries a `type` (an open reverse-DNS vocabulary) and a `description` so a platform can present it without understanding its type-specific fields; type-specific fields (gated by `type`) add structured context for platforms that model that type. Policies are reference data; the obligation to display a term to the buyer is carried by a `messages[]` warning whose `code` equals the policy `type` — see the Policies section of the specification.",
         "type": "object",
-        "required": [
-          "type",
-          "description"
-        ]
+        "required": ["type", "description"]
       },
       "PostalAddress": {
         "properties": {
@@ -4765,10 +4420,7 @@
             "pattern": "^[A-Z]{3}$"
           }
         },
-        "required": [
-          "amount",
-          "currency"
-        ],
+        "required": ["amount", "currency"],
         "title": "Price",
         "description": "Price with explicit currency.",
         "type": "object"
@@ -4799,10 +4451,7 @@
             "description": "Maximum price in the range."
           }
         },
-        "required": [
-          "min",
-          "max"
-        ],
+        "required": ["min", "max"],
         "title": "Price Range",
         "description": "A price range representing minimum and maximum values (e.g., a common example in retail shopping is when prices vary across product variants).",
         "type": "object"
@@ -4883,13 +4532,7 @@
             "description": "Business-defined custom data extending the standard product model."
           }
         },
-        "required": [
-          "id",
-          "title",
-          "description",
-          "price_range",
-          "variants"
-        ],
+        "required": ["id", "title", "description", "price_range", "variants"],
         "title": "Product",
         "description": "A product in the catalog with variants and options.",
         "type": "object"
@@ -4909,10 +4552,7 @@
             "description": "Available values for this option."
           }
         },
-        "required": [
-          "name",
-          "values"
-        ],
+        "required": ["name", "values"],
         "title": "Product Option",
         "description": "A product option such as size, color, or material.",
         "type": "object"
@@ -4929,9 +4569,7 @@
       "ProfileBase": {
         "type": "object",
         "description": "Common wrapper for UCP profile documents.",
-        "required": [
-          "ucp"
-        ],
+        "required": ["ucp"],
         "properties": {
           "ucp": {
             "$ref": "#/components/schemas/UcpBase",
@@ -5025,10 +4663,7 @@
             "description": "Number of reviews contributing to the rating."
           }
         },
-        "required": [
-          "value",
-          "scale_max"
-        ],
+        "required": ["value", "scale_max"],
         "title": "Rating",
         "description": "Product rating aggregate.",
         "type": "object"
@@ -5132,9 +4767,7 @@
             "description": "Total number of matching items, if available."
           }
         },
-        "required": [
-          "has_next_page"
-        ],
+        "required": ["has_next_page"],
         "if": {
           "properties": {
             "has_next_page": {
@@ -5143,14 +4776,10 @@
               "type": "boolean"
             }
           },
-          "required": [
-            "has_next_page"
-          ]
+          "required": ["has_next_page"]
         },
         "then": {
-          "required": [
-            "cursor"
-          ]
+          "required": ["cursor"]
         }
       },
       "ResponseCartSchema": {
@@ -5201,9 +4830,7 @@
             "$ref": "#/components/schemas/UcpBase"
           },
           {
-            "required": [
-              "payment_handlers"
-            ],
+            "required": ["payment_handlers"],
             "properties": {
               "services": {
                 "additionalProperties": {
@@ -5329,10 +4956,7 @@
       },
       "SearchResponse": {
         "type": "object",
-        "required": [
-          "ucp",
-          "products"
-        ],
+        "required": ["ucp", "products"],
         "properties": {
           "ucp": {
             "$ref": "#/components/schemas/ResponseCatalogSchema"
@@ -5382,10 +5006,7 @@
             "description": "Selected option label (e.g., 'Large')."
           }
         },
-        "required": [
-          "name",
-          "label"
-        ],
+        "required": ["name", "label"],
         "title": "Selected Option",
         "description": "A specific option selection on a variant (e.g., Size: Large).",
         "type": "object"
@@ -5415,18 +5036,11 @@
           },
           {
             "type": "object",
-            "required": [
-              "transport"
-            ],
+            "required": ["transport"],
             "properties": {
               "transport": {
                 "type": "string",
-                "enum": [
-                  "rest",
-                  "mcp",
-                  "a2a",
-                  "embedded"
-                ],
+                "enum": ["rest", "mcp", "a2a", "embedded"],
                 "description": "Transport protocol for this service binding."
               },
               "endpoint": {
@@ -5498,9 +5112,7 @@
             "$ref": "#/components/schemas/ServiceBase"
           },
           {
-            "required": [
-              "spec"
-            ]
+            "required": ["spec"]
           },
           {
             "anyOf": [
@@ -5615,10 +5227,7 @@
                 "default": "shipping_address"
               }
             },
-            "required": [
-              "id",
-              "type"
-            ]
+            "required": ["id", "type"]
           }
         ],
         "type": "object",
@@ -5716,31 +5325,21 @@
                 "type": "string"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           }
         ]
       },
       "Total": {
-        "required": [
-          "type",
-          "amount"
-        ],
+        "required": ["type", "amount"],
         "allOf": [
           {
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "discount",
-                    "items_discount"
-                  ]
+                  "enum": ["discount", "items_discount"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5754,17 +5353,10 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "subtotal",
-                    "fulfillment",
-                    "tax",
-                    "fee"
-                  ]
+                  "enum": ["subtotal", "fulfillment", "tax", "fee"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5799,15 +5391,10 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "discount",
-                    "items_discount"
-                  ]
+                  "enum": ["discount", "items_discount"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5821,17 +5408,10 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "subtotal",
-                    "fulfillment",
-                    "tax",
-                    "fee"
-                  ]
+                  "enum": ["subtotal", "fulfillment", "tax", "fee"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5853,15 +5433,10 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "discount",
-                    "items_discount"
-                  ]
+                  "enum": ["discount", "items_discount"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5875,17 +5450,10 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "subtotal",
-                    "fulfillment",
-                    "tax",
-                    "fee"
-                  ]
+                  "enum": ["subtotal", "fulfillment", "tax", "fee"]
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "then": {
               "properties": {
@@ -5911,9 +5479,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -5927,9 +5493,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -5957,10 +5521,7 @@
                       }
                     },
                     "description": "Sub-line entry. Additional metadata MAY be included.",
-                    "required": [
-                      "display_text",
-                      "amount"
-                    ]
+                    "required": ["display_text", "amount"]
                   },
                   "description": "Optional itemized breakdown. The parent entry is always rendered; lines are supplementary. Sum of line amounts MUST equal the parent entry amount."
                 }
@@ -5983,14 +5544,10 @@
                     }
                   }
                 },
-                "required": [
-                  "type"
-                ]
+                "required": ["type"]
               },
               "then": {
-                "required": [
-                  "display_text"
-                ]
+                "required": ["display_text"]
               }
             }
           ]
@@ -6010,9 +5567,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -6026,9 +5581,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -6060,14 +5613,10 @@
                     }
                   }
                 },
-                "required": [
-                  "type"
-                ]
+                "required": ["type"]
               },
               "then": {
-                "required": [
-                  "display_text"
-                ]
+                "required": ["display_text"]
               }
             }
           ]
@@ -6087,9 +5636,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -6103,9 +5650,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type"
-              ]
+              "required": ["type"]
             },
             "minContains": 1,
             "maxContains": 1
@@ -6137,14 +5682,10 @@
                     }
                   }
                 },
-                "required": [
-                  "type"
-                ]
+                "required": ["type"]
               },
               "then": {
-                "required": [
-                  "display_text"
-                ]
+                "required": ["display_text"]
               }
             }
           ]
@@ -6154,9 +5695,7 @@
         "type": "array"
       },
       "Ucp": {
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "type": "object",
         "title": "UCP Metadata",
         "description": "Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.",
@@ -6170,10 +5709,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "success",
-              "error"
-            ],
+            "enum": ["success", "error"],
             "default": "success",
             "description": "Application-level status of the UCP operation."
           },
@@ -6221,9 +5757,7 @@
       "UcpBase": {
         "description": "Base UCP metadata with shared properties for all schema types.",
         "type": "object",
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "properties": {
           "version": {
             "$ref": "#/components/schemas/Version"
@@ -6234,10 +5768,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "success",
-              "error"
-            ],
+            "enum": ["success", "error"],
             "default": "success",
             "description": "Application-level status of the UCP operation."
           },
@@ -6290,10 +5821,7 @@
             "$ref": "#/components/schemas/UcpBase"
           },
           {
-            "required": [
-              "services",
-              "payment_handlers"
-            ],
+            "required": ["services", "payment_handlers"],
             "properties": {
               "supported_versions": {
                 "type": "object",
@@ -6332,9 +5860,7 @@
         ]
       },
       "UcpCreateRequest": {
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "type": "object",
         "title": "UcpCreateRequest",
         "description": "Request payload to create a new Ucp. Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.",
@@ -6344,10 +5870,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "success",
-              "error"
-            ],
+            "enum": ["success", "error"],
             "default": "success",
             "description": "Application-level status of the UCP operation."
           },
@@ -6395,9 +5918,7 @@
       "UcpEntity": {
         "type": "object",
         "description": "Shared foundation for all UCP entities.",
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "properties": {
           "version": {
             "$ref": "#/components/schemas/Version",
@@ -6432,10 +5953,7 @@
             "$ref": "#/components/schemas/UcpBase"
           },
           {
-            "required": [
-              "services",
-              "payment_handlers"
-            ],
+            "required": ["services", "payment_handlers"],
             "properties": {
               "services": {
                 "additionalProperties": {
@@ -6463,9 +5981,7 @@
         ]
       },
       "UcpUpdateRequest": {
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "type": "object",
         "title": "UcpUpdateRequest",
         "description": "Request payload to update an existing Ucp. Protocol metadata for discovery profiles and responses. Uses slim schema pattern with context-specific required fields.",
@@ -6475,10 +5991,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "success",
-              "error"
-            ],
+            "enum": ["success", "error"],
             "default": "success",
             "description": "Application-level status of the UCP operation."
           },
@@ -6534,9 +6047,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "unit"
-              ]
+              "required": ["unit"]
             },
             "then": {
               "properties": {
@@ -6569,10 +6080,7 @@
         "title": "Unit",
         "description": "A reusable unit descriptor for quantities and measures. Its unit-descriptor machine identity is (`unit`, effective `scale`), where effective `scale` is the provided `scale` or 0; `display_text` is excluded.",
         "type": "object",
-        "required": [
-          "unit",
-          "display_text"
-        ]
+        "required": ["unit", "display_text"]
       },
       "UnitPrice": {
         "properties": {
@@ -6618,12 +6126,7 @@
             ]
           }
         },
-        "required": [
-          "amount",
-          "currency",
-          "measure",
-          "reference"
-        ],
+        "required": ["amount", "currency", "measure", "reference"],
         "title": "Unit Price",
         "description": "Price per standard unit of measurement. MAY be omitted when unit pricing does not apply. `unit_price.currency` MUST equal `price.currency`; the comparator MUST NOT perform currency conversion. `measure.unit` and `reference.unit` MUST be identical; cross-unit conversion is not permitted. Their scales MAY differ; each value represents `value × 10^-scale`.",
         "type": "object"
@@ -6633,9 +6136,7 @@
         "description": "A Value Constraint containing `enum`, `const`, or both.",
         "anyOf": [
           {
-            "required": [
-              "enum"
-            ],
+            "required": ["enum"],
             "type": "object",
             "properties": {
               "enum": {
@@ -6650,9 +6151,7 @@
             "additionalProperties": false
           },
           {
-            "required": [
-              "const"
-            ],
+            "required": ["const"],
             "type": "object",
             "properties": {
               "enum": {
@@ -6693,10 +6192,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "type",
-                "value"
-              ],
+              "required": ["type", "value"],
               "properties": {
                 "type": {
                   "type": "string",
@@ -6801,12 +6297,7 @@
             }
           }
         },
-        "required": [
-          "id",
-          "title",
-          "description",
-          "price"
-        ],
+        "required": ["id", "title", "description", "price"],
         "title": "Variant",
         "description": "A purchasable variant of a product with specific option selections.",
         "type": "object"
@@ -6829,9 +6320,7 @@
             "description": "Maximum compatible version (inclusive). When absent, no upper bound."
           }
         },
-        "required": [
-          "min"
-        ],
+        "required": ["min"],
         "additionalProperties": true
       },
       "WarningCode": {
