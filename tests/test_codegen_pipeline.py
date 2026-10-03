@@ -3265,5 +3265,209 @@ class FulfillmentMethodDestinationRetypingSemanticTest(unittest.TestCase):
         self._method()(id="m4", type="shipping", line_item_ids=["li1"])
 
 
+class DatetimePatternInjectorTest(unittest.TestCase):
+    """The date-time pattern post-generation rewrite's own behavior."""
+
+    OFFSET = "(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
+
+    # Shaped like raw generator output for date-time strings with a pattern.
+    MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from pydantic import AwareDatetime, BaseModel, ConfigDict, Field\n"
+        "\n"
+        "\n"
+        "class Window(BaseModel):\n"
+        '    """A window."""\n'
+        "\n"
+        "    model_config = ConfigDict(\n"
+        '        extra="allow",\n'
+        "    )\n"
+        "    opens_at: AwareDatetime = Field(\n"
+        f'        ..., pattern="{OFFSET}"\n'
+        "    )\n"
+        '    """When it opens."""\n'
+        '    closes_at: AwareDatetime | None = Field(None, pattern="Z$")\n'
+        '    starts_at: AwareDatetime = Field(..., alias="startsAt", pattern="Z$")\n'
+        '    code: str = Field(..., pattern="^[A-Z]+$")\n'
+    )
+
+    ALIAS_MODULE = (
+        "from __future__ import annotations\n"
+        "\n"
+        "from typing import Annotated\n"
+        "\n"
+        "from pydantic import AwareDatetime, Field\n"
+        "from typing_extensions import TypeAliasType\n"
+        "\n"
+        "Stamp = TypeAliasType(\n"
+        '    "Stamp", Annotated[AwareDatetime, Field(..., pattern="Z$")]\n'
+        ")\n"
+    )
+
+    def test_finds_only_datetime_fields(self) -> None:
+        """A pattern on a str field is valid pydantic and is left alone."""
+        fields, unsupported = postprocess_models.find_datetime_pattern_fields(
+            self.MODULE
+        )
+        self.assertEqual(
+            fields,
+            [
+                ("Window", "opens_at", self.OFFSET),
+                ("Window", "closes_at", "Z$"),
+                ("Window", "starts_at", "Z$"),
+            ],
+        )
+        self.assertEqual(unsupported, [])
+
+    def test_rewrite_removes_pattern_and_injects_validators(self) -> None:
+        out = postprocess_models.inject_datetime_patterns(self.MODULE)
+        self.assertIn("    opens_at: AwareDatetime\n", out)
+        self.assertIn("    closes_at: AwareDatetime | None = None\n", out)
+        self.assertIn(
+            "    starts_at: AwareDatetime = Field(..., alias='startsAt')\n",
+            out,
+        )
+        self.assertIn('    code: str = Field(..., pattern="^[A-Z]+$")\n', out)
+        self.assertIn('    """When it opens."""\n', out)
+        for field in ("opens_at", "closes_at", "starts_at"):
+            self.assertEqual(
+                out.count(f"def _enforce_datetime_pattern_{field}("), 1
+            )
+        self.assertNotIn("_enforce_datetime_pattern_code", out)
+        self.assertIn("field_validator", out)
+        self.assertIn("\nimport re\n", out)
+        self.assertEqual(
+            postprocess_models.find_datetime_pattern_fields(out), ([], [])
+        )
+
+    def test_injection_is_idempotent(self) -> None:
+        once = postprocess_models.inject_datetime_patterns(self.MODULE)
+        twice = postprocess_models.inject_datetime_patterns(once)
+        self.assertEqual(once, twice)
+
+    def test_type_alias_pattern_is_reported_not_rewritten(self) -> None:
+        self.assertEqual(
+            postprocess_models.find_datetime_pattern_fields(self.ALIAS_MODULE),
+            ([], [9]),
+        )
+        self.assertEqual(
+            postprocess_models.inject_datetime_patterns(self.ALIAS_MODULE),
+            self.ALIAS_MODULE,
+        )
+
+    def test_patch_rewrites_tree_and_fails_on_type_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            module = Path(tmp) / "window.py"
+            module.write_text(self.MODULE, encoding="utf-8")
+            with (
+                mock.patch.object(postprocess_models, "OUTPUT_DIR", Path(tmp)),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(
+                    postprocess_models._patch_datetime_patterns(), (1, 0)
+                )
+                self.assertEqual(
+                    postprocess_models.find_datetime_pattern_fields(
+                        module.read_text(encoding="utf-8")
+                    ),
+                    ([], []),
+                )
+                (Path(tmp) / "stamp.py").write_text(
+                    self.ALIAS_MODULE, encoding="utf-8"
+                )
+                self.assertEqual(
+                    postprocess_models._patch_datetime_patterns(), (0, 1)
+                )
+
+    @unittest.skipUnless(HAVE_SDK, "executing the module needs pydantic")
+    def test_injected_validator_enforces_pattern(self) -> None:
+        out = postprocess_models.inject_datetime_patterns(self.MODULE)
+        namespace: dict = {}
+        exec(compile(out, "<injected>", "exec"), namespace)  # noqa: S102
+        window = namespace["Window"]
+        window.model_rebuild(_types_namespace=namespace)
+        common = {"startsAt": "2026-05-18T09:00:00Z", "code": "A"}
+        for opens_at in ("2026-05-18T17:00:00Z", "2026-05-18T17:00:00-08:00"):
+            window.model_validate({**common, "opens_at": opens_at})
+        window.model_validate(
+            {**common, "opens_at": "2026-05-18T17:00:00Z", "closes_at": None}
+        )
+        for opens_at in ("2026-05-18T17:00:00", "2026-05-18T17:00:00+0530"):
+            with self.assertRaises(ValidationError):
+                window.model_validate({**common, "opens_at": opens_at})
+
+
+@unittest.skipUnless(
+    HAVE_SDK, "requires the installed package (pip install -e .)"
+)
+class LocationFilterOpenAtSemanticTest(unittest.TestCase):
+    """location_filter.json's hours.open_at is a date-time whose pattern
+    requires a `Z` or `+hh:mm`/`-hh:mm` offset. The generator put that
+    pattern on the AwareDatetime field itself, so validating any Location
+    Search or Lookup request carrying it raised TypeError ("Unable to apply
+    constraint 'pattern'") instead of ValidationError.
+    """
+
+    def _requests(self):
+        from ucp_sdk.models.schemas.common.location_lookup import (
+            LookupRequest,
+        )
+        from ucp_sdk.models.schemas.common.location_search import (
+            SearchRequest,
+        )
+
+        return ((SearchRequest, {}), (LookupRequest, {"ids": ["loc_1"]}))
+
+    def _validate(self, model, body, open_at):
+        return model.model_validate(
+            {**body, "filters": {"hours": {"open_at": open_at}}}
+        )
+
+    def test_utc_and_numeric_offsets_accepted(self):
+        for model, body in self._requests():
+            for open_at, offset in (
+                ("2026-05-18T17:00:00Z", 0),
+                ("2026-05-18T17:00:00+05:30", 19800),
+            ):
+                with self.subTest(model=model.__name__, open_at=open_at):
+                    request = self._validate(model, body, open_at)
+                    self.assertEqual(
+                        request.filters.hours.open_at.utcoffset().total_seconds(),
+                        offset,
+                    )
+
+    def test_naive_datetime_rejected(self):
+        for model, body in self._requests():
+            with (
+                self.subTest(model=model.__name__),
+                self.assertRaises(ValidationError),
+            ):
+                self._validate(model, body, "2026-05-18T17:00:00")
+
+    def test_offsets_outside_the_pattern_rejected(self):
+        # AwareDatetime alone accepts both of these; the pattern does not.
+        for model, body in self._requests():
+            for open_at in ("2026-05-18T17:00:00+0530", "1747587600"):
+                with (
+                    self.subTest(model=model.__name__, open_at=open_at),
+                    self.assertRaises(ValidationError),
+                ):
+                    self._validate(model, body, open_at)
+
+    def test_no_committed_datetime_field_carries_a_pattern(self):
+        import ucp_sdk.models.schemas as schemas
+
+        for path in sorted(Path(schemas.__file__).parent.rglob("*.py")):
+            with self.subTest(path=path.name):
+                self.assertEqual(
+                    postprocess_models.find_datetime_pattern_fields(
+                        path.read_text(encoding="utf-8")
+                    ),
+                    ([], []),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

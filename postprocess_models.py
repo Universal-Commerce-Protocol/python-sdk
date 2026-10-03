@@ -14,7 +14,7 @@
 
 """Post-generation fixes for constraints datamodel-code-generator ignores.
 
-Ten constraint families are handled:
+Eleven constraint families are handled:
 
 * ``minProperties`` / ``maxProperties`` on an object schema WITH declared
   properties are dropped by the generator: every field is optional, so an
@@ -134,9 +134,25 @@ Ten constraint families are handled:
   generated ``model_config`` to ``extra="forbid"`` while preserving
   ``extra="allow"`` on sibling models in the same module.
 
+* ``pattern`` on a ``format: date-time`` string is not dropped but emitted as
+  ``Field(pattern=...)`` on the ``AwareDatetime`` field, where pydantic
+  applies it to the parsed datetime rather than the string: validating
+  ``location_filter.json``'s ``hours.open_at`` raised a raw ``TypeError``
+  ("Unable to apply constraint 'pattern'") instead of a ``ValidationError``.
+  ``AwareDatetime`` alone is not equivalent to the pattern (it also accepts
+  ``+0530`` offsets and epoch-second strings), so the script removes the
+  ``pattern`` argument and injects a ``field_validator(mode="before")`` that
+  matches the raw string against the same pattern. The fields are found in
+  the generated source, not the schemas: dropping the pattern before
+  generation would let ``--reuse-model`` merge the class with a pattern-less
+  twin, and the validator would then reach both. A pattern inside an
+  ``Annotated`` type alias (e.g. date-time array items) is not rewritten; it
+  is reported and fails the run.
+
 Runs from generate_models.sh between generation and formatting; idempotent.
 """
 
+import ast
 import json
 import re
 import sys
@@ -336,6 +352,26 @@ _UNIQUE_VALIDATOR_TEMPLATE = '''
                     "Items must be unique (schema uniqueItems=true)"
                 )
             seen.append(item)
+        return value
+'''
+
+_DATETIME_PATTERN_MARKER = "_enforce_datetime_pattern"
+
+# Annotations the generator emits for ``format: date-time`` strings.
+_DATETIME_TYPES = {"AwareDatetime", "NaiveDatetime", "datetime"}
+
+# re.search, not fullmatch: JSON Schema patterns are unanchored, and the
+# date-time pattern UCP uses is anchored only at the end.
+_DATETIME_PATTERN_TEMPLATE = '''
+    @field_validator("{field}", mode="before")
+    def {marker}_{field}(cls, value):  # noqa: N805
+        """JSON Schema pattern: match the raw date-time string, since
+        pydantic cannot apply a regex to the parsed datetime."""
+        pattern = {pattern!r}
+        if isinstance(value, str) and re.search(pattern, value) is None:
+            raise ValueError(
+                f"{{value!r}} does not match the schema pattern {{pattern}}"
+            )
         return value
 '''
 
@@ -2087,6 +2123,168 @@ def _patch_extra_forbid():
     return patched, 0
 
 
+def _mentions_datetime(annotation):
+    """True if an annotation expression names a generated datetime type."""
+    return any(
+        isinstance(node, ast.Name) and node.id in _DATETIME_TYPES
+        for node in ast.walk(annotation)
+    )
+
+
+def _pattern_keyword(node):
+    """Return the string ``pattern=`` keyword of a ``Field(...)`` call."""
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "Field"
+    ):
+        return None
+    for keyword in node.keywords:
+        if (
+            keyword.arg == "pattern"
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, str)
+        ):
+            return keyword
+    return None
+
+
+def _datetime_pattern_fields(tree):
+    """Yield ``(class_node, statement)`` for patterned datetime fields."""
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for stmt in node.body:
+            if (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and _mentions_datetime(stmt.annotation)
+                and _pattern_keyword(stmt.value) is not None
+            ):
+                yield node, stmt
+
+
+def find_datetime_pattern_fields(source):
+    """Find datetime fields the generator gave a regex ``pattern``.
+
+    Returns ``(fields, unsupported)``. ``fields`` lists ``(class_name, field,
+    pattern)`` for class attributes written as ``name: <datetime> =
+    Field(..., pattern=...)``, which ``inject_datetime_patterns`` rewrites.
+    ``unsupported`` lists the line of every other datetime pattern (e.g. an
+    ``Annotated[AwareDatetime, Field(pattern=...)]`` type alias for array
+    items), which is left as generated and must be reported.
+    """
+    tree = ast.parse(source)
+    fields = [
+        (
+            cls.name,
+            stmt.target.id,
+            _pattern_keyword(stmt.value).value.value,
+        )
+        for cls, stmt in _datetime_pattern_fields(tree)
+    ]
+    unsupported = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "Annotated"
+        and isinstance(node.slice, ast.Tuple)
+        and _mentions_datetime(node.slice.elts[0])
+        and any(_pattern_keyword(meta) for meta in node.slice.elts[1:])
+    ]
+    return fields, unsupported
+
+
+def _source_offset(source, lineno, col_offset):
+    """Map an ast position (1-based line, UTF-8 byte column) to an index."""
+    start = 0
+    for _ in range(lineno - 1):
+        start = source.index("\n", start) + 1
+    line = source[start:].split("\n", 1)[0]
+    return start + len(line.encode("utf-8")[:col_offset].decode("utf-8"))
+
+
+def inject_datetime_patterns(source):
+    """Move each datetime field's regex ``pattern`` into a before-validator.
+
+    The ``pattern`` argument is removed from the field's ``Field(...)`` call,
+    and the whole call when only the default remains, matching how the
+    generator writes an unconstrained field. A ``field_validator(mode="before")``
+    carrying the same pattern is appended to the class. Fields are rewritten
+    one at a time, re-parsing in between so ast offsets stay valid.
+    """
+    while True:
+        cls, stmt = next(
+            _datetime_pattern_fields(ast.parse(source)), (None, None)
+        )
+        if stmt is None:
+            return source
+        call = stmt.value
+        keyword = _pattern_keyword(call)
+        call.keywords = [kw for kw in call.keywords if kw is not keyword]
+        default = call.args[0] if len(call.args) == 1 else None
+        if (
+            not call.keywords
+            and isinstance(default, ast.Constant)
+            and default.value is Ellipsis
+        ):
+            value = ""
+        elif (
+            not call.keywords
+            and isinstance(default, ast.Constant)
+            and default.value is None
+        ):
+            value = " = None"
+        else:
+            value = f" = {ast.unparse(call)}"
+        start = _source_offset(
+            source, stmt.annotation.end_lineno, stmt.annotation.end_col_offset
+        )
+        end = _source_offset(source, call.end_lineno, call.end_col_offset)
+        source = source[:start] + value + source[end:]
+
+        match = re.search(rf"^class {re.escape(cls.name)}\(", source, re.M)
+        end_match = re.compile(r"^\S", re.M).search(source, match.end())
+        body_end = end_match.start() if end_match else len(source)
+        method = _DATETIME_PATTERN_TEMPLATE.format(
+            marker=_DATETIME_PATTERN_MARKER,
+            field=stmt.target.id,
+            pattern=keyword.value.value,
+        )
+        prefix = source[:body_end].rstrip("\n")
+        suffix = source[body_end:]
+        source = prefix + "\n" + method + ("\n" + suffix if suffix else "")
+        source = _ensure_pydantic_import(source, "field_validator")
+        source = _ensure_stdlib_import(source, "import re")
+
+
+def _patch_datetime_patterns():
+    """Move datetime regex patterns into validators; return counts, status."""
+    patched = 0
+    status = 0
+    for path in sorted(OUTPUT_DIR.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        fields, unsupported = find_datetime_pattern_fields(source)
+        for line in unsupported:
+            sys.stderr.write(
+                f"  ! {path}:{line}: regex pattern on a datetime type alias "
+                "is not rewritten; validating it raises TypeError\n"
+            )
+            status = 1
+        if not fields:
+            continue
+        path.write_text(inject_datetime_patterns(source), encoding="utf-8")
+        patched += 1
+        names = ", ".join(f"{cls}.{field}" for cls, field, _ in fields)
+        sys.stdout.write(f"  date-time pattern on {names} -> {path}\n")
+    if not patched and not status:
+        sys.stdout.write(
+            "postprocess: no regex patterns on datetime fields found\n"
+        )
+    return patched, status
+
+
 def main():
     """Main entry point to scan schemas and patch generated models."""
     patched_mp, rc_mp = _patch_min_properties()
@@ -2099,6 +2297,7 @@ def main():
     patched_dr, rc_dr = _patch_dependent_required()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
+    patched_dp, rc_dp = _patch_datetime_patterns()
     total = (
         patched_mp
         + patched_xp
@@ -2110,6 +2309,7 @@ def main():
         + patched_dr
         + patched_ui
         + patched_ef
+        + patched_dp
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
     return (
@@ -2123,6 +2323,7 @@ def main():
         or rc_dr
         or rc_ui
         or rc_ef
+        or rc_dp
     )
 
 
