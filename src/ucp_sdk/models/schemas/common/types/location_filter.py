@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Annotated
 
 from pydantic import (
@@ -40,12 +42,21 @@ class Hours(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    open_at: AwareDatetime = Field(
-        ..., pattern="(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
-    )
+    open_at: AwareDatetime
     """
     The RFC 3339 instant at which matching Locations must be open, expressed with `Z` or a numeric offset. The Platform selects the instant that represents the Buyer's intent. The Business evaluates it exactly as supplied using each Location's authoritative `timezone`; the supplied offset does not identify that timezone.
     """
+
+    @field_validator("open_at", mode="before")
+    def _enforce_datetime_pattern_open_at(cls, value):  # noqa: N805
+        """JSON Schema pattern: match the raw date-time string, since
+        pydantic cannot apply a regex to the parsed datetime."""
+        pattern = "(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
+        if isinstance(value, str) and re.search(pattern, value) is None:
+            raise ValueError(
+                f"{value!r} does not match the schema pattern {pattern}"
+            )
+        return value
 
 
 Item = TypeAliasType("Item", Annotated[str, Field(..., min_length=1)])
