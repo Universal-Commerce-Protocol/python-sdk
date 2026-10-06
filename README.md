@@ -66,7 +66,7 @@ uv add ucp-sdk
 The example below parses a UCP checkout response and reads typed fields:
 
 ```python
-from ucp_sdk.models.schemas.shopping.checkout import Checkout
+from ucp_sdk.models import Checkout
 
 # Parse a UCP checkout response
 checkout = Checkout.model_validate(checkout_data)
@@ -80,14 +80,13 @@ for item in checkout.line_items:
 
 ### Available model packages
 
-| Package                                 | Description                                                       |
-| --------------------------------------- | ----------------------------------------------------------------- |
-| `ucp_sdk.models.schemas.common`         | Location search/lookup, identity linking, loyalty, payment terms  |
-| `ucp_sdk.models.schemas.common.types`   | Shared primitives (amounts, prices, totals, postal address, etc.) |
-| `ucp_sdk.models.schemas.shopping`       | Checkout, cart, catalog, order, buyer consent, permalink models   |
-| `ucp_sdk.models.schemas.shopping.types` | Line items, adjustments, fulfillments, destinations, attribution  |
-| `ucp_sdk.models.schemas.transports`     | REST, MCP, and embedded protocol bindings                         |
-| `ucp_sdk.models.schemas`                | Service definitions, capabilities, profile, payment handlers      |
+All generated Pydantic models and type aliases are exported from both
+`ucp_sdk.models` and `ucp_sdk.models.schemas`:
+
+| Package                  | Description                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `ucp_sdk.models`         | Top-level re-export of all generated UCP models (checkout, cart, order, fulfillment, profile, etc.) |
+| `ucp_sdk.models.schemas` | Generated Pydantic v2 models synthesized from the UCP JSON Schema bundle                            |
 
 ### Validation
 
@@ -95,7 +94,7 @@ All models support Pydantic validation and serialization:
 
 ```python
 from pydantic import ValidationError
-from ucp_sdk.models.schemas.shopping.checkout import Checkout
+from ucp_sdk.models import Checkout
 
 # Validate data against UCP schemas
 try:
@@ -110,7 +109,10 @@ except ValidationError as e:
 
 ### Prerequisites
 
-This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
+This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management
+and [`ucp-schema`](https://crates.io/crates/ucp-schema)
+(`cargo install ucp-schema`) to synthesize the flat `$defs` bundle for model
+generation.
 
 ### Setup
 
@@ -126,26 +128,26 @@ uv sync
 ### Generating Pydantic Models
 
 The models are automatically generated from the JSON schemas in the UCP
-Specification.
+Specification using `ucp-schema generate-types` and `datamodel-codegen`.
 
 To regenerate the models:
 
 ```bash
 uv sync
-./generate_models.sh <version>
+./generate_models.sh <version-or-path>
 ```
 
-Where `<version>` is the version of the UCP specification to use (for example,
-"2026-08-25").
+Where `<version-or-path>` is a UCP release version (for example, `2026-08-25`),
+a branch or commit SHA, or a path to a local UCP repository checkout.
 
-If no version is specified, the `main` branch of the
+If no argument is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.
 
-The generated code is automatically formatted using `ruff`.
+The generated code is automatically post-processed and formatted using `ruff`.
 
 ### Running Tests
 
-Run the schema preprocessing test suite with:
+Run the test suite with:
 
 ```bash
 uv run python -m unittest discover -s tests -p "test_*.py"

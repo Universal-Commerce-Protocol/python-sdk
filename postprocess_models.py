@@ -47,14 +47,12 @@ Eleven constraint families are handled:
   ``contains.properties.<field>.const`` — nothing is hard-coded — and one function
   enforces *all* of a schema's contains bounds.
 
-  The pristine (pre-preprocessing) schemas are read for this: ``totals.json``
-  carries its two containment rules as two ``allOf`` branches, and
-  ``preprocess_schemas.py`` merges ``allOf`` into the root, where a JSON node can
-  hold only one ``contains`` — so the second (``total``) would be lost if the
-  preprocessed output were scanned. generate_models.sh snapshots the originals to
-  ``ucp/raw_schemas`` before preprocessing for exactly this reason. The bound is
-  applied to the base model and to its generated request variants (linked by file
-  stem), and travels wherever the alias is reused as a field type.
+  The source schemas are read directly for this: ``totals.json`` carries its two
+  containment rules as two ``allOf`` branches, whereas ``ucp-schema generate-types``
+  strips validation-only ``contains`` ``allOf`` branches when synthesizing the
+  flat ``$defs`` bundle. The bound is applied to the base model and to its
+  generated request variants, and travels wherever the alias is reused as a field
+  type.
 
 * ``propertyNames`` on an object WITH named ``properties`` is not enforced. Such
   a schema is emitted as a ``BaseModel(extra="allow")`` with the named fields, so
@@ -599,8 +597,6 @@ def inject_property_names(source, class_name, pattern):
 
 def inject_min_properties(source, class_name, minimum):
     """Inject the minProperties validator at the end of ``class_name``."""
-    if f"def {_MARKER}(" in source:
-        return source
     class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
     match = class_re.search(source)
     if not match:
@@ -609,6 +605,8 @@ def inject_min_properties(source, class_name, minimum):
     tail = re.compile(r"^\S", re.M)
     end_match = tail.search(source, match.end())
     end = end_match.start() if end_match else len(source)
+    if f"def {_MARKER}(" in source[match.start() : end]:
+        return source
     method = _VALIDATOR_TEMPLATE.format(
         marker=_MARKER,
         minimum=minimum,
@@ -628,8 +626,6 @@ def inject_max_properties(source, class_name, maximum):
     minProperties: 1 and maxProperties: 1), each guarded by its own marker
     so neither injection clobbers the other or re-runs on a second pass.
     """
-    if f"def {_MAX_MARKER}(" in source:
-        return source
     class_re = re.compile(rf"^class {re.escape(class_name)}\(", re.M)
     match = class_re.search(source)
     if not match:
@@ -638,6 +634,8 @@ def inject_max_properties(source, class_name, maximum):
     tail = re.compile(r"^\S", re.M)
     end_match = tail.search(source, match.end())
     end = end_match.start() if end_match else len(source)
+    if f"def {_MAX_MARKER}(" in source[match.start() : end]:
+        return source
     method = _MAX_VALIDATOR_TEMPLATE.format(
         marker=_MAX_MARKER,
         maximum=maximum,
@@ -866,7 +864,7 @@ def _build_contains_function(func_name, groups, item_condition=None):
         lines += [
             f"    _excluded = {item_condition['excluded']!r}",
             "    for _item in value:",
-            f"        _actual = (_item.get({field!r}) if isinstance(_item, dict) ",
+            f"        _actual = (_item.get({field!r}) if isinstance(_item, dict)",
             f"                   else getattr(_item, {field!r}, None))",
             "        if _actual in _excluded:",
             "            continue",
@@ -875,7 +873,7 @@ def _build_contains_function(func_name, groups, item_condition=None):
             lines += [
                 f"        if isinstance(_item, dict) and {required!r} not in _item:",
                 f'            raise ValueError("Field {required!r} is required for custom {field}")',
-                f"        if not isinstance(_item, dict) and {required!r} not in _item.model_fields_set:",
+                f"        if not isinstance(_item, dict) and {required!r} not in (_item.model_fields_set | set(_item.model_extra or {{}})):",
                 f'            raise ValueError("Field {required!r} is required for custom {field}")',
             ]
     lines.append("    return value")
@@ -937,7 +935,47 @@ def inject_array_contains(source, alias_name, groups, item_condition=None):
     func_src = _build_contains_function(func_name, groups, item_condition)
     insert_at = assign_re.search(out).start()
     out = out[:insert_at] + func_src + "\n\n" + out[insert_at:]
+    if item_condition:
+        out = _inject_item_condition_on_item_class(
+            out, f"{alias_name}Item", item_condition
+        )
     return _ensure_pydantic_import(out, "AfterValidator")
+
+
+_ITEM_COND_MARKER = "_enforce_item_required_condition"
+
+_ITEM_COND_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema if/then: require {required!r} when {field!r} is custom."""
+        if getattr(self, {field!r}, None) not in {excluded!r}:
+            _present = self.model_fields_set | set(self.model_extra or {{}})
+            for _req in {required!r}:
+                if _req not in _present:
+                    raise ValueError(
+                        f"Field {{_req!r}} is required for custom {field}"
+                    )
+        return self
+'''
+
+
+def _inject_item_condition_on_item_class(source, item_class_name, cond):
+    """Inject item_condition model_validator onto ``item_class_name`` if present."""
+    span = _class_body_span(source, item_class_name)
+    if span is None:
+        return source
+    if f"def {_ITEM_COND_MARKER}(" in source[span[0] : span[1]]:
+        return source
+    method = _ITEM_COND_TEMPLATE.format(
+        marker=_ITEM_COND_MARKER,
+        field=cond["field"],
+        excluded=cond["excluded"],
+        required=cond["required"],
+    )
+    body = source[: span[1]].rstrip("\n")
+    rest = source[span[1] :]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
 
 
 def find_conditional_required(schema_dir):
@@ -1019,7 +1057,11 @@ def find_conditional_required(schema_dir):
             properties if isinstance(properties, dict) else enclosing_properties
         )
         then = node.get("then")
-        is_required_rule = isinstance(then, dict) and "required" in then
+        is_required_rule = (
+            isinstance(then, dict)
+            and "required" in then
+            and "properties" not in then
+        )
         if isinstance(scope, dict) and is_required_rule:
             if "else" in node:
                 rule = None
@@ -1186,10 +1228,17 @@ def find_conditional_bounds(schema_dir):
             properties if isinstance(properties, dict) else enclosing_properties
         )
         then = node.get("then")
+        then_props = then.get("properties") if isinstance(then, dict) else None
+        is_retyping_only = (
+            isinstance(then_props, dict)
+            and bool(then_props)
+            and all(_is_ref_array(v) for v in then_props.values())
+        )
         is_bounds_rule = (
             isinstance(then, dict)
             and "properties" in then
             and "required" not in then
+            and not is_retyping_only
         )
         if isinstance(scope, dict) and is_bounds_rule:
             rule = (
@@ -1457,6 +1506,90 @@ def inject_conditional_array_retyping(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def _extract_presence_if_then_dependent_required(node):
+    """Extract dependentRequired-equivalent rules from an if/then presence block."""
+    if not isinstance(node, dict) or "else" in node:
+        return {}
+    cond = node.get("if")
+    then = node.get("then")
+    if not isinstance(cond, dict) or not isinstance(then, dict):
+        return {}
+    if set(then) - {"required", "title", "description"}:
+        return {}
+    then_req = then.get("required")
+    if (
+        not isinstance(then_req, list)
+        or not then_req
+        or not all(isinstance(k, str) for k in then_req)
+    ):
+        return {}
+    triggers = []
+    if set(cond) == {"required"} and isinstance(cond.get("required"), list):
+        if len(cond["required"]) == 1 and isinstance(cond["required"][0], str):
+            triggers.append(cond["required"][0])
+    elif set(cond) == {"anyOf"} and isinstance(cond.get("anyOf"), list):
+        for branch in cond["anyOf"]:
+            if (
+                isinstance(branch, dict)
+                and set(branch) == {"required"}
+                and isinstance(branch.get("required"), list)
+                and len(branch["required"]) == 1
+                and isinstance(branch["required"][0], str)
+            ):
+                triggers.append(branch["required"][0])
+            else:
+                return {}
+    return {trigger: list(then_req) for trigger in triggers}
+
+
+def _merge_props_and_dependent_required(node, merged_props, merged_rules):
+    """Merge properties and dependentRequired from a schema dict if present."""
+    if not isinstance(node, dict):
+        return
+    if isinstance(node.get("properties"), dict):
+        merged_props.update(node["properties"])
+    if isinstance(node.get("dependentRequired"), dict):
+        merged_rules.update(node["dependentRequired"])
+    merged_rules.update(_extract_presence_if_then_dependent_required(node))
+
+
+def _load_local_ref_schema(ref, path):
+    """Load a relative file $ref schema dict and its path, or return (None, None)."""
+    if not isinstance(ref, str) or ref.startswith("#"):
+        return None, None
+    file_part = ref.split("#", 1)[0]
+    if not file_part:
+        return None, None
+    ref_path = (path.parent / file_part).resolve()
+    try:
+        loaded = json.loads(ref_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    return (loaded, ref_path) if isinstance(loaded, dict) else (None, None)
+
+
+def _collect_root_and_allof_properties_and_dependent_required(schema, path):
+    """Collect root + local allOf properties and dependentRequired rules."""
+    merged_props = {}
+    merged_rules = {}
+    allof = schema.get("allOf") if isinstance(schema, dict) else None
+    for branch in allof if isinstance(allof, list) else []:
+        if not isinstance(branch, dict):
+            continue
+        ref_schema, ref_path = _load_local_ref_schema(branch.get("$ref"), path)
+        if ref_schema is not None:
+            ref_props, ref_rules = (
+                _collect_root_and_allof_properties_and_dependent_required(
+                    ref_schema, ref_path
+                )
+            )
+            merged_props.update(ref_props)
+            merged_rules.update(ref_rules)
+        _merge_props_and_dependent_required(branch, merged_props, merged_rules)
+    _merge_props_and_dependent_required(schema, merged_props, merged_rules)
+    return merged_props, merged_rules
+
+
 def find_root_dependent_required(schema_dir):
     """Map generated class names to root-level dependentRequired rules.
 
@@ -1472,15 +1605,13 @@ def find_root_dependent_required(schema_dir):
             continue
         if not isinstance(schema, dict):
             continue
-        properties = schema.get("properties")
-        rules = schema.get("dependentRequired")
+        properties, rules = (
+            _collect_root_and_allof_properties_and_dependent_required(
+                schema, path
+            )
+        )
         title = schema.get("title")
-        if (
-            not isinstance(properties, dict)
-            or not properties
-            or not isinstance(rules, dict)
-            or not rules
-        ):
+        if not properties or not rules:
             continue
         normalized = {}
         malformed = False
@@ -1532,10 +1663,14 @@ def inject_dependent_required(source, class_name, rules):
         field.group(1)
         for field in re.finditer(r"^    (\w+): [^\n]+", class_body, re.M)
     }
+    allow_extra_trigger = (
+        class_name.endswith("Base") and 'extra="allow"' in class_body
+    )
     applicable = {
         field: required
         for field, required in rules.items()
-        if field in declared and all(name in declared for name in required)
+        if (field in declared or allow_extra_trigger)
+        and all(name in declared for name in required)
     }
     if not applicable:
         return source
@@ -1549,6 +1684,24 @@ def inject_dependent_required(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
+def _hoisted_if_then_variant_name(node, current_class_name):
+    """Return hoisted variant class name for a single-const if/then branch, or None."""
+    if not current_class_name or not isinstance(node, dict):
+        return None
+    cond = node.get("if")
+    if not isinstance(cond, dict):
+        return None
+    cond_props = cond.get("properties")
+    if not isinstance(cond_props, dict) or len(cond_props) != 1:
+        return None
+    predicate = next(iter(cond_props.values()))
+    if not isinstance(predicate, dict) or not isinstance(
+        predicate.get("const"), str
+    ):
+        return None
+    return f"{_to_camel_case(predicate['const'])}{current_class_name}"
+
+
 def find_unique_items_fields(schema_dir):
     """Map generated class names to fields carrying ``uniqueItems``.
 
@@ -1557,11 +1710,11 @@ def find_unique_items_fields(schema_dir):
     """
     fields_by_class = {}
 
-    def walk(node, current_class_name, path_str):
+    def walk(node, current_class_name, path_str, is_def=False):
         if not isinstance(node, dict):
             return
 
-        if isinstance(node.get("title"), str):
+        if not is_def and isinstance(node.get("title"), str):
             current_class_name = _alias_name(node["title"])
 
         props = node.get("properties")
@@ -1593,13 +1746,20 @@ def find_unique_items_fields(schema_dir):
         defs = node.get("$defs")
         if isinstance(defs, dict):
             for def_name, def_node in defs.items():
-                walk(def_node, _to_camel_case(def_name), path_str)
+                walk(def_node, _to_camel_case(def_name), path_str, is_def=True)
 
         # Recurse into combinators (allOf, anyOf, oneOf)
         for key in ("allOf", "anyOf", "oneOf"):
             if isinstance(node.get(key), list):
                 for item in node[key]:
                     walk(item, current_class_name, path_str)
+
+        # Recurse into conditional then branches (including hoisted variants)
+        if isinstance(node.get("then"), dict):
+            walk(node["then"], current_class_name, path_str)
+            hoisted = _hoisted_if_then_variant_name(node, current_class_name)
+            if hoisted:
+                walk(node["then"], hoisted, path_str)
 
     for path in sorted(Path(schema_dir).rglob("*.json")):
         try:
@@ -1618,6 +1778,25 @@ def find_unique_items_fields(schema_dir):
     return fields_by_class
 
 
+def _expand_unique_fields_across_type_aliases(source, unique_fields_by_class):
+    """Propagate uniqueItems field sets from TypeAliasType unions to their member classes."""
+    expanded = {k: set(v) for k, v in unique_fields_by_class.items()}
+    alias_re = re.compile(
+        r'^(\w+) = TypeAliasType\(\s*"\w+",\s*(?:Annotated\[\s*)?([^,\])]+)',
+        re.M | re.S,
+    )
+    for match in alias_re.finditer(source):
+        alias_name = match.group(1)
+        fields = expanded.get(alias_name)
+        if not fields:
+            continue
+        for member in match.group(2).split("|"):
+            member_name = member.strip()
+            if member_name:
+                expanded.setdefault(member_name, set()).update(fields)
+    return expanded
+
+
 def inject_unique_items(source, unique_fields_by_class):
     """Inject uniqueness validators for list fields declared ``uniqueItems``.
 
@@ -1626,6 +1805,9 @@ def inject_unique_items(source, unique_fields_by_class):
     """
     if not unique_fields_by_class:
         return source
+    expanded_fields = _expand_unique_fields_across_type_aliases(
+        source, unique_fields_by_class
+    )
     class_re = re.compile(r"^class (\w+)\(", re.M)
     matches = list(class_re.finditer(source))
     if not matches:
@@ -1635,7 +1817,7 @@ def inject_unique_items(source, unique_fields_by_class):
     # Process from the last class to the first so earlier insert offsets
     # (computed against the original source) stay valid as text is appended.
     for match in reversed(matches):
-        unique_fields = unique_fields_by_class.get(match.group(1), set())
+        unique_fields = expanded_fields.get(match.group(1), set())
         if not unique_fields:
             continue
         body_start = match.end()
@@ -1730,30 +1912,55 @@ def _patch_max_properties():
     return patched, 0
 
 
+_NOT_ENUM_MARKER = "_enforce_not_enum"
+
+_NOT_ENUM_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
+        if getattr(self, {field!r}, None) in {excluded!r}:
+            raise ValueError(
+                f"Field {field!r} must not be one of {excluded!r} "
+                "(schema not.enum)"
+            )
+        return self
+'''
+
+
+def _class_body_span(source, class_name):
+    """Return (start, end) of ``class_name`` in ``source``, or ``None``."""
+    match = re.search(rf"^class {re.escape(class_name)}\(", source, re.M)
+    if match is None:
+        return None
+    tail = re.compile(r"^\S", re.M)
+    end_match = tail.search(source, match.end())
+    end = end_match.start() if end_match else len(source)
+    return match.start(), end
+
+
+def _declared_fields(class_body):
+    """Return the set of field names declared on a class body."""
+    return {
+        m.group(1) for m in re.finditer(r"^    (\w+): [^\n]+", class_body, re.M)
+    }
+
+
 def _array_contains_targets():
     """Resolve ``title -> groups`` for every model needing a contains bound.
 
-    The authoritative (complete) groups come from the pristine schemas. The
-    preprocessed tree is consulted only to enumerate which models actually
-    exist — the base plus its generated request variants — so each variant
-    inherits its base schema's full set of containment rules. Variants are
-    linked to their base by file stem (``totals_create_request`` -> ``totals``).
+    The authoritative (complete) groups come from the pristine schemas.
     """
-    raw = find_array_contains_constraints(RAW_SCHEMA_DIR)
+    raw = (
+        find_array_contains_constraints(RAW_SCHEMA_DIR)
+        if RAW_SCHEMA_DIR.exists()
+        else {}
+    )
     if not raw:
-        # Fallback keeps a standalone run working if the snapshot is absent,
-        # though the pipeline always provides it (see module docstring).
         raw = find_array_contains_constraints(SCHEMA_DIR)
-        if raw:
-            sys.stderr.write(
-                f"  ! {RAW_SCHEMA_DIR} missing; falling back to preprocessed "
-                "schemas (multi-branch contains may be incomplete)\n"
-            )
     if not raw:
         return {}
     raw_stems = sorted(raw, key=len, reverse=True)
     targets = {}
-    # Enumerate base + variants from the preprocessed tree; attach raw groups.
     for stem, info in find_array_contains_constraints(SCHEMA_DIR).items():
         origin = next(
             (s for s in raw_stems if stem == s or stem.startswith(s + "_")),
@@ -1764,16 +1971,31 @@ def _array_contains_targets():
                 "groups": raw[origin]["groups"],
                 "item_condition": raw[origin]["item_condition"],
             }
-    # Defensive: cover each raw base title even if the preprocessed base lost
-    # its contains entirely.
+    py_sources = [
+        path.read_text(encoding="utf-8")
+        for path in sorted(OUTPUT_DIR.rglob("*.py"))
+    ]
     for info in raw.values():
+        base_title = info["title"]
+        base_alias = _alias_name(base_title)
         targets.setdefault(
-            info["title"],
+            base_title,
             {
                 "groups": info["groups"],
                 "item_condition": info["item_condition"],
             },
         )
+        for suffix in ("CreateRequest", "UpdateRequest", "CompleteRequest"):
+            variant_alias = f"{base_alias}{suffix}"
+            pattern = rf"^{re.escape(variant_alias)} = TypeAliasType\("
+            if any(re.search(pattern, src, re.M) for src in py_sources):
+                targets.setdefault(
+                    variant_alias,
+                    {
+                        "groups": info["groups"],
+                        "item_condition": info["item_condition"],
+                    },
+                )
     return targets
 
 
@@ -1786,6 +2008,18 @@ def _patch_property_names():
             "models found\n"
         )
         return 0, 0
+    py_sources = [
+        path.read_text(encoding="utf-8")
+        for path in sorted(OUTPUT_DIR.rglob("*.py"))
+    ]
+    for class_name, pattern in list(patterns.items()):
+        for suffix in ("CreateRequest", "UpdateRequest", "CompleteRequest"):
+            variant = f"{class_name}{suffix}"
+            if any(
+                re.search(rf"^class {re.escape(variant)}\(", src, re.M)
+                for src in py_sources
+            ):
+                patterns.setdefault(variant, pattern)
     patched = 0
     for class_name, pattern in sorted(patterns.items()):
         hits = []
@@ -1851,6 +2085,26 @@ def _patch_array_contains():
     return patched, 0
 
 
+def _resolve_conditional_required_targets(source, class_name, rules):
+    """Return matching class names in ``source`` for ``class_name``."""
+    if re.search(rf"^class {re.escape(class_name)}\(", source, re.M):
+        return [class_name]
+    needed = {rule["discriminator"] for rule in rules} | {
+        field for rule in rules for field in rule["required"]
+    }
+    candidates = []
+    for match in re.finditer(
+        rf"^class (\w+{re.escape(class_name)})\(", source, re.M
+    ):
+        candidate = match.group(1)
+        span = _class_body_span(source, candidate)
+        if span is None:
+            continue
+        if needed <= _declared_fields(source[span[0] : span[1]]):
+            candidates.append(candidate)
+    return candidates
+
+
 def _patch_conditional_required():
     """Inject conditional-required validators; return counts and status."""
     rules_by_class = find_conditional_required(SCHEMA_DIR)
@@ -1864,11 +2118,14 @@ def _patch_conditional_required():
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
-            if not re.search(
-                rf"^class {re.escape(class_name)}\(", source, re.M
-            ):
+            targets = _resolve_conditional_required_targets(
+                source, class_name, rules
+            )
+            if not targets:
                 continue
-            updated = inject_conditional_required(source, class_name, rules)
+            updated = source
+            for target in targets:
+                updated = inject_conditional_required(updated, target, rules)
             if updated != source:
                 path.write_text(updated, encoding="utf-8")
                 patched += 1
@@ -1884,6 +2141,36 @@ def _patch_conditional_required():
     return patched, 0
 
 
+def _resolve_conditional_bounds_targets(source, class_name, rules):
+    """Return matching class names (including item models, flattened subtypes, and request slices)."""
+    extra_candidates = (
+        ["Measure", "QuantityUnit"] if class_name == "Unit" else []
+    )
+    pattern = rf"^class ({re.escape(class_name)}(?:\d+|s?Item|PriceMeasure|PriceReference|CreateRequest|UpdateRequest|CompleteRequest)?)\("
+    candidate_names = [
+        m.group(1) for m in re.finditer(pattern, source, re.M)
+    ] + [
+        c
+        for c in extra_candidates
+        if re.search(rf"^class {re.escape(c)}\(", source, re.M)
+    ]
+    targets = []
+    for candidate in candidate_names:
+        span = _class_body_span(source, candidate)
+        if span is None:
+            continue
+        declared = _declared_fields(source[span[0] : span[1]])
+        applicable = [
+            rule
+            for rule in rules
+            if rule["discriminator"] in declared
+            and all(field in declared for field in rule["bounds"])
+        ]
+        if applicable:
+            targets.append((candidate, applicable))
+    return targets
+
+
 def _patch_conditional_bounds():
     """Inject conditional numeric-bound validators; return counts and status."""
     rules_by_class = find_conditional_bounds(SCHEMA_DIR)
@@ -1895,11 +2182,16 @@ def _patch_conditional_bounds():
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
-            if not re.search(
-                rf"^class {re.escape(class_name)}\(", source, re.M
-            ):
+            targets = _resolve_conditional_bounds_targets(
+                source, class_name, rules
+            )
+            if not targets:
                 continue
-            updated = inject_conditional_bounds(source, class_name, rules)
+            updated = source
+            for target, applicable_rules in targets:
+                updated = inject_conditional_bounds(
+                    updated, target, applicable_rules
+                )
             if updated != source:
                 path.write_text(updated, encoding="utf-8")
                 patched += 1
@@ -1926,6 +2218,11 @@ def _patch_conditional_array_retyping():
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
+            if re.search(
+                rf"^{re.escape(class_name)} = TypeAliasType\(", source, re.M
+            ):
+                hits.append(path)
+                continue
             if not re.search(
                 rf"^class {re.escape(class_name)}\(", source, re.M
             ):
@@ -1948,6 +2245,28 @@ def _patch_conditional_array_retyping():
     return patched, 0
 
 
+def _dependent_required_target_classes(source, class_name):
+    """Return all generated class variants of ``class_name`` in ``source``."""
+    suffixes = (
+        "",
+        "Base",
+        "CreateRequest",
+        "UpdateRequest",
+        "CompleteRequest",
+        "CreateRequestBase",
+        "UpdateRequestBase",
+        "CompleteRequestBase",
+    )
+    candidates = [f"{class_name}{s}" for s in suffixes]
+    if class_name == "Location":
+        candidates.append("LookupLocation")
+    return [
+        name
+        for name in candidates
+        if _class_body_span(source, name) is not None
+    ]
+
+
 def _patch_dependent_required():
     """Inject dependentRequired validators; return counts and status."""
     rules_by_class = find_root_dependent_required(SCHEMA_DIR)
@@ -1961,26 +2280,31 @@ def _patch_dependent_required():
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
-            match = re.search(
-                rf"^class {re.escape(class_name)}\(", source, re.M
-            )
-            if match is None:
+            targets = _dependent_required_target_classes(source, class_name)
+            if not targets:
+                if re.search(
+                    rf"^{re.escape(class_name)} = TypeAliasType\(", source, re.M
+                ):
+                    hits.append(path)
                 continue
-            tail = re.compile(r"^\S", re.M)
-            end_match = tail.search(source, match.end())
-            end = end_match.start() if end_match else len(source)
-            if (
-                f"def {_DEPENDENT_REQUIRED_MARKER}("
-                in source[match.start() : end]
-            ):
+            updated = source
+            any_already = False
+            for target in targets:
+                span = _class_body_span(updated, target)
+                if (
+                    span is not None
+                    and f"def {_DEPENDENT_REQUIRED_MARKER}("
+                    in updated[span[0] : span[1]]
+                ):
+                    any_already = True
+                    continue
+                updated = inject_dependent_required(updated, target, rules)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
                 hits.append(path)
-                continue
-            updated = inject_dependent_required(source, class_name, rules)
-            if updated == source:
-                continue
-            path.write_text(updated, encoding="utf-8")
-            patched += 1
-            hits.append(path)
+            elif any_already:
+                hits.append(path)
         label = (
             ", ".join(str(path) for path in hits) or "NO APPLICABLE CLASS FOUND"
         )
@@ -1996,6 +2320,11 @@ def _patch_unique_items():
     if not unique_fields_by_class:
         sys.stdout.write("postprocess: no uniqueItems constraints found\n")
         return 0, 0
+    for class_name, fields in list(unique_fields_by_class.items()):
+        for suffix in ("CreateRequest", "UpdateRequest", "CompleteRequest"):
+            unique_fields_by_class.setdefault(
+                f"{class_name}{suffix}", set(fields)
+            )
     unique_patched = 0
     touched = []
     for path in sorted(OUTPUT_DIR.rglob("*.py")):
@@ -2016,6 +2345,249 @@ def _patch_unique_items():
         f" ({', '.join(str(t) for t in touched) or 'none'})\n"
     )
     return unique_patched, 0
+
+
+def _extract_variant_discriminator_tags(var_body, base_fields):
+    """Extract (disc_field, tags) from Literal annotations in a variant body."""
+    disc_field = None
+    tags = set()
+    for lit_match in re.finditer(
+        r"^    (\w+): [^\n]*\bLiteral\[([^\]]+)\]", var_body, re.M
+    ):
+        field_name = lit_match.group(1)
+        if field_name not in base_fields:
+            continue
+        disc_field = field_name
+        for q1, q2 in re.findall(r'"([^"]+)"|\'([^\']+)\'', lit_match.group(2)):
+            tags.add(q1 or q2)
+    return disc_field, tags
+
+
+def _find_open_union_base_exclusions(source):
+    """Discover ``<Union>Base`` discriminator ``not.enum`` rules in ``source``."""
+    exclusions = {}
+    alias_re = re.compile(
+        r"^(\w+) = TypeAliasType\(\s*\"\w+\",\s*Annotated\[\s*([^,\]]+),",
+        re.M | re.S,
+    )
+    for match in alias_re.finditer(source):
+        members = [m.strip() for m in match.group(2).split("|") if m.strip()]
+        if len(members) < 2 or not members[-1].endswith("Base"):
+            continue
+        base_class = members[-1]
+        base_span = _class_body_span(source, base_class)
+        if base_span is None:
+            continue
+        base_fields = _declared_fields(source[base_span[0] : base_span[1]])
+        disc_field = None
+        tags = set()
+        for variant in members[:-1]:
+            var_span = _class_body_span(source, variant)
+            if var_span is None:
+                continue
+            field_name, var_tags = _extract_variant_discriminator_tags(
+                source[var_span[0] : var_span[1]], base_fields
+            )
+            if field_name:
+                disc_field = field_name
+                tags.update(var_tags)
+        if disc_field and tags:
+            exclusions[base_class] = {
+                "field": disc_field,
+                "excluded": sorted(tags),
+            }
+    return exclusions
+
+
+def inject_open_union_not_enum(source, class_name, field, excluded):
+    """Inject ``not.enum`` discriminator guard onto ``class_name``."""
+    span = _class_body_span(source, class_name)
+    if span is None:
+        return source
+    if f"def {_NOT_ENUM_MARKER}(" in source[span[0] : span[1]]:
+        return source
+    method = _NOT_ENUM_TEMPLATE.format(
+        marker=_NOT_ENUM_MARKER,
+        field=field,
+        excluded=excluded,
+    )
+    body = source[: span[1]].rstrip("\n")
+    rest = source[span[1] :]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
+def _patch_open_union_not_enum():
+    """Inject ``not.enum`` discriminator checks on ``<Union>Base`` classes.
+
+    Also performs single-file bundle hygiene:
+    1. ``datamodel-code-generator`` emits ``typing.Dict[...]`` inside
+       ``__pydantic_extra__`` annotations on ``extra="allow"`` models with typed
+       ``additionalProperties`` (e.g. ``Actions``) even when
+       ``--use-standard-collections`` is enabled; normalizing ``Dict[`` to
+       built-in ``dict[`` keeps Ruff ``UP006``/``UP035`` clean.
+    2. Strips the synthetic root bundle wrapper ``UCPSchemaTypes`` /
+       ``UcpSchemaTypes = TypeAliasType(...)`` emitted from the bundle's root
+       ``"title": "UCP Schema Types"``.
+    """
+    patched = 0
+    for path in sorted(OUTPUT_DIR.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        updated = re.sub(r"\bDict\[", "dict[", source)
+        updated = re.sub(
+            r"^(from typing import [^\n]*?),\s*Dict\b",
+            r"\1",
+            updated,
+            flags=re.M,
+        )
+        updated = re.sub(
+            r"^(?:Ucp|UCP)SchemaTypes = TypeAliasType\((?:[^\n]*\)|.*?\n\))\n*",
+            "",
+            updated,
+            flags=re.M | re.S,
+        )
+        exclusions = _find_open_union_base_exclusions(updated)
+        for base_class, rule in sorted(exclusions.items()):
+            updated = inject_open_union_not_enum(
+                updated, base_class, rule["field"], rule["excluded"]
+            )
+            sys.stdout.write(
+                f"  not.enum {rule['field']}!={rule['excluded']} on '{base_class}' -> {path}\n"
+            )
+        if updated != source:
+            path.write_text(updated, encoding="utf-8")
+            patched += 1
+    return patched, 0
+
+
+_FORBIDDEN_KEYS_MARKER = "_enforce_forbidden_keys"
+
+_FORBIDDEN_KEYS_TEMPLATE = '''
+    @model_validator(mode="after")
+    def {marker}(self):
+        """JSON Schema not: reject forbidden property keys."""
+        _present = self.model_fields_set | set(self.model_extra or {{}})
+        for _key in {forbidden!r}:
+            if _key in _present:
+                raise ValueError(
+                    f"Field {{_key!r}} is forbidden by schema 'not' constraint"
+                )
+        return self
+'''
+
+
+def _extract_forbidden_keys(not_node):
+    """Extract forbidden key names from a ``not`` schema dict, or return []."""
+    if not isinstance(not_node, dict):
+        return []
+    if set(not_node) == {"required"} and isinstance(
+        not_node.get("required"), list
+    ):
+        if len(not_node["required"]) == 1 and isinstance(
+            not_node["required"][0], str
+        ):
+            return [not_node["required"][0]]
+        return []
+    if set(not_node) == {"anyOf"} and isinstance(not_node.get("anyOf"), list):
+        keys = []
+        for branch in not_node["anyOf"]:
+            if (
+                isinstance(branch, dict)
+                and set(branch) == {"required"}
+                and isinstance(branch.get("required"), list)
+                and len(branch["required"]) == 1
+                and isinstance(branch["required"][0], str)
+            ):
+                keys.append(branch["required"][0])
+            else:
+                return []
+        return sorted(set(keys))
+    return []
+
+
+def find_forbidden_keys(schema_dir):
+    """Map generated class names to forbidden property keys from ``not`` rules."""
+    found = {}
+
+    def walk(node, current_class_name, is_def=False):
+        if not isinstance(node, dict):
+            return
+        if not is_def and isinstance(node.get("title"), str):
+            current_class_name = _alias_name(node["title"])
+        forbidden = _extract_forbidden_keys(node.get("not"))
+        if forbidden and current_class_name:
+            found.setdefault(current_class_name, set()).update(forbidden)
+        for name, prop in (node.get("properties") or {}).items():
+            if isinstance(prop, dict):
+                walk(prop, _to_camel_case(name))
+        for def_name, def_node in (node.get("$defs") or {}).items():
+            if isinstance(def_node, dict):
+                walk(def_node, _to_camel_case(def_name), is_def=True)
+        for key in ("allOf", "anyOf", "oneOf"):
+            if isinstance(node.get(key), list):
+                for item in node[key]:
+                    walk(item, current_class_name)
+
+    for path in sorted(Path(schema_dir).rglob("*.json")):
+        try:
+            schema = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(schema, dict):
+            continue
+        root_title = schema.get("title")
+        initial_class = (
+            _alias_name(root_title) if root_title else _to_camel_case(path.stem)
+        )
+        walk(schema, initial_class)
+
+    return {cls: sorted(keys) for cls, keys in found.items()}
+
+
+def inject_forbidden_keys(source, class_name, forbidden):
+    """Inject forbidden-key validator onto ``class_name``."""
+    span = _class_body_span(source, class_name)
+    if span is None:
+        return source
+    if f"def {_FORBIDDEN_KEYS_MARKER}(" in source[span[0] : span[1]]:
+        return source
+    method = _FORBIDDEN_KEYS_TEMPLATE.format(
+        marker=_FORBIDDEN_KEYS_MARKER,
+        forbidden=sorted(forbidden),
+    )
+    body = source[: span[1]].rstrip("\n")
+    rest = source[span[1] :]
+    out = body + "\n" + method + ("\n" + rest if rest else "")
+    return _ensure_pydantic_import(out, "model_validator")
+
+
+def _patch_forbidden_keys():
+    """Inject forbidden-key validators for ``not`` required rules."""
+    rules_by_class = find_forbidden_keys(SCHEMA_DIR)
+    if not rules_by_class:
+        sys.stdout.write("postprocess: no forbidden-key constraints found\n")
+        return 0, 0
+    patched = 0
+    for class_name, forbidden in sorted(rules_by_class.items()):
+        hits = []
+        for path in sorted(OUTPUT_DIR.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                rf"^class {re.escape(class_name)}\(", source, re.M
+            ):
+                continue
+            updated = inject_forbidden_keys(source, class_name, forbidden)
+            if updated != source:
+                path.write_text(updated, encoding="utf-8")
+                patched += 1
+            hits.append(path)
+        label = ", ".join(str(h) for h in hits) or "NO GENERATED CLASS FOUND"
+        sys.stdout.write(
+            f"  forbidden keys {forbidden} on '{class_name}' -> {label}\n"
+        )
+        if not hits:
+            return patched, 1
+    return patched, 0
 
 
 def find_extra_forbid_class_names(schema_dir):
@@ -2090,6 +2662,18 @@ def inject_extra_forbid(source, class_name):
     return source[: head.end()] + new_body + rest[body_end:]
 
 
+def _resolve_extra_forbid_targets(source, class_name):
+    """Return matching class names in ``source`` for ``class_name`` (including parent-qualified names)."""
+    if re.search(rf"^class {re.escape(class_name)}\(", source, re.M):
+        return [class_name]
+    return [
+        m.group(1)
+        for m in re.finditer(
+            rf"^class (\w+{re.escape(class_name)})\(", source, re.M
+        )
+    ]
+
+
 def _patch_extra_forbid():
     """Inject extra="forbid" on models whose schema forbids unknown keys."""
     class_names = find_extra_forbid_class_names(SCHEMA_DIR)
@@ -2103,11 +2687,12 @@ def _patch_extra_forbid():
         hits = []
         for path in sorted(OUTPUT_DIR.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
-            if not re.search(
-                rf"^class {re.escape(class_name)}\(", source, re.M
-            ):
+            targets = _resolve_extra_forbid_targets(source, class_name)
+            if not targets:
                 continue
-            updated = inject_extra_forbid(source, class_name)
+            updated = source
+            for target in targets:
+                updated = inject_extra_forbid(updated, target)
             if updated != source:
                 path.write_text(updated, encoding="utf-8")
                 patched += 1
@@ -2285,8 +2870,14 @@ def _patch_datetime_patterns():
     return patched, status
 
 
-def main():
+def main(argv=None):
     """Main entry point to scan schemas and patch generated models."""
+    global SCHEMA_DIR, OUTPUT_DIR
+    args = sys.argv[1:] if argv is None else list(argv)
+    if len(args) >= 1:
+        SCHEMA_DIR = Path(args[0])
+    if len(args) >= 2:
+        OUTPUT_DIR = Path(args[1])
     patched_mp, rc_mp = _patch_min_properties()
     patched_xp, rc_xp = _patch_max_properties()
     patched_pn, rc_pn = _patch_property_names()
@@ -2297,6 +2888,8 @@ def main():
     patched_dr, rc_dr = _patch_dependent_required()
     patched_ui, rc_ui = _patch_unique_items()
     patched_ef, rc_ef = _patch_extra_forbid()
+    patched_ne, rc_ne = _patch_open_union_not_enum()
+    patched_fk, rc_fk = _patch_forbidden_keys()
     patched_dp, rc_dp = _patch_datetime_patterns()
     total = (
         patched_mp
@@ -2309,6 +2902,8 @@ def main():
         + patched_dr
         + patched_ui
         + patched_ef
+        + patched_ne
+        + patched_fk
         + patched_dp
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
@@ -2323,6 +2918,8 @@ def main():
         or rc_dr
         or rc_ui
         or rc_ef
+        or rc_ne
+        or rc_fk
         or rc_dp
     )
 
