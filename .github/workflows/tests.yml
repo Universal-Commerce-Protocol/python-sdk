@@ -57,6 +57,8 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
+      - name: Install ucp-schema CLI
+        run: cargo install --git https://github.com/Universal-Commerce-Protocol/ucp-schema.git --branch feat/codegen-subtype-discovery ucp-schema
       - name: Regenerate models from the pinned spec version
         # SDK 0.5.x targets UCP 2026-08-25 (see the README compatibility
         # table). Bump this pin together with the SDK version line.

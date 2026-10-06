@@ -13,3 +13,5 @@
 # limitations under the License.
 
 """UCP models."""
+
+from .schemas import *  # noqa: F403
