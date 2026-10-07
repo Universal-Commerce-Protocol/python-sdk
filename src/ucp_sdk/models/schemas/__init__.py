@@ -335,7 +335,7 @@ class DailyHour(BaseModel):
     @model_validator(mode="after")
     def _enforce_dependent_required(self):
         """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"opens": ["closes"], "closes": ["opens"]}
+        rules = {"closes": ["opens"], "opens": ["closes"]}
         provided = self.model_fields_set | set(self.model_extra or {})
         for field, required_fields in rules.items():
             if field not in provided:
@@ -519,7 +519,7 @@ class ExceptionHour(BaseModel):
     @model_validator(mode="after")
     def _enforce_dependent_required(self):
         """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"opens": ["closes"], "closes": ["opens"]}
+        rules = {"closes": ["opens"], "opens": ["closes"]}
         provided = self.model_fields_set | set(self.model_extra or {})
         for field, required_fields in rules.items():
             if field not in provided:
@@ -1006,7 +1006,7 @@ class JsonrpcErrorResponse(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
     )
     jsonrpc: Literal["2.0"]
     """
@@ -1022,7 +1022,7 @@ class JsonrpcRequest(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
     )
     jsonrpc: Literal["2.0"]
     """
@@ -1036,6 +1036,25 @@ class JsonrpcRequest(BaseModel):
     params: dict[str, Any] | list[Any] | None = None
     """
     Method parameters. Binding-specific schemas define the object shape.
+    """
+
+
+class JsonrpcSuccessResponse(BaseModel):
+    """
+    JSON-RPC success response envelope.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id
+    result: Any
+    """
+    Successful transport result. UCP bindings define the nested result payload.
     """
 
 
@@ -2724,25 +2743,6 @@ Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to th
 """
 
 
-class SuccessResponse(BaseModel):
-    """
-    JSON-RPC success response envelope.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id
-    result: Any
-    """
-    Successful transport result. UCP bindings define the nested result payload.
-    """
-
-
 class TimeInterval(BaseModel):
     """
     Reusable opening and closing time fields for a containing schedule schema. Containing schemas determine whether the `opens` and `closes` pair is required; this fragment's standalone `{}` is not an interval.
@@ -3474,6 +3474,58 @@ class A2aMessageMessage(BaseModel):
     contextId: str
 
 
+class A2aMessageRequestParams(BaseModel):
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    message: A2aMessageMessage
+
+
+class A2aMessageRequest(BaseModel):
+    """
+    A2A message/send JSON-RPC request whose params carry a UCP-bearing Message from the platform to the business agent.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id | None = None
+    method: Literal["message/send"] = Field(..., min_length=1)
+    """
+    Transport method name. Binding-specific schemas constrain the method namespace.
+    """
+    params: A2aMessageRequestParams = Field(
+        ..., title="A2aMessageRequestParams"
+    )
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
+
+
+class A2aMessageResponse(BaseModel):
+    """
+    JSON-RPC success response whose result is an A2A Message from the business agent.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id
+    result: A2aMessageMessage
+
+
 class Actions(BaseModel):
     """
     Outstanding extension-defined Action instances, keyed by reverse-domain Action type, not extension name.
@@ -3497,6 +3549,19 @@ class Actions(BaseModel):
     """
     A 3DS challenge Action.
     """
+
+    @model_validator(mode="after")
+    def _enforce_property_names(self):
+        """JSON Schema propertyNames: every extra key must match the
+        declared reverse-domain pattern (schema propertyNames)."""
+        pattern = "^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$"
+        for key in self.model_extra or {}:
+            if re.fullmatch(pattern, key) is None:
+                raise ValueError(
+                    f"Property name {key!r} does not match the schema "
+                    f"propertyNames pattern {pattern}"
+                )
+        return self
 
 
 class AdjustmentLineItem(BaseModel):
@@ -3734,6 +3799,14 @@ class BusinessSplitPaymentsConfig(BaseModel):
     """
 
 
+Extends = TypeAliasType(
+    "Extends", Annotated[list[ReverseDomainName], Field(..., min_length=1)]
+)
+"""
+Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
+"""
+
+
 class CapabilityBase(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -3758,7 +3831,7 @@ class CapabilityBase(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -3792,7 +3865,7 @@ class CapabilityBusinessSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -3826,7 +3899,7 @@ class CapabilityPlatformSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -3860,7 +3933,7 @@ class CapabilityResponseSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -4211,11 +4284,9 @@ class EarningForecast(BaseModel):
     """
 
 
-EmbeddedMessageErrorResponse = TypeAliasType(
-    "EmbeddedMessageErrorResponse",
-    Annotated[
-        JsonrpcErrorResponse, Field(..., title="EmbeddedMessageErrorResponse")
-    ],
+EmbeddedErrorResponse = TypeAliasType(
+    "EmbeddedErrorResponse",
+    Annotated[JsonrpcErrorResponse, Field(..., title="EmbeddedErrorResponse")],
 )
 """
 JSON-RPC transport-level error response for EP messages. Application-level failures use the response result with result.ucp.status=error instead.
@@ -4323,7 +4394,7 @@ class FulfillmentBusinessSchema(BaseModel):
     """
     Business fulfillment configuration
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -4429,7 +4500,7 @@ class FulfillmentPlatformSchema(BaseModel):
     """
     Platform fulfillment configuration
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -4506,7 +4577,7 @@ class IdentityLinkingPlatformSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -4581,7 +4652,7 @@ class ItemUpdateRequest(BaseModel):
 Jsonrpc = TypeAliasType(
     "Jsonrpc",
     Annotated[
-        JsonrpcRequest | SuccessResponse | JsonrpcErrorResponse,
+        JsonrpcRequest | JsonrpcSuccessResponse | JsonrpcErrorResponse,
         Field(..., title="Jsonrpc"),
     ],
 )
@@ -4693,7 +4764,7 @@ class Location(BaseModel):
     @model_validator(mode="after")
     def _enforce_dependent_required(self):
         """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"hours": ["timezone"], "exception_hours": ["timezone"]}
+        rules = {"exception_hours": ["timezone"], "hours": ["timezone"]}
         provided = self.model_fields_set | set(self.model_extra or {})
         for field, required_fields in rules.items():
             if field not in provided:
@@ -4890,7 +4961,7 @@ class LookupLocation(BaseModel):
     @model_validator(mode="after")
     def _enforce_dependent_required(self):
         """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"hours": ["timezone"], "exception_hours": ["timezone"]}
+        rules = {"exception_hours": ["timezone"], "hours": ["timezone"]}
         provided = self.model_fields_set | set(self.model_extra or {})
         for field, required_fields in rules.items():
             if field not in provided:
@@ -5034,56 +5105,6 @@ class MembershipTier(BaseModel):
     """
     List of benefits associated with this tier.
     """
-
-
-class MessageRequestParams(BaseModel):
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    message: A2aMessageMessage
-
-
-class MessageRequest(BaseModel):
-    """
-    A2A message/send JSON-RPC request whose params carry a UCP-bearing Message from the platform to the business agent.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id | None = None
-    method: Literal["message/send"] = Field(..., min_length=1)
-    """
-    Transport method name. Binding-specific schemas constrain the method namespace.
-    """
-    params: MessageRequestParams = Field(..., title="MessageRequestParams")
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
-
-
-class MessageResponse(BaseModel):
-    """
-    JSON-RPC success response whose result is an A2A Message from the business agent.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id
-    result: A2aMessageMessage
 
 
 class MessageWarning(BaseModel):
@@ -5311,7 +5332,7 @@ class PaymentSplitPaymentsBusinessSchema(BaseModel):
     """
     Business split payments configuration
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -5374,7 +5395,7 @@ class PermalinkPlatformSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -5408,7 +5429,7 @@ class PermalinkResponseSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -6137,7 +6158,7 @@ class UcpEntity(BaseModel):
 A2aMessage = TypeAliasType(
     "A2aMessage",
     Annotated[
-        AgentCard | MessageRequest | MessageResponse,
+        AgentCard | A2aMessageRequest | A2aMessageResponse,
         Field(..., title="A2aMessage"),
     ],
 )
@@ -6289,7 +6310,7 @@ EmbeddedMessage = TypeAliasType(
     Annotated[
         EmbeddedMessageRequest
         | EmbeddedMessageResponse
-        | EmbeddedMessageErrorResponse,
+        | EmbeddedErrorResponse,
         Field(..., title="EmbeddedMessage"),
     ],
 )
@@ -6640,7 +6661,7 @@ class IdentityLinkingBusinessSchema(BaseModel):
     """
     Entity-specific configuration. Structure defined by each entity's schema.
     """
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """
@@ -6908,7 +6929,7 @@ class PermalinkBusinessSchema(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: PermalinkConfig
-    extends: list[ReverseDomainName] | None = Field(None, min_length=1)
+    extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
     """

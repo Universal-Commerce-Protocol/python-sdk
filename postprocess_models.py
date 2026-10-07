@@ -374,27 +374,46 @@ _DATETIME_PATTERN_TEMPLATE = '''
 '''
 
 
+def _iter_schema_files(schema_dir):
+    """Return a list of JSON schema paths from a file or directory."""
+    path = Path(schema_dir)
+    if path.is_file():
+        return [path]
+    return sorted(path.rglob("*.json"))
+
+
+def _iter_root_and_def_objects(schema):
+    """Yield root and top-level $defs schema dicts."""
+    if not isinstance(schema, dict):
+        return
+    yield schema
+    defs = schema.get("$defs")
+    if isinstance(defs, dict):
+        for def_node in defs.values():
+            if isinstance(def_node, dict):
+                yield def_node
+
+
 def find_root_min_properties(schema_dir):
     """Map schema title -> minProperties for root-level object constraints."""
     found = {}
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(schema, dict):
-            continue
-        minimum = schema.get("minProperties")
-        if not minimum or not schema.get("properties"):
-            continue
-        title = schema.get("title")
-        if not title:
-            sys.stderr.write(
-                f"  ! {path}: root minProperties but no title; "
-                "cannot map to a class\n"
-            )
-            continue
-        found[_alias_name(title)] = minimum
+        for obj in _iter_root_and_def_objects(schema):
+            minimum = obj.get("minProperties")
+            if not minimum or not obj.get("properties"):
+                continue
+            title = obj.get("title")
+            if not title:
+                sys.stderr.write(
+                    f"  ! {path}: root minProperties but no title; "
+                    "cannot map to a class\n"
+                )
+                continue
+            found[_alias_name(title)] = minimum
     return found
 
 
@@ -412,24 +431,23 @@ def find_root_max_properties(schema_dir):
     (Field(max_length=...) on the dict field), so it is out of scope here.
     """
     found = {}
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(schema, dict):
-            continue
-        maximum = schema.get("maxProperties")
-        if not isinstance(maximum, int) or not schema.get("properties"):
-            continue
-        title = schema.get("title")
-        if not title:
-            sys.stderr.write(
-                f"  ! {path}: root maxProperties but no title; "
-                "cannot map to a class\n"
-            )
-            continue
-        found[_alias_name(title)] = maximum
+        for obj in _iter_root_and_def_objects(schema):
+            maximum = obj.get("maxProperties")
+            if not isinstance(maximum, int) or not obj.get("properties"):
+                continue
+            title = obj.get("title")
+            if not title:
+                sys.stderr.write(
+                    f"  ! {path}: root maxProperties but no title; "
+                    "cannot map to a class\n"
+                )
+                continue
+            found[_alias_name(title)] = maximum
     return found
 
 
@@ -465,14 +483,12 @@ def _ensure_stdlib_import(source, statement):
     )
 
 
-def _resolve_property_names_pattern(prop_names, schema_path):
+def _resolve_property_names_pattern(prop_names, schema_path, root_schema=None):
     """Return the key pattern a ``propertyNames`` node enforces, or ``None``.
 
-    Reads an inline ``pattern`` directly, or follows a ``$ref`` to an external
-    schema file's root ``pattern`` (e.g. ``reverse_domain_name.json``) so the
-    pattern is never duplicated here — it always comes from the source schema.
-    Local ``#/...`` pointer refs are not resolved and are skipped with a
-    warning rather than guessed.
+    Reads an inline ``pattern`` directly, or follows a ``$ref`` to an internal
+    ``#/$defs/<Name>`` entry or external schema file's root ``pattern`` (e.g.
+    ``reverse_domain_name.json``) so the pattern is never duplicated here.
     """
     if not isinstance(prop_names, dict):
         return None
@@ -482,6 +498,13 @@ def _resolve_property_names_pattern(prop_names, schema_path):
     ref = prop_names.get("$ref")
     if not isinstance(ref, str):
         return None
+    if ref.startswith("#/$defs/") and isinstance(root_schema, dict):
+        def_key = ref.removeprefix("#/$defs/")
+        referenced = (root_schema.get("$defs") or {}).get(def_key)
+        if isinstance(referenced, dict) and isinstance(
+            referenced.get("pattern"), str
+        ):
+            return referenced["pattern"]
     if ref.startswith("#"):
         sys.stderr.write(
             f"  ! {schema_path}: propertyNames $ref '{ref}' is a local "
@@ -525,16 +548,16 @@ def find_property_names_patterns(schema_dir):
     """
     found = {}
 
-    def walk(node, path_str):
+    def walk(node, path_str, root_schema):
         if not isinstance(node, dict):
             if isinstance(node, list):
                 for item in node:
-                    walk(item, path_str)
+                    walk(item, path_str, root_schema)
             return
         props = node.get("properties")
         if "propertyNames" in node and isinstance(props, dict) and props:
             pattern = _resolve_property_names_pattern(
-                node["propertyNames"], path_str
+                node["propertyNames"], path_str, root_schema
             )
             title = node.get("title")
             if pattern is None:
@@ -545,13 +568,6 @@ def find_property_names_patterns(schema_dir):
                     "but no title; cannot map to a class\n"
                 )
             else:
-                # The injected validator uses re.fullmatch to mirror
-                # pydantic-core / ECMA-262 (JSON Schema's regex dialect) key
-                # semantics, which the sibling dict-map path already applies.
-                # That is exact for the ^...$-anchored patterns UCP uses. An
-                # unanchored pattern means JSON Schema unanchored-search
-                # semantics, where fullmatch would over-restrict; warn so a
-                # future schema does not silently get a stricter check.
                 if not (pattern.startswith("^") and pattern.endswith("$")):
                     sys.stderr.write(
                         f"  ! {path_str}: propertyNames pattern {pattern!r} is "
@@ -560,14 +576,14 @@ def find_property_names_patterns(schema_dir):
                     )
                 found[_alias_name(title)] = pattern
         for value in node.values():
-            walk(value, path_str)
+            walk(value, path_str, root_schema)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        walk(schema, str(path))
+        walk(schema, str(path), schema)
     return found
 
 
@@ -699,7 +715,7 @@ def find_array_contains_constraints(schema_dir):
     output must not be used here.
     """
     found = {}
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -799,9 +815,9 @@ def _is_bare_conditional_branch(node):
 
 
 def _to_camel_case(string):
-    """Convert a string (snake, kebab, space-separated) to CamelCase."""
+    """Convert a string (snake, kebab, space-separated, or PascalCase) to CamelCase."""
     parts = re.split(r"[^a-zA-Z0-9]", string)
-    return "".join(p.capitalize() for p in parts if p)
+    return "".join(p[0].upper() + p[1:] for p in parts if p)
 
 
 def _snake_name(name):
@@ -1088,7 +1104,7 @@ def find_conditional_required(schema_dir):
                 for item in node[key]:
                     walk(item, current_class_name, path_str, scope)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -1258,6 +1274,8 @@ def find_conditional_bounds(schema_dir):
         if isinstance(properties, dict):
             for name, prop in properties.items():
                 walk(prop, _to_camel_case(name), path_str)
+        if isinstance(node.get("items"), dict):
+            walk(node["items"], current_class_name, path_str)
         defs = node.get("$defs")
         if isinstance(defs, dict):
             for def_name, def_node in defs.items():
@@ -1267,7 +1285,7 @@ def find_conditional_bounds(schema_dir):
                 for item in node[key]:
                     walk(item, current_class_name, path_str, scope)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -1473,7 +1491,7 @@ def find_conditional_array_retyping(schema_dir):
             for def_name, def_node in defs.items():
                 walk(def_node, _to_camel_case(def_name), schema_path)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -1506,90 +1524,6 @@ def inject_conditional_array_retyping(source, class_name, rules):
     return _ensure_pydantic_import(out, "model_validator")
 
 
-def _extract_presence_if_then_dependent_required(node):
-    """Extract dependentRequired-equivalent rules from an if/then presence block."""
-    if not isinstance(node, dict) or "else" in node:
-        return {}
-    cond = node.get("if")
-    then = node.get("then")
-    if not isinstance(cond, dict) or not isinstance(then, dict):
-        return {}
-    if set(then) - {"required", "title", "description"}:
-        return {}
-    then_req = then.get("required")
-    if (
-        not isinstance(then_req, list)
-        or not then_req
-        or not all(isinstance(k, str) for k in then_req)
-    ):
-        return {}
-    triggers = []
-    if set(cond) == {"required"} and isinstance(cond.get("required"), list):
-        if len(cond["required"]) == 1 and isinstance(cond["required"][0], str):
-            triggers.append(cond["required"][0])
-    elif set(cond) == {"anyOf"} and isinstance(cond.get("anyOf"), list):
-        for branch in cond["anyOf"]:
-            if (
-                isinstance(branch, dict)
-                and set(branch) == {"required"}
-                and isinstance(branch.get("required"), list)
-                and len(branch["required"]) == 1
-                and isinstance(branch["required"][0], str)
-            ):
-                triggers.append(branch["required"][0])
-            else:
-                return {}
-    return {trigger: list(then_req) for trigger in triggers}
-
-
-def _merge_props_and_dependent_required(node, merged_props, merged_rules):
-    """Merge properties and dependentRequired from a schema dict if present."""
-    if not isinstance(node, dict):
-        return
-    if isinstance(node.get("properties"), dict):
-        merged_props.update(node["properties"])
-    if isinstance(node.get("dependentRequired"), dict):
-        merged_rules.update(node["dependentRequired"])
-    merged_rules.update(_extract_presence_if_then_dependent_required(node))
-
-
-def _load_local_ref_schema(ref, path):
-    """Load a relative file $ref schema dict and its path, or return (None, None)."""
-    if not isinstance(ref, str) or ref.startswith("#"):
-        return None, None
-    file_part = ref.split("#", 1)[0]
-    if not file_part:
-        return None, None
-    ref_path = (path.parent / file_part).resolve()
-    try:
-        loaded = json.loads(ref_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None, None
-    return (loaded, ref_path) if isinstance(loaded, dict) else (None, None)
-
-
-def _collect_root_and_allof_properties_and_dependent_required(schema, path):
-    """Collect root + local allOf properties and dependentRequired rules."""
-    merged_props = {}
-    merged_rules = {}
-    allof = schema.get("allOf") if isinstance(schema, dict) else None
-    for branch in allof if isinstance(allof, list) else []:
-        if not isinstance(branch, dict):
-            continue
-        ref_schema, ref_path = _load_local_ref_schema(branch.get("$ref"), path)
-        if ref_schema is not None:
-            ref_props, ref_rules = (
-                _collect_root_and_allof_properties_and_dependent_required(
-                    ref_schema, ref_path
-                )
-            )
-            merged_props.update(ref_props)
-            merged_rules.update(ref_rules)
-        _merge_props_and_dependent_required(branch, merged_props, merged_rules)
-    _merge_props_and_dependent_required(schema, merged_props, merged_rules)
-    return merged_props, merged_rules
-
-
 def find_root_dependent_required(schema_dir):
     """Map generated class names to root-level dependentRequired rules.
 
@@ -1598,52 +1532,50 @@ def find_root_dependent_required(schema_dir):
     class and are skipped by ``inject_dependent_required``.
     """
     found = {}
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if not isinstance(schema, dict):
             continue
-        properties, rules = (
-            _collect_root_and_allof_properties_and_dependent_required(
-                schema, path
-            )
-        )
-        title = schema.get("title")
-        if not properties or not rules:
-            continue
-        normalized = {}
-        malformed = False
-        for field, required in rules.items():
-            if (
-                not isinstance(field, str)
-                or not isinstance(required, list)
-                or not required
-                or not all(isinstance(name, str) for name in required)
-            ):
-                malformed = True
-                break
-            # Request variants may project either side out. Such a rule no
-            # longer applies to that generated class and is skipped silently.
-            if field in properties and all(
-                name in properties for name in required
-            ):
-                normalized[field] = required
-        if malformed:
-            sys.stderr.write(
-                f"  ! {path}: unsupported dependentRequired rule; skipped\n"
-            )
-            continue
-        if not normalized:
-            continue
-        if not isinstance(title, str) or not title:
-            sys.stderr.write(
-                f"  ! {path}: root dependentRequired but no title; "
-                "cannot map to a class\n"
-            )
-            continue
-        found[_alias_name(title)] = normalized
+        for obj in _iter_root_and_def_objects(schema):
+            properties = obj.get("properties")
+            rules = obj.get("dependentRequired")
+            title = obj.get("title")
+            if not isinstance(properties, dict) or not isinstance(rules, dict):
+                continue
+            normalized = {}
+            malformed = False
+            for field, required in rules.items():
+                if (
+                    not isinstance(field, str)
+                    or not isinstance(required, list)
+                    or not required
+                    or not all(isinstance(name, str) for name in required)
+                ):
+                    malformed = True
+                    break
+                # Request variants may project either side out. Such a rule no
+                # longer applies to that generated class and is skipped silently.
+                if field in properties and all(
+                    name in properties for name in required
+                ):
+                    normalized[field] = required
+            if malformed:
+                sys.stderr.write(
+                    f"  ! {path}: unsupported dependentRequired rule; skipped\n"
+                )
+                continue
+            if not normalized:
+                continue
+            if not isinstance(title, str) or not title:
+                sys.stderr.write(
+                    f"  ! {path}: root dependentRequired but no title; "
+                    "cannot map to a class\n"
+                )
+                continue
+            found[_alias_name(title)] = normalized
     return found
 
 
@@ -1682,24 +1614,6 @@ def inject_dependent_required(source, class_name, rules):
     rest = source[end:]
     out = body + "\n" + method + ("\n" + rest if rest else "")
     return _ensure_pydantic_import(out, "model_validator")
-
-
-def _hoisted_if_then_variant_name(node, current_class_name):
-    """Return hoisted variant class name for a single-const if/then branch, or None."""
-    if not current_class_name or not isinstance(node, dict):
-        return None
-    cond = node.get("if")
-    if not isinstance(cond, dict):
-        return None
-    cond_props = cond.get("properties")
-    if not isinstance(cond_props, dict) or len(cond_props) != 1:
-        return None
-    predicate = next(iter(cond_props.values()))
-    if not isinstance(predicate, dict) or not isinstance(
-        predicate.get("const"), str
-    ):
-        return None
-    return f"{_to_camel_case(predicate['const'])}{current_class_name}"
 
 
 def find_unique_items_fields(schema_dir):
@@ -1754,14 +1668,11 @@ def find_unique_items_fields(schema_dir):
                 for item in node[key]:
                     walk(item, current_class_name, path_str)
 
-        # Recurse into conditional then branches (including hoisted variants)
+        # Recurse into conditional then branches
         if isinstance(node.get("then"), dict):
             walk(node["then"], current_class_name, path_str)
-            hoisted = _hoisted_if_then_variant_name(node, current_class_name)
-            if hoisted:
-                walk(node["then"], hoisted, path_str)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -2142,18 +2053,9 @@ def _patch_conditional_required():
 
 
 def _resolve_conditional_bounds_targets(source, class_name, rules):
-    """Return matching class names (including item models, flattened subtypes, and request slices)."""
-    extra_candidates = (
-        ["Measure", "QuantityUnit"] if class_name == "Unit" else []
-    )
-    pattern = rf"^class ({re.escape(class_name)}(?:\d+|s?Item|PriceMeasure|PriceReference|CreateRequest|UpdateRequest|CompleteRequest)?)\("
-    candidate_names = [
-        m.group(1) for m in re.finditer(pattern, source, re.M)
-    ] + [
-        c
-        for c in extra_candidates
-        if re.search(rf"^class {re.escape(c)}\(", source, re.M)
-    ]
+    """Return matching class names (including numeric suffixes and request slices)."""
+    pattern = rf"^class ({re.escape(class_name)}(?:\d+|CreateRequest|UpdateRequest|CompleteRequest)?)\("
+    candidate_names = [m.group(1) for m in re.finditer(pattern, source, re.M)]
     targets = []
     for candidate in candidate_names:
         span = _class_body_span(source, candidate)
@@ -2247,6 +2149,7 @@ def _patch_conditional_array_retyping():
 
 def _dependent_required_target_classes(source, class_name):
     """Return all generated class variants of ``class_name`` in ``source``."""
+    base_name = class_name[:-4] if class_name.endswith("Base") else class_name
     suffixes = (
         "",
         "Base",
@@ -2257,9 +2160,7 @@ def _dependent_required_target_classes(source, class_name):
         "UpdateRequestBase",
         "CompleteRequestBase",
     )
-    candidates = [f"{class_name}{s}" for s in suffixes]
-    if class_name == "Location":
-        candidates.append("LookupLocation")
+    candidates = [f"{base_name}{s}" for s in suffixes]
     return [
         name
         for name in candidates
@@ -2528,7 +2429,7 @@ def find_forbidden_keys(schema_dir):
                 for item in node[key]:
                     walk(item, current_class_name)
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -2622,8 +2523,10 @@ def find_extra_forbid_class_names(schema_dir):
             found.add(effective)
         for name, child in (node.get("properties") or {}).items():
             visit(child, _to_camel_case(name))
+        for def_name, child in (node.get("$defs") or {}).items():
+            visit(child, _to_camel_case(def_name))
 
-    for path in sorted(Path(schema_dir).rglob("*.json")):
+    for path in _iter_schema_files(schema_dir):
         try:
             schema = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -2872,12 +2775,14 @@ def _patch_datetime_patterns():
 
 def main(argv=None):
     """Main entry point to scan schemas and patch generated models."""
-    global SCHEMA_DIR, OUTPUT_DIR
+    global SCHEMA_DIR, OUTPUT_DIR, RAW_SCHEMA_DIR
     args = sys.argv[1:] if argv is None else list(argv)
     if len(args) >= 1:
         SCHEMA_DIR = Path(args[0])
     if len(args) >= 2:
         OUTPUT_DIR = Path(args[1])
+    if len(args) >= 3:
+        RAW_SCHEMA_DIR = Path(args[2])
     patched_mp, rc_mp = _patch_min_properties()
     patched_xp, rc_xp = _patch_max_properties()
     patched_pn, rc_pn = _patch_property_names()

@@ -140,7 +140,7 @@ uv run \
     --additional-imports pydantic.ConfigDict
 
 echo "Post-processing generated models (constraints the generator ignores)..."
-uv run python postprocess_models.py "$SCHEMA_DIR" src/ucp_sdk/models
+uv run python postprocess_models.py "$TMP_TYPES_JSON" src/ucp_sdk/models "$SCHEMA_DIR"
 
 echo "Formatting generated models..."
 uv run ruff check --fix src/ucp_sdk/models
