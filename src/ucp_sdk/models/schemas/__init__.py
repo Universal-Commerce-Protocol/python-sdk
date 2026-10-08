@@ -8015,7 +8015,7 @@ class CheckoutCompleteRequest(BaseModel):
     """
     Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
     """
-    ap2: Ap2WithCheckoutMandateCompleteRequest
+    ap2: Ap2WithCheckoutMandateCompleteRequest | None = None
 
 
 class CheckoutCreateRequest(BaseModel):
