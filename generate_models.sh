@@ -69,6 +69,9 @@ INPUT_ARG="${1:-}"
 if [ -n "$INPUT_ARG" ] && [ -d "$INPUT_ARG" ]; then
     INPUT_DIR="$INPUT_ARG"
     echo "Using local UCP directory: $INPUT_DIR"
+elif [[ "$INPUT_ARG" == /* || "$INPUT_ARG" == ./* || "$INPUT_ARG" == ../* ]]; then
+    echo "Error: Local UCP directory not found at '$INPUT_ARG'."
+    exit 1
 elif [ -z "$INPUT_ARG" ] && [ -d "../ucp" ]; then
     INPUT_DIR="../ucp"
     echo "No version specified; using sibling ../ucp directory..."
