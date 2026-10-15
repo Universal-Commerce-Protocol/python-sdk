@@ -8032,7 +8032,7 @@ class CheckoutCompleteRequest(BaseModel):
     """
     Payment details with available and selected payment terms.
     """
-    cart_id: str | None = None
+    cart_id: str | None = Field(None, deprecated=True)
     """
     Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
     """

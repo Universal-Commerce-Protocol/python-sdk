@@ -61,7 +61,7 @@ jobs:
         # Pinned to an immutable commit + Cargo.lock while ucp-schema#81-#88 are
         # in review; switch to `cargo install ucp-schema@<version> --locked`
         # once the ucp-schema release is published.
-        run: cargo install --git https://github.com/Universal-Commerce-Protocol/ucp-schema.git --rev 2ad1c6c3accff7cfba1b92023710f9dc94813c7d --locked ucp-schema
+        run: cargo install --git https://github.com/Universal-Commerce-Protocol/ucp-schema.git --rev 65b0a52383d718d592ec9551c3ed56cce3773352 --locked ucp-schema
       - name: Regenerate models from the pinned spec version
         # SDK 0.5.x targets UCP 2026-08-25 (see the README compatibility
         # table). Bump this pin together with the SDK version line.
