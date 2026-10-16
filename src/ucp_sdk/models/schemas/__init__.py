@@ -3524,9 +3524,6 @@ class A2aMessageResponse(BaseModel):
     """
     id: Id
     result: A2aMessageMessage
-    """
-    Successful transport result. UCP bindings define the nested result payload.
-    """
 
 
 class Actions(BaseModel):
@@ -4310,9 +4307,6 @@ class EmbeddedMessageRequest(BaseModel):
     """
     id: Id | None = None
     method: Method
-    """
-    Transport method name. Binding-specific schemas constrain the method namespace.
-    """
     params: dict[str, Any]
     """
     Capability-specific EP parameters.
@@ -5775,9 +5769,6 @@ class ServiceBusinessSchemaEmbedded(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: EmbeddedConfig | None = None
-    """
-    Entity-specific configuration. Structure defined by each entity's schema.
-    """
     transport: Literal["embedded"]
     """
     Transport protocol for this service binding.
@@ -6109,9 +6100,6 @@ class ServiceResponseSchemaEmbedded(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: EmbeddedConfig | None = None
-    """
-    Entity-specific configuration. Structure defined by each entity's schema.
-    """
     transport: Literal["embedded"]
     """
     Transport protocol for this service binding.
@@ -6941,9 +6929,6 @@ class PermalinkBusinessSchema(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: PermalinkConfig
-    """
-    Entity-specific configuration. Structure defined by each entity's schema.
-    """
     extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
@@ -7775,9 +7760,6 @@ class ProfileBusinessSchema(BaseModel):
         extra="allow",
     )
     ucp: UcpBusinessSchema
-    """
-    Protocol metadata, capabilities, services, and payment handlers advertised by this party.
-    """
     keys: list[JwkPublicKey] | None = None
     """
     Canonical UCP profile field for publishing signing keys, as a JWK Set per RFC 7517. When a profile publishes signing keys, they MUST appear here; this is where every UCP verifier reads them. Publishing keys[] makes the UCP profile a valid JWK Set that a signer can reuse as its Web Bot Auth key source: a WBA-shape verifier resolving via Signature-Agent type=jwks_uri pointed at this profile reads these keys, and the cimd and directory variants reach them through their own documents. See the Deployment Patterns for WBA Interop section in the overview for hosting patterns.
@@ -7793,9 +7775,6 @@ class ProfilePlatformSchema(BaseModel):
         extra="allow",
     )
     ucp: UcpPlatformSchema
-    """
-    Protocol metadata, capabilities, services, and payment handlers advertised by this party.
-    """
     keys: list[JwkPublicKey] | None = None
     """
     Canonical UCP profile field for publishing signing keys, as a JWK Set per RFC 7517. When a profile publishes signing keys, they MUST appear here; this is where every UCP verifier reads them. Publishing keys[] makes the UCP profile a valid JWK Set that a signer can reuse as its Web Bot Auth key source: a WBA-shape verifier resolving via Signature-Agent type=jwks_uri pointed at this profile reads these keys, and the cimd and directory variants reach them through their own documents. See the Deployment Patterns for WBA Interop section in the overview for hosting patterns.
