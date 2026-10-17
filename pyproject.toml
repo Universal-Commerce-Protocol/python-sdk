@@ -75,7 +75,6 @@ line-ending = "auto"
 
 [tool.ruff.lint.per-file-ignores]
 "src/ucp_sdk/models/schemas/**/*.py" = ["E501", "D", "N801", "N815"]
-"preprocess_schemas.py" = ["E501", "D"]
 "postprocess_models.py" = ["E501", "D"]
 "tests/**/*.py" = ["E501", "D"]
 
