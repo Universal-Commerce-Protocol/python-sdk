@@ -2773,6 +2773,63 @@ def _patch_datetime_patterns():
     return patched, status
 
 
+def _write_schemas_reexport_init():
+    """Write schemas/__init__.py re-exporting public symbols from _generated.py."""
+    candidates = (
+        OUTPUT_DIR / "schemas" / "_generated.py",
+        OUTPUT_DIR / "_generated.py",
+    )
+    generated_path = next((p for p in candidates if p.is_file()), None)
+    if generated_path is None:
+        return 0
+    tree = ast.parse(generated_path.read_text(encoding="utf-8"))
+    exports = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+            exports.append(node.name)
+            continue
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and not target.id.startswith(
+                    "_"
+                ):
+                    exports.append(target.id)
+            continue
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and not node.target.id.startswith("_")
+        ):
+            exports.append(node.target.id)
+    exports = sorted(dict.fromkeys(exports))
+    init_path = generated_path.parent / "__init__.py"
+    imports_block = ",\n    ".join(exports)
+    all_block = ",\n    ".join(f'"{name}"' for name in exports)
+    content = (
+        "# Copyright 2026 UCP Authors\n"
+        "#\n"
+        '# Licensed under the Apache License, Version 2.0 (the "License");\n'
+        "# you may not use this file except in compliance with the License.\n"
+        "# You may obtain a copy of the License at\n"
+        "#\n"
+        "#     http://www.apache.org/licenses/LICENSE-2.0\n"
+        "#\n"
+        "# Unless required by applicable law or agreed to in writing, software\n"
+        '# distributed under the License is distributed on an "AS IS" BASIS,\n'
+        "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n"
+        "# See the License for the specific language governing permissions and\n"
+        "# limitations under the License.\n\n"
+        '"""Generated UCP schema models."""\n\n'
+        f"from ._generated import (\n    {imports_block},\n)\n\n"
+        f"__all__ = [\n    {all_block},\n]\n"
+    )
+    init_path.write_text(content, encoding="utf-8")
+    sys.stdout.write(
+        f"  re-export index ({len(exports)} symbols) -> {init_path}\n"
+    )
+    return 1
+
+
 def main(argv=None):
     """Main entry point to scan schemas and patch generated models."""
     global SCHEMA_DIR, OUTPUT_DIR, RAW_SCHEMA_DIR
@@ -2796,6 +2853,7 @@ def main(argv=None):
     patched_ne, rc_ne = _patch_open_union_not_enum()
     patched_fk, rc_fk = _patch_forbidden_keys()
     patched_dp, rc_dp = _patch_datetime_patterns()
+    patched_re = _write_schemas_reexport_init()
     total = (
         patched_mp
         + patched_xp
@@ -2810,6 +2868,7 @@ def main(argv=None):
         + patched_ne
         + patched_fk
         + patched_dp
+        + patched_re
     )
     sys.stdout.write(f"postprocess: {total} module(s) patched\n")
     return (
