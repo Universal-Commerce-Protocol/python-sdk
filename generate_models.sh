@@ -56,9 +56,13 @@ else
 fi
 
 TMP_CLONE_DIR=""
+SCOPED_SCHEMA_DIR=""
 TMP_TYPES_JSON="$(mktemp "${TMPDIR:-/tmp}/ucp-types.XXXXXX.json")"
 cleanup() {
     rm -f "$TMP_TYPES_JSON"
+    if [ -n "$SCOPED_SCHEMA_DIR" ] && [ -d "$SCOPED_SCHEMA_DIR" ]; then
+        rm -rf "$SCOPED_SCHEMA_DIR"
+    fi
     if [ -n "$TMP_CLONE_DIR" ] && [ -d "$TMP_CLONE_DIR" ]; then
         rm -rf "$TMP_CLONE_DIR"
     fi
@@ -114,8 +118,17 @@ fi
 
 OUTPUT_DIR="src/ucp_sdk/models/schemas"
 
+# Scope compilation to Shopping + Common + Transports so other verticals do not bleed in.
+SCOPED_SCHEMA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ucp-schemas.XXXXXX")"
+cp "$SCHEMA_DIR"/*.json "$SCOPED_SCHEMA_DIR"/
+for dir in common transports shopping; do
+    if [ -d "$SCHEMA_DIR/$dir" ]; then
+        cp -R "$SCHEMA_DIR/$dir" "$SCOPED_SCHEMA_DIR/$dir"
+    fi
+done
+
 echo "Compiling type bundle with ucp-schema generate-types..."
-"$UCP_SCHEMA_BIN" generate-types --schema-dir "$SCHEMA_DIR" --output "$TMP_TYPES_JSON"
+"$UCP_SCHEMA_BIN" generate-types --schema-dir "$SCOPED_SCHEMA_DIR" --output "$TMP_TYPES_JSON"
 
 echo "Generating Pydantic models from compiled type bundle..."
 rm -rf "$OUTPUT_DIR"
@@ -127,7 +140,7 @@ uv run \
     -m datamodel_code_generator \
     --input "$TMP_TYPES_JSON" \
     --input-file-type jsonschema \
-    --output "$OUTPUT_DIR/__init__.py" \
+    --output "$OUTPUT_DIR/_generated.py" \
     --output-model-type pydantic_v2.BaseModel \
     --use-schema-description \
     --field-constraints \
@@ -143,7 +156,7 @@ uv run \
     --additional-imports pydantic.ConfigDict
 
 echo "Post-processing generated models (constraints the generator ignores)..."
-uv run python postprocess_models.py "$TMP_TYPES_JSON" src/ucp_sdk/models "$SCHEMA_DIR"
+uv run python postprocess_models.py "$TMP_TYPES_JSON" src/ucp_sdk/models "$SCOPED_SCHEMA_DIR"
 
 echo "Formatting generated models..."
 uv run ruff check --fix src/ucp_sdk/models
@@ -160,4 +173,4 @@ for path in Path("src/ucp_sdk/models").rglob("*.py"):
         path.write_text(fixed, encoding="utf-8")
 PY
 
-echo "Done. Models generated in $OUTPUT_DIR/__init__.py"
+echo "Done. Models generated in $OUTPUT_DIR/_generated.py"
