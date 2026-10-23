@@ -20,10 +20,34 @@ from __future__ import annotations
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
+from . import media_source
+
+
+class Preview(BaseModel):
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    url: AnyUrl
+    """
+    URL of the preview image.
+    """
+    width: int | None = Field(None, ge=1)
+    """
+    Pixel width of the preview image.
+    """
+    height: int | None = Field(None, ge=1)
+    """
+    Pixel height of the preview image.
+    """
+
 
 class Media(BaseModel):
     """
-    Media item (image, video, etc.).
+    One logical media item — such as an image, a video, or a 3D model. `url` identifies the resource the Platform renders; `sources` lists alternate renditions; `preview` is a still.
     """
 
     model_config = ConfigDict(
@@ -31,11 +55,15 @@ class Media(BaseModel):
     )
     type: str
     """
-    Media type. Well-known values: `image`, `video`, `model_3d`.
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
     """
     url: AnyUrl
     """
-    URL to the media resource.
+    URL of the media resource the Platform renders; interpretation is specialized per `type`.
+    """
+    name: str | None = None
+    """
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
     """
     alt_text: str | None = None
     """
@@ -43,9 +71,21 @@ class Media(BaseModel):
     """
     width: int | None = Field(None, ge=1)
     """
-    Width in pixels (for images/video).
+    Intrinsic pixel width of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
     """
     height: int | None = Field(None, ge=1)
     """
-    Height in pixels (for images/video).
+    Intrinsic pixel height of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
+    """
+    duration: int | None = Field(None, ge=1)
+    """
+    Duration in seconds, for time-based media such as `video` and `external_video`.
+    """
+    preview: Preview | None = None
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+    sources: list[media_source.MediaSource] | None = None
+    """
+    Alternate renditions of the resource at `url`. The Business SHOULD include the rendition at `url`.
     """
