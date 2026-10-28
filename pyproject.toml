@@ -31,7 +31,7 @@ dev = [
     # pinned UCP spec and asserts byte-identical output, so the codegen
     # toolchain must resolve reproducibly. Bump these pins and regenerate
     # the models in the same PR.
-    "datamodel-code-generator[http]==0.71.0",
+    "datamodel-code-generator[http]==0.81.0",
     "ruff==0.16.1",
 ]
 
