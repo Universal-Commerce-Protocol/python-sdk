@@ -92,16 +92,45 @@ both `ucp_sdk.models` and `ucp_sdk.models.schemas`:
 
 ### Validation
 
-All models support Pydantic validation and serialization:
+Pydantic models in `ucp_sdk.models` provide Tier 1 wire DTO structural typing
+and tolerant-reader deserialization (preserving unknown extension fields for
+forward compatibility) rather than full UCP protocol conformance.
+
+To validate inbound messages against normative UCP constraints (capability
+profile composition, directional `ucp_request` / `ucp_response` visibility,
+`dependentRequired`, `if`/`then`, `uniqueItems`, `contains`, `propertyNames`,
+`not.enum`, and closed-schema rules), verify received JSON payloads with
+[`ucp-schema validate`](https://crates.io/crates/ucp-schema) prior to
+deserializing into SDK DTOs:
+
+```bash
+# Self-describing response or JSON-RPC envelope
+ucp-schema validate payload.json --op read
+
+# REST request against a discovery profile (or --schema checkout.json --request --op create)
+ucp-schema validate payload.json --profile profile.json --op create
+```
 
 ```python
+from pathlib import Path
+import subprocess
+
 from pydantic import ValidationError
 from ucp_sdk.models import Checkout
 
-# Validate data against UCP schemas
+payload_path = Path("payload.json")
+
+# Step 1: Verify normative UCP protocol constraints with ucp-schema validate
+subprocess.run(
+    ["ucp-schema", "validate", str(payload_path), "--op", "read"],
+    check=True,
+)
+
+# Step 2: Deserialize verified JSON into typed Pydantic DTOs
 try:
-    checkout = Checkout.model_validate(checkout_data)
-    # Serialize to JSON-compatible dict
+    checkout = Checkout.model_validate_json(
+        payload_path.read_text(encoding="utf-8")
+    )
     checkout_dict = checkout.model_dump(exclude_none=True)
 except ValidationError as e:
     print(e.errors())
@@ -145,7 +174,7 @@ a branch or commit SHA, or a path to a local UCP repository checkout.
 If no argument is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.
 
-The generated code is automatically post-processed and formatted using `ruff`.
+The generated code is automatically formatted using `ruff`.
 
 ### Running Tests
 

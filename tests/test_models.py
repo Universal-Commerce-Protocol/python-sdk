@@ -493,12 +493,6 @@ class MediaModelTest(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 self.media_adapter.validate_python(bad)
 
-        for known_type in ("image", "video", "external_video", "model_3d"):
-            with self.assertRaises(ValidationError):
-                MediaBase.model_validate(
-                    {"type": known_type, "url": "https://example.com/x"}
-                )
-
 
 class OpenDiscriminatedUnionModelTest(unittest.TestCase):
     """Tests for open discriminated union validation and round-trip behavior."""
@@ -729,23 +723,22 @@ class OpenDiscriminatedUnionModelTest(unittest.TestCase):
             "Locker bank 7",
         )
 
-    def test_missing_discriminator_raises_validation_error(self) -> None:
-        with self.assertRaises(ValidationError):
-            self.destination_adapter.validate_python(
-                {"id": "dest_missing_type", "postal_code": "94043"}
-            )
+    def test_missing_or_non_string_discriminator_raises_validation_error(
+        self,
+    ) -> None:
+        for bad_dest in (
+            {"id": "dest_missing_type", "postal_code": "94043"},
+            {"id": "dest_int_type", "type": 123},
+            {"id": "dest_null_type", "type": None},
+        ):
+            with self.assertRaises(ValidationError):
+                self.destination_adapter.validate_python(bad_dest)
         with self.assertRaises(ValidationError):
             self.method_adapter.validate_python(
                 {"id": "m_missing_type", "line_item_ids": ["li_1"]}
             )
-
-    def test_known_discriminator_with_malformed_field_raises_validation_error(
-        self,
-    ) -> None:
-        # postal_code must be a string; known discriminator "shipping_address"
-        # must NOT silently fall back to FulfillmentDestinationBase.
         with self.assertRaises(ValidationError):
-            self.destination_adapter.validate_python(
+            ShippingDestination.model_validate(
                 {
                     "type": "shipping_address",
                     "id": "dest_bad",
@@ -781,9 +774,11 @@ class OpenDiscriminatedUnionModelTest(unittest.TestCase):
         )
 
         with self.assertRaises(ValidationError):
-            self.provider_adapter.validate_python({"type": "oauth2"})
+            Oauth2Provider.model_validate({"type": "oauth2"})
         with self.assertRaises(ValidationError):
-            ProviderBase.model_validate({"type": "oauth2"})
+            self.provider_adapter.validate_python({})
+        with self.assertRaises(ValidationError):
+            self.provider_adapter.validate_python({"type": 123})
 
     def test_fulfillment_method_create_and_update_request_open_unions(
         self,
@@ -811,7 +806,7 @@ class OpenDiscriminatedUnionModelTest(unittest.TestCase):
         )
 
         with self.assertRaises(ValidationError):
-            self.method_create_adapter.validate_python(
+            ShippingMethodCreateRequest.model_validate(
                 {"type": "shipping", "destinations": [{"postal_code": 123}]}
             )
 
@@ -838,7 +833,130 @@ class OpenDiscriminatedUnionModelTest(unittest.TestCase):
         )
 
         with self.assertRaises(ValidationError):
-            self.method_update_adapter.validate_python({"type": "shipping"})
+            ShippingMethodUpdateRequest.model_validate({"type": "shipping"})
+
+
+class IdentityLinkingRoleSchemaTest(unittest.TestCase):
+    """Tests for IdentityLinkingBusinessSchema and IdentityLinkingPlatformSchema."""
+
+    BASE = {
+        "version": "2026-08-25",
+        "schema": "https://ucp.dev/2026-08-25/schemas/common/identity_linking",
+    }
+
+    def test_platform_and_business_role_schemas(self) -> None:
+        plat_cls = models_module.IdentityLinkingPlatformSchema
+        biz_cls = models_module.IdentityLinkingBusinessSchema
+        spec_url = "https://ucp.dev/specification/common/identity-linking"
+        plat = plat_cls.model_validate({**self.BASE, "spec": spec_url})
+        self.assertEqual(str(plat.version), "2026-08-25")
+
+        scope = "dev.ucp.shopping.order:read"
+        biz = biz_cls.model_validate(
+            {**self.BASE, "config": {"scopes": {scope: {}}}}
+        )
+        self.assertEqual(list(biz.config.scopes), [scope])
+        self.assertIsNone(biz.config.scopes[scope].description)
+        for bad in (
+            self.BASE,
+            {**self.BASE, "config": {}},
+            {**self.BASE, "config": {"scopes": {"BAD": {}}}},
+        ):
+            with self.assertRaises(ValidationError):
+                biz_cls.model_validate(bad)
+
+
+class PureDtoStructureAndOpennessTest(unittest.TestCase):
+    """Tests for semantic model naming, __all__ hygiene, LocationFilter, and DTO openness."""
+
+    def test_semantic_names_present_and_synthetic_wrapper_absent(self) -> None:
+        forbidden = (
+            *("UCPSchemaTypes", "UcpSchemaTypes", "AnyUrl", "AwareDatetime"),
+            *("BaseModel", "ConfigDict", "Field", "RootModel"),
+            *("date", "timedelta", "TypeAliasType"),
+        )
+        for sym in forbidden:
+            self.assertNotIn(sym, schemas_module.__all__)
+            self.assertNotIn(sym, models_module.__all__)
+            self.assertFalse(hasattr(models_module, sym), sym)
+        expected = (
+            *("TotalsItem", "ValueConstraintEnum", "ValueConstraintConst"),
+            *("ServiceBusinessSchemaRest", "ServiceBusinessSchemaMcp"),
+            *("ServiceBusinessSchemaA2a", "ServiceBusinessSchemaEmbedded"),
+            *("LocationServesAddressCountry", "LocationServesAddressRegion"),
+            *("LocationServesAddressPostalCode", "UnitPriceMeasure"),
+            "UnitPriceReference",
+        )
+        for name in expected:
+            self.assertIn(name, schemas_module.__all__)
+            self.assertTrue(hasattr(models_module, name), name)
+
+    def test_location_filter_open_at_utc_offset_and_naive_datetime(
+        self,
+    ) -> None:
+        search_cls = models_module.LocationSearchRequest
+        lookup_cls = models_module.LocationLookupRequest
+        for model, base in ((search_cls, {}), (lookup_cls, {"ids": ["loc_1"]})):
+            for open_at, offset in (
+                ("2026-05-18T17:00:00Z", 0),
+                ("2026-05-18T17:00:00+05:30", 19800),
+            ):
+                hours = {"open_at": open_at}
+                req = model.model_validate(
+                    {**base, "filters": {"hours": hours}}
+                )
+                assert req.filters is not None and req.filters.hours is not None
+                assert req.filters.hours.open_at is not None
+                utcoffset = req.filters.hours.open_at.utcoffset()
+                assert utcoffset is not None
+                self.assertEqual(utcoffset.total_seconds(), offset)
+            naive = {"open_at": "2026-05-18T17:00:00"}
+            with self.assertRaises(ValidationError):
+                model.model_validate({**base, "filters": {"hours": naive}})
+
+    def test_dto_openness_preserves_extra_fields(self) -> None:
+        msg = {
+            "type": "error",
+            "code": "invalid",
+            "content": "bad",
+            "severity": "recoverable",
+        }
+        err = models_module.ErrorResponse.model_validate(
+            {
+                "ucp": {"version": "2026-08-25", "status": "error"},
+                "messages": [msg],
+                "com.example.trace": "t_1",
+            }
+        )
+        self.assertEqual(
+            err.model_dump(exclude_none=True)["com.example.trace"], "t_1"
+        )
+
+        rc = models_module.RequestConstraints.model_validate(
+            {"path": "$.buyer", "com.example.meta": 42}
+        )
+        self.assertEqual(
+            rc.model_dump(exclude_none=True)["com.example.meta"], 42
+        )
+
+        vc_adapter: TypeAdapter[Any] = TypeAdapter(
+            models_module.ValueConstraint
+        )
+        vc_enum = vc_adapter.validate_python(
+            {"enum": ["a", "b"], "com.example.extra": True}
+        )
+        self.assertIsInstance(vc_enum, models_module.ValueConstraintEnum)
+        self.assertIs(
+            vc_enum.model_dump(exclude_none=True)["com.example.extra"], True
+        )
+
+        vc_const = vc_adapter.validate_python(
+            {"const": "a", "com.example.extra": "ok"}
+        )
+        self.assertIsInstance(vc_const, models_module.ValueConstraintConst)
+        self.assertEqual(
+            vc_const.model_dump(exclude_none=True)["com.example.extra"], "ok"
+        )
 
 
 if __name__ == "__main__":
