@@ -1,5 +1,8 @@
 node_modules/
 .ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
 __pycache__/
 .venv/
 *.py[cod]
