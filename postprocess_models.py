@@ -167,7 +167,7 @@ _MARKER = "_enforce_min_properties"
 
 _VALIDATOR_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema minProperties: require at least {minimum}
         provided {properties_noun}."""
         provided = self.model_fields_set | set(self.model_extra or {{}})
@@ -183,7 +183,7 @@ _MAX_MARKER = "_enforce_max_properties"
 
 _MAX_VALIDATOR_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema maxProperties: allow at most {maximum}
         provided {properties_noun}."""
         provided = self.model_fields_set | set(self.model_extra or {{}})
@@ -199,7 +199,7 @@ _PROPNAMES_MARKER = "_enforce_property_names"
 
 _PROPNAMES_VALIDATOR_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema propertyNames: every extra key must match the
         declared reverse-domain pattern (schema propertyNames)."""
         pattern = {pattern!r}
@@ -216,7 +216,7 @@ _DEPENDENT_REQUIRED_MARKER = "_enforce_dependent_required"
 
 _DEPENDENT_REQUIRED_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema dependentRequired: enforce dependent fields."""
         rules = {rules!r}
         provided = self.model_fields_set | set(self.model_extra or {{}})
@@ -238,9 +238,9 @@ _CONDITIONAL_REQUIRED_MARKER = "_enforce_conditional_required"
 
 _CONDITIONAL_REQUIRED_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema if/then: enforce conditionally required fields."""
-        rules = {rules!r}
+        rules: list[dict[str, Any]] = {rules!r}
         for rule in rules:
             if getattr(self, rule["discriminator"], None) not in rule["values"]:
                 continue
@@ -274,9 +274,9 @@ _BOUND_KEYWORDS = {
 
 _CONDITIONAL_BOUNDS_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules = {rules!r}
+        rules: list[dict[str, Any]] = {rules!r}
         checks = {checks!r}
         for rule in rules:
             actual = getattr(self, rule["discriminator"], None)
@@ -300,11 +300,11 @@ _RETYPE_MARKER = "_enforce_conditional_item_retyping"
 
 _RETYPE_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema if/then: approximate a discriminator's array-item
         retyping to a different referenced schema, via that schema's own
         required keys and const-pinned fields."""
-        rules = {rules!r}
+        rules: list[dict[str, Any]] = {rules!r}
         for rule in rules:
             actual = getattr(self, rule["discriminator"], None)
             if actual not in rule["values"]:
@@ -339,11 +339,11 @@ _RETYPE_TEMPLATE = '''
 
 _UNIQUE_VALIDATOR_TEMPLATE = '''
     @field_validator("{field}", mode="after")
-    def {marker}_{field}(cls, value):  # noqa: N805
+    def {marker}_{field}(cls, value: Any) -> Any:  # noqa: N805
         """JSON Schema uniqueItems: reject duplicate entries."""
         if value is None:
             return value
-        seen = []
+        seen: list[Any] = []
         for item in value:
             if item in seen:
                 raise ValueError(
@@ -362,7 +362,7 @@ _DATETIME_TYPES = {"AwareDatetime", "NaiveDatetime", "datetime"}
 # date-time pattern UCP uses is anchored only at the end.
 _DATETIME_PATTERN_TEMPLATE = '''
     @field_validator("{field}", mode="before")
-    def {marker}_{field}(cls, value):  # noqa: N805
+    def {marker}_{field}(cls, value: Any) -> Any:  # noqa: N805
         """JSON Schema pattern: match the raw date-time string, since
         pydantic cannot apply a regex to the parsed datetime."""
         pattern = {pattern!r}
@@ -843,7 +843,7 @@ def _predicate_expr(pairs):
 def _build_contains_function(func_name, groups, item_condition=None):
     """Render the module-level ``AfterValidator`` counting function."""
     lines = [
-        f"def {func_name}(value):",
+        f"def {func_name}(value: list[Any]) -> list[Any]:",
         '    """JSON Schema contains/minContains/maxContains (see #49)."""',
     ]
     for index, group in enumerate(groups):
@@ -949,7 +949,9 @@ def inject_array_contains(source, alias_name, groups, item_condition=None):
         addition = f", AfterValidator({func_name})"
     out = source[:insert_at] + addition + source[insert_at:]
     func_src = _build_contains_function(func_name, groups, item_condition)
-    insert_at = assign_re.search(out).start()
+    assign_match = assign_re.search(out)
+    assert assign_match is not None
+    insert_at = assign_match.start()
     out = out[:insert_at] + func_src + "\n\n" + out[insert_at:]
     if item_condition:
         out = _inject_item_condition_on_item_class(
@@ -962,7 +964,7 @@ _ITEM_COND_MARKER = "_enforce_item_required_condition"
 
 _ITEM_COND_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema if/then: require {required!r} when {field!r} is custom."""
         if getattr(self, {field!r}, None) not in {excluded!r}:
             _present = self.model_fields_set | set(self.model_extra or {{}})
@@ -1827,7 +1829,7 @@ _NOT_ENUM_MARKER = "_enforce_not_enum"
 
 _NOT_ENUM_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
         if getattr(self, {field!r}, None) in {excluded!r}:
             raise ValueError(
@@ -2365,7 +2367,7 @@ _FORBIDDEN_KEYS_MARKER = "_enforce_forbidden_keys"
 
 _FORBIDDEN_KEYS_TEMPLATE = '''
     @model_validator(mode="after")
-    def {marker}(self):
+    def {marker}(self) -> Any:
         """JSON Schema not: reject forbidden property keys."""
         _present = self.model_fields_set | set(self.model_extra or {{}})
         for _key in {forbidden!r}:
@@ -2663,14 +2665,18 @@ def find_datetime_pattern_fields(source):
     items), which is left as generated and must be reported.
     """
     tree = ast.parse(source)
-    fields = [
-        (
-            cls.name,
-            stmt.target.id,
-            _pattern_keyword(stmt.value).value.value,
-        )
-        for cls, stmt in _datetime_pattern_fields(tree)
-    ]
+    fields = []
+    for cls, stmt in _datetime_pattern_fields(tree):
+        if not isinstance(stmt.target, ast.Name):
+            continue
+        keyword = _pattern_keyword(stmt.value)
+        if (
+            keyword is None
+            or not isinstance(keyword.value, ast.Constant)
+            or not isinstance(keyword.value.value, str)
+        ):
+            continue
+        fields.append((cls.name, stmt.target.id, keyword.value.value))
     unsupported = [
         node.lineno
         for node in ast.walk(tree)
@@ -2706,10 +2712,13 @@ def inject_datetime_patterns(source):
         cls, stmt = next(
             _datetime_pattern_fields(ast.parse(source)), (None, None)
         )
-        if stmt is None:
+        if cls is None or stmt is None:
             return source
+        assert isinstance(stmt.target, ast.Name)
         call = stmt.value
+        assert isinstance(call, ast.Call)
         keyword = _pattern_keyword(call)
+        assert keyword is not None and isinstance(keyword.value, ast.Constant)
         call.keywords = [kw for kw in call.keywords if kw is not keyword]
         default = call.args[0] if len(call.args) == 1 else None
         if (
@@ -2726,6 +2735,11 @@ def inject_datetime_patterns(source):
             value = " = None"
         else:
             value = f" = {ast.unparse(call)}"
+        assert (
+            stmt.annotation.end_lineno is not None
+            and stmt.annotation.end_col_offset is not None
+        )
+        assert call.end_lineno is not None and call.end_col_offset is not None
         start = _source_offset(
             source, stmt.annotation.end_lineno, stmt.annotation.end_col_offset
         )
@@ -2733,6 +2747,7 @@ def inject_datetime_patterns(source):
         source = source[:start] + value + source[end:]
 
         match = re.search(rf"^class {re.escape(cls.name)}\(", source, re.M)
+        assert match is not None
         end_match = re.compile(r"^\S", re.M).search(source, match.end())
         body_end = end_match.start() if end_match else len(source)
         method = _DATETIME_PATTERN_TEMPLATE.format(
@@ -2803,12 +2818,12 @@ def _write_schemas_reexport_init():
         ):
             exports.append(node.target.id)
             continue
-        if (
-            isinstance(node, type_alias_cls)
-            and isinstance(node.name, ast.Name)
-            and not node.name.id.startswith("_")
-        ):
-            exports.append(node.name.id)
+        if isinstance(node, type_alias_cls):
+            alias_name = getattr(node, "name", None)
+            if isinstance(
+                alias_name, ast.Name
+            ) and not alias_name.id.startswith("_"):
+                exports.append(alias_name.id)
     exports = sorted(dict.fromkeys(exports))
     init_path = generated_path.parent / "__init__.py"
     if exports:

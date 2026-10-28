@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pyright: reportCallIssue=false, reportArgumentType=false, reportOptionalMemberAccess=false
+
 """Tests for the schema codegen and postprocessing pipeline."""
 
 import ast
