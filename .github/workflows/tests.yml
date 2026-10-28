@@ -63,7 +63,7 @@ jobs:
         # --locked` once a crates.io release > 1.4.1 is published.
         run: cargo install --git https://github.com/Universal-Commerce-Protocol/ucp-schema.git --rev 2ce04ccdcd529416808160b8419e97a91483a1f7 --locked ucp-schema
       - name: Regenerate models from the pinned spec version
-        # SDK 0.5.x targets UCP 2026-08-25 (see the README compatibility
+        # SDK 0.6.x targets UCP 2026-08-25 (see the README compatibility
         # table). Bump this pin together with the SDK version line.
         run: ./generate_models.sh 2026-08-25
       - name: Normalize file endings (as pre-commit's end-of-file-fixer does)
