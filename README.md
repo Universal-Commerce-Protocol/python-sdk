@@ -80,13 +80,14 @@ for item in checkout.line_items:
 
 ### Available model packages
 
-All generated Pydantic models and type aliases are exported from both
-`ucp_sdk.models` and `ucp_sdk.models.schemas`:
+Generated Pydantic models and type aliases for the Shopping vertical
+(`shopping`, `common`, and `transports` schemas) are lazily re-exported from
+both `ucp_sdk.models` and `ucp_sdk.models.schemas`:
 
-| Package                  | Description                                                                                         |
-| ------------------------ | --------------------------------------------------------------------------------------------------- |
-| `ucp_sdk.models`         | Top-level re-export of all generated UCP models (checkout, cart, order, fulfillment, profile, etc.) |
-| `ucp_sdk.models.schemas` | Generated Pydantic v2 models synthesized from the UCP JSON Schema bundle                            |
+| Package                  | Description                                                                                                |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `ucp_sdk.models`         | Top-level lazy re-export of all generated UCP models (checkout, cart, order, fulfillment, profile, etc.)   |
+| `ucp_sdk.models.schemas` | Lazy re-export of Pydantic v2 models synthesized from the UCP Shopping, Common, and Transports JSON Schema |
 
 ### Validation
 

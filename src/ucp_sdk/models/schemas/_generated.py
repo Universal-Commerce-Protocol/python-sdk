@@ -1418,10 +1418,6 @@ Preferred key order for map-valued fields in the scope annotated by the containi
 
 
 class McpToolCallResponseResult(BaseModel):
-    """
-    Successful transport result. UCP bindings define the nested result payload.
-    """
-
     model_config = ConfigDict(
         extra="allow",
     )
@@ -1432,7 +1428,7 @@ class McpToolCallResponseResult(BaseModel):
     content: list[ContentPart] | None = None
 
 
-class McpToolCallResponse(BaseModel):
+class McpToolCallResponse(JsonrpcSuccessResponse):
     """
     MCP tools/call response envelope. UCP payloads are carried in result.structuredContent; content is compatibility output.
     """
@@ -1440,17 +1436,9 @@ class McpToolCallResponse(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id
-    result: McpToolCallResponseResult = Field(
-        ..., title="McpToolCallResponseResult"
+    result: McpToolCallResponseResult | None = Field(
+        None, title="McpToolCallResponseResult"
     )
-    """
-    Successful transport result. UCP bindings define the nested result payload.
-    """
 
 
 class Measure(BaseModel):
@@ -1513,21 +1501,105 @@ class Measure(BaseModel):
         return self
 
 
-class Media(BaseModel):
+class MediaBasePreview(BaseModel):
     """
-    Media item (image, video, etc.).
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    type: str
+    url: AnyUrl
     """
-    Media type. Well-known values: `image`, `video`, `model_3d`.
+    URL of the preview image.
+    """
+    width: int | None = Field(None, ge=1)
+    """
+    Pixel width of the preview image.
+    """
+    height: int | None = Field(None, ge=1)
+    """
+    Pixel height of the preview image.
+    """
+
+
+class MediaExternalVideoPreview(MediaBasePreview):
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+
+
+class MediaImagePreview(MediaBasePreview):
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+
+
+class MediaModel3dPreview(MediaBasePreview):
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+
+
+class MediaSource(BaseModel):
+    """
+    One encoded rendition of the parent media item: a format or resolution of an image or video, a streaming manifest, or a file format of a 3D model. The Platform selects a source by `mime_type` and dimensions.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    url: AnyUrl
+    """
+    URL to this rendition's file or streaming manifest.
+    """
+    mime_type: str | None = None
+    """
+    IANA media type of this source. A Platform MUST NOT reject the parent media item solely because this value is unknown, but MAY skip a source it cannot decode. Examples: `image/avif`, `image/webp`, `image/jpeg`, `video/mp4`, `video/webm`, `application/vnd.apple.mpegurl` (HLS), `application/dash+xml` (DASH), `model/gltf-binary` (GLB), `model/gltf+json` (glTF), `model/vnd.usdz+zip` (USDZ).
+    """
+    format: str | None = None
+    """
+    Short format token for display/selection. A Platform MUST NOT reject the parent media item solely because this value is unknown, but MAY skip a source it cannot decode. Examples: `avif`, `webp`, `jpg`, `mp4`, `webm`, `m3u8`, `mpd`, `glb`, `gltf`, `usdz`.
+    """
+    width: int | None = Field(None, ge=1)
+    """
+    Pixel width of this rendition. Omitted for adaptive manifests and 3D models.
+    """
+    height: int | None = Field(None, ge=1)
+    """
+    Pixel height of this rendition. Omitted for adaptive manifests and 3D models.
+    """
+    filesize: int | None = Field(None, ge=1)
+    """
+    File size in bytes. Lets the Platform decide whether to prefetch a large asset (e.g. a multi-megabyte 3D model). Omitted for adaptive-streaming manifests, whose total size is not fixed.
+    """
+
+
+class MediaVideoPreview(MediaBasePreview):
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+
+
+class MediaVideo(BaseModel):
+    """
+    Type-specific properties for video media.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["video"]
+    """
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
     """
     url: AnyUrl
     """
-    URL to the media resource.
+    A playable rendition of the video: a progressive file or an adaptive-streaming manifest.
+    """
+    name: str | None = None
+    """
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
     """
     alt_text: str | None = None
     """
@@ -1535,11 +1607,23 @@ class Media(BaseModel):
     """
     width: int | None = Field(None, ge=1)
     """
-    Width in pixels (for images/video).
+    Intrinsic pixel width of the video; a rendition's own dimensions are on its `sources` entry.
     """
     height: int | None = Field(None, ge=1)
     """
-    Height in pixels (for images/video).
+    Intrinsic pixel height of the video; a rendition's own dimensions are on its `sources` entry.
+    """
+    duration: int | None = Field(None, ge=1)
+    """
+    Duration in seconds, for time-based media such as `video` and `external_video`.
+    """
+    preview: MediaVideoPreview | None = Field(None, title="MediaVideoPreview")
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+    sources: list[MediaSource] | None = None
+    """
+    Alternate renditions (MP4/WebM) and adaptive manifests (HLS/DASH).
     """
 
 
@@ -3319,92 +3403,6 @@ class VariantSeller(LookupVariantSeller):
     """
 
 
-class Variant(BaseModel):
-    """
-    A purchasable variant of a product with specific option selections.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
-    """
-    sku: str | None = None
-    """
-    Business-assigned identifier for inventory and fulfillment.
-    """
-    barcodes: list[VariantBarcode] | None = None
-    """
-    Industry-standard product identifiers for cross-reference and correlation.
-    """
-    handle: str | None = None
-    """
-    URL-safe variant handle/slug.
-    """
-    title: str
-    """
-    Variant display title (e.g., 'Blue / Large').
-    """
-    description: Description
-    """
-    Variant description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical variant page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Variant categories with optional taxonomy identifiers.
-    """
-    price: Price
-    """
-    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
-    """
-    quantity_unit: QuantityUnit | None = None
-    """
-    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
-    """
-    list_price: Price | None = None
-    """
-    List price before discounts (for strikethrough display).
-    """
-    unit_price: UnitPrice | None = None
-    """
-    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
-    """
-    availability: Availability | None = None
-    """
-    Variant availability for purchase.
-    """
-    options: list[SelectedOption] | None = None
-    """
-    Option values that define this variant (e.g., Color: Blue, Size: Large).
-    """
-    media: list[Media] | None = None
-    """
-    Variant media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    rating: Rating | None = None
-    """
-    Variant rating.
-    """
-    tags: list[str] | None = None
-    """
-    Variant tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard variant model.
-    """
-    seller: VariantSeller | None = Field(None, title="VariantSeller")
-    """
-    Optional seller context for this variant.
-    """
-
-
 Version = TypeAliasType(
     "Version",
     Annotated[
@@ -3475,17 +3473,13 @@ class A2aMessageMessage(BaseModel):
 
 
 class A2aMessageRequestParams(BaseModel):
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
-
     model_config = ConfigDict(
         extra="allow",
     )
     message: A2aMessageMessage
 
 
-class A2aMessageRequest(BaseModel):
+class A2aMessageRequest(JsonrpcRequest):
     """
     A2A message/send JSON-RPC request whose params carry a UCP-bearing Message from the platform to the business agent.
     """
@@ -3493,24 +3487,13 @@ class A2aMessageRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id | None = None
-    method: Literal["message/send"] = Field(..., min_length=1)
-    """
-    Transport method name. Binding-specific schemas constrain the method namespace.
-    """
+    method: Literal["message/send"] = "message/send"
     params: A2aMessageRequestParams = Field(
         ..., title="A2aMessageRequestParams"
     )
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
 
 
-class A2aMessageResponse(BaseModel):
+class A2aMessageResponse(JsonrpcSuccessResponse):
     """
     JSON-RPC success response whose result is an A2A Message from the business agent.
     """
@@ -3518,12 +3501,7 @@ class A2aMessageResponse(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id
-    result: A2aMessageMessage
+    result: A2aMessageMessage | None = None
 
 
 class Actions(BaseModel):
@@ -4152,76 +4130,6 @@ class Context(BaseModel):
         return value
 
 
-class DetailProduct(BaseModel):
-    """
-    A product in a get_product response, extended with effective selections and availability signals on option values.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this product.
-    """
-    handle: str | None = None
-    """
-    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
-    """
-    title: str
-    """
-    Product title.
-    """
-    description: Description
-    """
-    Product description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical product page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Product categories with optional taxonomy identifiers.
-    """
-    price_range: PriceRange
-    """
-    Price range across all variants.
-    """
-    list_price_range: PriceRange | None = None
-    """
-    List price range before discounts (for strikethrough display).
-    """
-    media: list[Media] | None = None
-    """
-    Product media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    options: list[DetailProductOption] | None = None
-    """
-    Product options with availability signals relative to the effective selections.
-    """
-    variants: list[Variant] = Field(..., min_length=1)
-    """
-    Purchasable variants of this product. First item is the featured variant for listings.
-    """
-    rating: Rating | None = None
-    """
-    Aggregate product rating.
-    """
-    tags: list[str] | None = None
-    """
-    Product tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard product model.
-    """
-    selected: list[SelectedOption] | None = None
-    """
-    Effective option selections that anchor the featured variant and availability signals. Required when the product has configurable options; may be empty or omitted for products with no option axes.
-    """
-
-
 class DiscountsObject(BaseModel):
     """
     Discount codes input and applied discounts output.
@@ -4293,7 +4201,7 @@ JSON-RPC transport-level error response for EP messages. Application-level failu
 """
 
 
-class EmbeddedMessageRequest(BaseModel):
+class EmbeddedMessageRequest(JsonrpcRequest):
     """
     Embedded Protocol request or notification envelope. Messages with id expect a response; messages without id are notifications.
     """
@@ -4301,19 +4209,14 @@ class EmbeddedMessageRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id | None = None
-    method: Method
+    method: Method | None = None
     params: dict[str, Any]
     """
     Capability-specific EP parameters.
     """
 
 
-class EmbeddedMessageResponse(BaseModel):
+class EmbeddedMessageResponse(JsonrpcSuccessResponse):
     """
     Embedded Protocol success response envelope. UCP application-level success and error outcomes are both carried in result.ucp.status.
     """
@@ -4321,12 +4224,7 @@ class EmbeddedMessageResponse(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id
-    result: dict[str, Any]
+    result: dict[str, Any] | None = None
     """
     Capability-specific EP result. Application-level status is defined by capability schemas; see Embedded Protocol response handling.
     """
@@ -4975,95 +4873,206 @@ class LookupLocation(BaseModel):
         return self
 
 
-class LookupVariant(BaseModel):
+class MediaBase(BaseModel):
     """
-    Variant with required correlation metadata for lookup responses.
+    One logical media item — such as an image, a video, or a 3D model. `url` identifies the resource the Platform renders; `sources` lists alternate renditions; `preview` is a still.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    id: str
+    type: str
     """
-    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
     """
-    sku: str | None = None
+    url: AnyUrl
     """
-    Business-assigned identifier for inventory and fulfillment.
+    URL of the media resource the Platform renders; interpretation is specialized per `type`.
     """
-    barcodes: list[LookupVariantBarcode] | None = None
+    name: str | None = None
     """
-    Industry-standard product identifiers for cross-reference and correlation.
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
     """
-    handle: str | None = None
+    alt_text: str | None = None
     """
-    URL-safe variant handle/slug.
+    Accessibility text describing the media.
     """
-    title: str
+    width: int | None = Field(None, ge=1)
     """
-    Variant display title (e.g., 'Blue / Large').
+    Intrinsic pixel width of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
     """
-    description: Description
+    height: int | None = Field(None, ge=1)
     """
-    Variant description in one or more formats.
+    Intrinsic pixel height of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
     """
-    url: AnyUrl | None = None
+    duration: int | None = Field(None, ge=1)
     """
-    Canonical variant page URL.
+    Duration in seconds, for time-based media such as `video` and `external_video`.
     """
-    categories: list[Category] | None = None
+    preview: MediaBasePreview | None = Field(None, title="MediaBasePreview")
     """
-    Variant categories with optional taxonomy identifiers.
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
     """
-    price: Price
+    sources: list[MediaSource] | None = None
     """
-    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
+    Alternate renditions of the resource at `url`. The Business SHOULD include the rendition at `url`.
     """
-    quantity_unit: QuantityUnit | None = None
+
+    @model_validator(mode="after")
+    def _enforce_not_enum(self):
+        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
+        if getattr(self, "type", None) in [
+            "external_video",
+            "image",
+            "model_3d",
+            "video",
+        ]:
+            raise ValueError(
+                "Field 'type' must not be one of ['external_video', 'image', 'model_3d', 'video'] "
+                "(schema not.enum)"
+            )
+        return self
+
+
+class MediaExternalVideo(BaseModel):
     """
-    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    Type-specific properties for a video presented through a third-party player.
     """
-    list_price: Price | None = None
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["external_video"]
     """
-    List price before discounts (for strikethrough display).
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
     """
-    unit_price: UnitPrice | None = None
+    url: AnyUrl
     """
-    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    The third-party player the Platform embeds. A video the Business serves as files from any origin, including a CDN, is `video`, not `external_video`.
     """
-    availability: Availability | None = None
+    name: str | None = None
     """
-    Variant availability for purchase.
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
     """
-    options: list[SelectedOption] | None = None
+    alt_text: str | None = None
     """
-    Option values that define this variant (e.g., Color: Blue, Size: Large).
+    Accessibility text describing the media.
     """
-    media: list[Media] | None = None
+    width: int | None = Field(None, ge=1)
     """
-    Variant media (images, videos, 3D models). First item is the featured media for listings.
+    Intrinsic pixel width of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
     """
-    rating: Rating | None = None
+    height: int | None = Field(None, ge=1)
     """
-    Variant rating.
+    Intrinsic pixel height of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
     """
-    tags: list[str] | None = None
+    duration: int | None = Field(None, ge=1)
     """
-    Variant tags for categorization and search.
+    Duration in seconds, for time-based media such as `video` and `external_video`.
     """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard variant model.
-    """
-    seller: LookupVariantSeller | None = Field(
-        None, title="LookupVariantSeller"
+    preview: MediaExternalVideoPreview | None = Field(
+        None, title="MediaExternalVideoPreview"
     )
     """
-    Optional seller context for this variant.
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
     """
-    inputs: list[InputCorrelation] = Field(..., min_length=1)
+    sources: list[MediaSource] | None = None
     """
-    Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
+    Not used: a video presented through a player has no renditions.
+    """
+
+
+class MediaImage(BaseModel):
+    """
+    Type-specific properties for image media.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["image"]
+    """
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
+    """
+    url: AnyUrl
+    """
+    A directly displayable image.
+    """
+    name: str | None = None
+    """
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
+    """
+    alt_text: str | None = None
+    """
+    Accessibility text describing the media.
+    """
+    width: int | None = Field(None, ge=1)
+    """
+    Intrinsic pixel width of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
+    """
+    height: int | None = Field(None, ge=1)
+    """
+    Intrinsic pixel height of the media item, for image and video types; a rendition's own dimensions are on its `sources` entry.
+    """
+    duration: int | None = Field(None, ge=1)
+    """
+    Duration in seconds, for time-based media such as `video` and `external_video`.
+    """
+    preview: MediaImagePreview | None = Field(None, title="MediaImagePreview")
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+    sources: list[MediaSource] | None = None
+    """
+    Alternate encodings and sizes of the image (e.g. `image/avif`, `image/webp`, `image/jpeg`; width variants for responsive layout). `url` SHOULD be the most broadly decodable rendition.
+    """
+
+
+class MediaModel3d(BaseModel):
+    """
+    Type-specific properties for 3D model media.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["model_3d"]
+    """
+    Media type. Well-known values: `image`, `video`, `external_video`, `model_3d`. A Platform MUST NOT reject the containing object for an unrecognized value; it MAY present the item from `preview` and `name`, or omit it.
+    """
+    url: AnyUrl
+    """
+    The primary model file (e.g. GLB).
+    """
+    name: str | None = None
+    """
+    Human-readable title or label for the media, distinct from `alt_text` (accessibility text). Often present for `video` and `model_3d`.
+    """
+    alt_text: str | None = None
+    """
+    Accessibility text describing the media.
+    """
+    width: int | None = Field(None, ge=1)
+    """
+    Not applicable: a 3D model has no pixel dimensions.
+    """
+    height: int | None = Field(None, ge=1)
+    """
+    Not applicable: a 3D model has no pixel dimensions.
+    """
+    duration: int | None = Field(None, ge=1)
+    """
+    Duration in seconds, for time-based media such as `video` and `external_video`.
+    """
+    preview: MediaModel3dPreview | None = Field(
+        None, title="MediaModel3dPreview"
+    )
+    """
+    Poster/thumbnail still the Platform renders before or instead of the primary resource. A Business SHOULD provide it for `video`, `external_video`, and `model_3d` unless no suitable still exists, and MAY provide it for `image` as a low-resolution placeholder.
+    """
+    sources: list[MediaSource] | None = None
+    """
+    Alternate file formats of the model (glTF/GLB/USDZ).
     """
 
 
@@ -5461,72 +5470,6 @@ class Policy(BaseModel):
     """
 
 
-class Product(BaseModel):
-    """
-    A product in the catalog with variants and options.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this product.
-    """
-    handle: str | None = None
-    """
-    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
-    """
-    title: str
-    """
-    Product title.
-    """
-    description: Description
-    """
-    Product description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical product page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Product categories with optional taxonomy identifiers.
-    """
-    price_range: PriceRange
-    """
-    Price range across all variants.
-    """
-    list_price_range: PriceRange | None = None
-    """
-    List price range before discounts (for strikethrough display).
-    """
-    media: list[Media] | None = None
-    """
-    Product media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    options: list[ProductOption] | None = None
-    """
-    Product options (Size, Color, etc.).
-    """
-    variants: list[Variant] = Field(..., min_length=1)
-    """
-    Purchasable variants of this product. First item is the featured variant for listings.
-    """
-    rating: Rating | None = None
-    """
-    Aggregate product rating.
-    """
-    tags: list[str] | None = None
-    """
-    Product tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard product model.
-    """
-
-
 Provider = TypeAliasType(
     "Provider",
     Annotated[Oauth2Provider | ProviderBase, Field(..., title="Provider")],
@@ -5769,6 +5712,9 @@ class ServiceBusinessSchemaEmbedded(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: EmbeddedConfig | None = None
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
     transport: Literal["embedded"]
     """
     Transport protocol for this service binding.
@@ -6100,6 +6046,9 @@ class ServiceResponseSchemaEmbedded(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: EmbeddedConfig | None = None
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
     transport: Literal["embedded"]
     """
     Transport protocol for this service binding.
@@ -6371,99 +6320,6 @@ class FulfillmentGroup(BaseModel):
     """
 
 
-class FulfillmentLookupVariant(BaseModel):
-    """
-    A lookup variant (carrying input correlation) enriched with fulfillment.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
-    """
-    sku: str | None = None
-    """
-    Business-assigned identifier for inventory and fulfillment.
-    """
-    barcodes: list[FulfillmentLookupVariantBarcode] | None = None
-    """
-    Industry-standard product identifiers for cross-reference and correlation.
-    """
-    handle: str | None = None
-    """
-    URL-safe variant handle/slug.
-    """
-    title: str
-    """
-    Variant display title (e.g., 'Blue / Large').
-    """
-    description: Description
-    """
-    Variant description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical variant page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Variant categories with optional taxonomy identifiers.
-    """
-    price: Price
-    """
-    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
-    """
-    quantity_unit: QuantityUnit | None = None
-    """
-    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
-    """
-    list_price: Price | None = None
-    """
-    List price before discounts (for strikethrough display).
-    """
-    unit_price: UnitPrice | None = None
-    """
-    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
-    """
-    availability: Availability | None = None
-    """
-    Variant availability for purchase.
-    """
-    options: list[SelectedOption] | None = None
-    """
-    Option values that define this variant (e.g., Color: Blue, Size: Large).
-    """
-    media: list[Media] | None = None
-    """
-    Variant media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    rating: Rating | None = None
-    """
-    Variant rating.
-    """
-    tags: list[str] | None = None
-    """
-    Variant tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard variant model.
-    """
-    seller: FulfillmentLookupVariantSeller | None = Field(
-        None, title="FulfillmentLookupVariantSeller"
-    )
-    """
-    Optional seller context for this variant.
-    """
-    inputs: list[InputCorrelation] = Field(..., min_length=1)
-    """
-    Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
-    """
-    fulfillment: CatalogFulfillment | None = None
-
-
 class FulfillmentMethodBase(BaseModel):
     """
     A fulfillment method with destinations and groups.
@@ -6522,95 +6378,6 @@ class FulfillmentMethodBase(BaseModel):
                 "(schema not.enum)"
             )
         return self
-
-
-class FulfillmentVariant(BaseModel):
-    """
-    A catalog variant with fulfillment.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
-    """
-    sku: str | None = None
-    """
-    Business-assigned identifier for inventory and fulfillment.
-    """
-    barcodes: list[FulfillmentVariantBarcode] | None = None
-    """
-    Industry-standard product identifiers for cross-reference and correlation.
-    """
-    handle: str | None = None
-    """
-    URL-safe variant handle/slug.
-    """
-    title: str
-    """
-    Variant display title (e.g., 'Blue / Large').
-    """
-    description: Description
-    """
-    Variant description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical variant page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Variant categories with optional taxonomy identifiers.
-    """
-    price: Price
-    """
-    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
-    """
-    quantity_unit: QuantityUnit | None = None
-    """
-    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
-    """
-    list_price: Price | None = None
-    """
-    List price before discounts (for strikethrough display).
-    """
-    unit_price: UnitPrice | None = None
-    """
-    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
-    """
-    availability: Availability | None = None
-    """
-    Variant availability for purchase.
-    """
-    options: list[SelectedOption] | None = None
-    """
-    Option values that define this variant (e.g., Color: Blue, Size: Large).
-    """
-    media: list[Media] | None = None
-    """
-    Variant media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    rating: Rating | None = None
-    """
-    Variant rating.
-    """
-    tags: list[str] | None = None
-    """
-    Variant tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard variant model.
-    """
-    seller: FulfillmentVariantSeller | None = Field(
-        None, title="FulfillmentVariantSeller"
-    )
-    """
-    Optional seller context for this variant.
-    """
-    fulfillment: CatalogFulfillment | None = None
 
 
 class IdentityLinkingBusinessSchemaConfig(BaseModel):
@@ -6702,10 +6469,6 @@ class LoyaltyMembership(BaseModel):
 
 
 class McpToolCallRequestParams(BaseModel):
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
-
     model_config = ConfigDict(
         extra="allow",
     )
@@ -6716,7 +6479,7 @@ class McpToolCallRequestParams(BaseModel):
     arguments: Arguments
 
 
-class McpToolCallRequest(BaseModel):
+class McpToolCallRequest(JsonrpcRequest):
     """
     MCP tools/call request envelope for invoking a UCP operation.
     """
@@ -6724,21 +6487,22 @@ class McpToolCallRequest(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    jsonrpc: Literal["2.0"]
-    """
-    JSON-RPC protocol version.
-    """
-    id: Id | None = None
-    method: Literal["tools/call"] = Field(..., min_length=1)
-    """
-    Transport method name. Binding-specific schemas constrain the method namespace.
-    """
+    method: Literal["tools/call"] = "tools/call"
     params: McpToolCallRequestParams = Field(
         ..., title="McpToolCallRequestParams"
     )
-    """
-    Method parameters. Binding-specific schemas define the object shape.
-    """
+
+
+Media = TypeAliasType(
+    "Media",
+    Annotated[
+        MediaExternalVideo | MediaImage | MediaModel3d | MediaVideo | MediaBase,
+        Field(..., title="Media"),
+    ],
+)
+"""
+One logical media item — such as an image, a video, or a 3D model. `url` identifies the resource the Platform renders; `sources` lists alternate renditions; `preview` is a still.
+"""
 
 
 class Members(BaseModel):
@@ -6929,6 +6693,9 @@ class PermalinkBusinessSchema(BaseModel):
     Unique identifier for this entity instance. Used to disambiguate when multiple instances exist.
     """
     config: PermalinkConfig
+    """
+    Entity-specific configuration. Structure defined by each entity's schema.
+    """
     extends: ReverseDomainName | Extends | None = None
     """
     Parent capability(s) this extends. Present for extensions, absent for root capabilities. Use array for multi-parent extensions.
@@ -7351,6 +7118,92 @@ class UcpPlatformSchema(BaseModel):
     """
 
 
+class Variant(BaseModel):
+    """
+    A purchasable variant of a product with specific option selections.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[VariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
+    """
+    handle: str | None = None
+    """
+    URL-safe variant handle/slug.
+    """
+    title: str
+    """
+    Variant display title (e.g., 'Blue / Large').
+    """
+    description: Description
+    """
+    Variant description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical variant page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Variant categories with optional taxonomy identifiers.
+    """
+    price: Price
+    """
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
+    """
+    quantity_unit: QuantityUnit | None = None
+    """
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    List price before discounts (for strikethrough display).
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
+    """
+    media: list[Media] | None = None
+    """
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    rating: Rating | None = None
+    """
+    Variant rating.
+    """
+    tags: list[str] | None = None
+    """
+    Variant tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard variant model.
+    """
+    seller: VariantSeller | None = Field(None, title="VariantSeller")
+    """
+    Optional seller context for this variant.
+    """
+
+
 Consent = TypeAliasType(
     "Consent",
     Annotated[
@@ -7360,6 +7213,76 @@ Consent = TypeAliasType(
 """
 Per-purpose consent. Keys are reverse-DNS purpose identifiers. UCP defines four well-known purposes: `dev.ucp.consent.marketing`, `dev.ucp.consent.analytics`, `dev.ucp.consent.preferences`, `dev.ucp.consent.sale_or_sharing`. Vendors and merchants may define additional purposes under their own reverse-DNS namespace.
 """
+
+
+class DetailProduct(BaseModel):
+    """
+    A product in a get_product response, extended with effective selections and availability signals on option values.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    List price range before discounts (for strikethrough display).
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[DetailProductOption] | None = None
+    """
+    Product options with availability signals relative to the effective selections.
+    """
+    variants: list[Variant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+    selected: list[SelectedOption] | None = None
+    """
+    Effective option selections that anchor the featured variant and availability signals. Required when the product has configurable options; may be empty or omitted for products with no option axes.
+    """
 
 
 class ErrorResponse(BaseModel):
@@ -7384,79 +7307,9 @@ class ErrorResponse(BaseModel):
     """
 
 
-class FulfillmentDetailProduct(BaseModel):
+class FulfillmentLookupVariant(BaseModel):
     """
-    A get_product detail product (carrying selected/options availability signals) whose variants are fulfillment-enriched. Used by get_product.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Global ID (GID) uniquely identifying this product.
-    """
-    handle: str | None = None
-    """
-    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
-    """
-    title: str
-    """
-    Product title.
-    """
-    description: Description
-    """
-    Product description in one or more formats.
-    """
-    url: AnyUrl | None = None
-    """
-    Canonical product page URL.
-    """
-    categories: list[Category] | None = None
-    """
-    Product categories with optional taxonomy identifiers.
-    """
-    price_range: PriceRange
-    """
-    Price range across all variants.
-    """
-    list_price_range: PriceRange | None = None
-    """
-    List price range before discounts (for strikethrough display).
-    """
-    media: list[Media] | None = None
-    """
-    Product media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    options: list[FulfillmentDetailProductOption] | None = None
-    """
-    Product options with availability signals relative to the effective selections.
-    """
-    variants: list[FulfillmentVariant] = Field(..., min_length=1)
-    """
-    Purchasable variants of this product. First item is the featured variant for listings.
-    """
-    rating: Rating | None = None
-    """
-    Aggregate product rating.
-    """
-    tags: list[str] | None = None
-    """
-    Product tags for categorization and search.
-    """
-    metadata: dict[str, Any] | None = None
-    """
-    Business-defined custom data extending the standard product model.
-    """
-    selected: list[SelectedOption] | None = None
-    """
-    Effective option selections that anchor the featured variant and availability signals. Required when the product has configurable options; may be empty or omitted for products with no option axes.
-    """
-
-
-class FulfillmentLookupProduct(BaseModel):
-    """
-    A lookup product whose variants are fulfillment-enriched, preserving input correlation. Used by lookup.
+    A lookup variant (carrying input correlation) enriched with fulfillment.
     """
 
     model_config = ConfigDict(
@@ -7464,60 +7317,87 @@ class FulfillmentLookupProduct(BaseModel):
     )
     id: str
     """
-    Global ID (GID) uniquely identifying this product.
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[FulfillmentLookupVariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
     """
     handle: str | None = None
     """
-    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    URL-safe variant handle/slug.
     """
     title: str
     """
-    Product title.
+    Variant display title (e.g., 'Blue / Large').
     """
     description: Description
     """
-    Product description in one or more formats.
+    Variant description in one or more formats.
     """
     url: AnyUrl | None = None
     """
-    Canonical product page URL.
+    Canonical variant page URL.
     """
     categories: list[Category] | None = None
     """
-    Product categories with optional taxonomy identifiers.
+    Variant categories with optional taxonomy identifiers.
     """
-    price_range: PriceRange
+    price: Price
     """
-    Price range across all variants.
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
     """
-    list_price_range: PriceRange | None = None
+    quantity_unit: QuantityUnit | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    List price before discounts (for strikethrough display).
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
     """
     media: list[Media] | None = None
     """
-    Product media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    options: list[ProductOption] | None = None
-    """
-    Product options (Size, Color, etc.).
-    """
-    variants: list[FulfillmentLookupVariant] = Field(..., min_length=1)
-    """
-    Purchasable variants of this product. First item is the featured variant for listings.
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
     """
     rating: Rating | None = None
     """
-    Aggregate product rating.
+    Variant rating.
     """
     tags: list[str] | None = None
     """
-    Product tags for categorization and search.
+    Variant tags for categorization and search.
     """
     metadata: dict[str, Any] | None = None
     """
-    Business-defined custom data extending the standard product model.
+    Business-defined custom data extending the standard variant model.
     """
+    seller: FulfillmentLookupVariantSeller | None = Field(
+        None, title="FulfillmentLookupVariantSeller"
+    )
+    """
+    Optional seller context for this variant.
+    """
+    inputs: list[InputCorrelation] = Field(..., min_length=1)
+    """
+    Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
+    """
+    fulfillment: CatalogFulfillment | None = None
 
 
 FulfillmentMethod = TypeAliasType(
@@ -7532,9 +7412,9 @@ A fulfillment method with destinations and groups.
 """
 
 
-class FulfillmentProduct(BaseModel):
+class FulfillmentVariant(BaseModel):
     """
-    A catalog product whose variants are fulfillment-enriched. Used by search.
+    A catalog variant with fulfillment.
     """
 
     model_config = ConfigDict(
@@ -7542,60 +7422,83 @@ class FulfillmentProduct(BaseModel):
     )
     id: str
     """
-    Global ID (GID) uniquely identifying this product.
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[FulfillmentVariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
     """
     handle: str | None = None
     """
-    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    URL-safe variant handle/slug.
     """
     title: str
     """
-    Product title.
+    Variant display title (e.g., 'Blue / Large').
     """
     description: Description
     """
-    Product description in one or more formats.
+    Variant description in one or more formats.
     """
     url: AnyUrl | None = None
     """
-    Canonical product page URL.
+    Canonical variant page URL.
     """
     categories: list[Category] | None = None
     """
-    Product categories with optional taxonomy identifiers.
+    Variant categories with optional taxonomy identifiers.
     """
-    price_range: PriceRange
+    price: Price
     """
-    Price range across all variants.
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
     """
-    list_price_range: PriceRange | None = None
+    quantity_unit: QuantityUnit | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    List price before discounts (for strikethrough display).
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
     """
     media: list[Media] | None = None
     """
-    Product media (images, videos, 3D models). First item is the featured media for listings.
-    """
-    options: list[ProductOption] | None = None
-    """
-    Product options (Size, Color, etc.).
-    """
-    variants: list[FulfillmentVariant] = Field(..., min_length=1)
-    """
-    Purchasable variants of this product. First item is the featured variant for listings.
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
     """
     rating: Rating | None = None
     """
-    Aggregate product rating.
+    Variant rating.
     """
     tags: list[str] | None = None
     """
-    Product tags for categorization and search.
+    Variant tags for categorization and search.
     """
     metadata: dict[str, Any] | None = None
     """
-    Business-defined custom data extending the standard product model.
+    Business-defined custom data extending the standard variant model.
     """
+    seller: FulfillmentVariantSeller | None = Field(
+        None, title="FulfillmentVariantSeller"
+    )
+    """
+    Optional seller context for this variant.
+    """
+    fulfillment: CatalogFulfillment | None = None
 
 
 class LocationLookupResponse(BaseModel):
@@ -7626,6 +7529,98 @@ class LocationSearchResponse(BaseModel):
     messages: list[Message] | None = None
     """
     Errors, warnings, or informational messages about the search results.
+    """
+
+
+class LookupVariant(BaseModel):
+    """
+    Variant with required correlation metadata for lookup responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[LookupVariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
+    """
+    handle: str | None = None
+    """
+    URL-safe variant handle/slug.
+    """
+    title: str
+    """
+    Variant display title (e.g., 'Blue / Large').
+    """
+    description: Description
+    """
+    Variant description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical variant page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Variant categories with optional taxonomy identifiers.
+    """
+    price: Price
+    """
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
+    """
+    quantity_unit: QuantityUnit | None = None
+    """
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    List price before discounts (for strikethrough display).
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
+    """
+    media: list[Media] | None = None
+    """
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    rating: Rating | None = None
+    """
+    Variant rating.
+    """
+    tags: list[str] | None = None
+    """
+    Variant tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard variant model.
+    """
+    seller: LookupVariantSeller | None = Field(
+        None, title="LookupVariantSeller"
+    )
+    """
+    Optional seller context for this variant.
+    """
+    inputs: list[InputCorrelation] = Field(..., min_length=1)
+    """
+    Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
     """
 
 
@@ -7715,6 +7710,72 @@ class Order(BaseModel):
     """
 
 
+class Product(BaseModel):
+    """
+    A product in the catalog with variants and options.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    List price range before discounts (for strikethrough display).
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[ProductOption] | None = None
+    """
+    Product options (Size, Color, etc.).
+    """
+    variants: list[Variant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+
+
 class Profile(BaseModel):
     """
     Variant-neutral wrapper schema for UCP profile documents. Use the business_schema definition to validate business profiles and the platform_schema definition to validate platform profiles.
@@ -7760,6 +7821,9 @@ class ProfileBusinessSchema(BaseModel):
         extra="allow",
     )
     ucp: UcpBusinessSchema
+    """
+    Protocol metadata, capabilities, services, and payment handlers advertised by this party.
+    """
     keys: list[JwkPublicKey] | None = None
     """
     Canonical UCP profile field for publishing signing keys, as a JWK Set per RFC 7517. When a profile publishes signing keys, they MUST appear here; this is where every UCP verifier reads them. Publishing keys[] makes the UCP profile a valid JWK Set that a signer can reuse as its Web Bot Auth key source: a WBA-shape verifier resolving via Signature-Agent type=jwks_uri pointed at this profile reads these keys, and the cimd and directory variants reach them through their own documents. See the Deployment Patterns for WBA Interop section in the overview for hosting patterns.
@@ -7775,6 +7839,9 @@ class ProfilePlatformSchema(BaseModel):
         extra="allow",
     )
     ucp: UcpPlatformSchema
+    """
+    Protocol metadata, capabilities, services, and payment handlers advertised by this party.
+    """
     keys: list[JwkPublicKey] | None = None
     """
     Canonical UCP profile field for publishing signing keys, as a JWK Set per RFC 7517. When a profile publishes signing keys, they MUST appear here; this is where every UCP verifier reads them. Publishing keys[] makes the UCP profile a valid JWK Set that a signer can reuse as its Web Bot Auth key source: a WBA-shape verifier resolving via Signature-Agent type=jwks_uri pointed at this profile reads these keys, and the cimd and directory variants reach them through their own documents. See the Deployment Patterns for WBA Interop section in the overview for hosting patterns.
@@ -7920,79 +7987,6 @@ class CartUpdateRequest(BaseModel):
     discounts: DiscountsObjectUpdateRequest | None = None
 
 
-class CatalogGetProductResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: ResponseCatalogSchema
-    product: FulfillmentDetailProduct
-    """
-    The requested product with full detail. Singular — this is a single-resource operation.
-    """
-    actions: Actions | None = None
-    """
-    Outstanding extension-defined Actions for this product response.
-    """
-    messages: list[Message] | None = None
-    """
-    Warnings or informational messages about the product (e.g., price recently changed, limited availability).
-    """
-    policies: list[Policy] | None = None
-    """
-    Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
-    """
-    loyalty: Loyalty | None = None
-
-
-class CatalogLookupResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: ResponseCatalogSchema
-    products: list[FulfillmentLookupProduct]
-    """
-    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
-    """
-    actions: Actions | None = None
-    """
-    Outstanding extension-defined Actions for this catalog lookup response.
-    """
-    messages: list[Message] | None = None
-    """
-    Errors, warnings, or informational messages about the requested items.
-    """
-    policies: list[Policy] | None = None
-    """
-    Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
-    """
-    loyalty: Loyalty | None = None
-
-
-class CatalogSearchResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    ucp: ResponseCatalogSchema
-    products: list[FulfillmentProduct]
-    """
-    Products matching the search criteria.
-    """
-    pagination: PaginationResponse | None = None
-    actions: Actions | None = None
-    """
-    Outstanding extension-defined Actions for this catalog search response.
-    """
-    messages: list[Message] | None = None
-    """
-    Errors, warnings, or informational messages about the search results.
-    """
-    policies: list[Policy] | None = None
-    """
-    Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
-    """
-    loyalty: Loyalty | None = None
-
-
 class CheckoutCompleteRequest(BaseModel):
     """
     Request payload to complete a Checkout. Base checkout schema. Extensions compose onto this using allOf.
@@ -8098,6 +8092,281 @@ class Fulfillment(BaseModel):
     """
     Inventory availability hints.
     """
+
+
+class FulfillmentDetailProduct(BaseModel):
+    """
+    A get_product detail product (carrying selected/options availability signals) whose variants are fulfillment-enriched. Used by get_product.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    List price range before discounts (for strikethrough display).
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[FulfillmentDetailProductOption] | None = None
+    """
+    Product options with availability signals relative to the effective selections.
+    """
+    variants: list[FulfillmentVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+    selected: list[SelectedOption] | None = None
+    """
+    Effective option selections that anchor the featured variant and availability signals. Required when the product has configurable options; may be empty or omitted for products with no option axes.
+    """
+
+
+class FulfillmentLookupProduct(BaseModel):
+    """
+    A lookup product whose variants are fulfillment-enriched, preserving input correlation. Used by lookup.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    List price range before discounts (for strikethrough display).
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[ProductOption] | None = None
+    """
+    Product options (Size, Color, etc.).
+    """
+    variants: list[FulfillmentLookupVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+
+
+class FulfillmentProduct(BaseModel):
+    """
+    A catalog product whose variants are fulfillment-enriched. Used by search.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    List price range before discounts (for strikethrough display).
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[ProductOption] | None = None
+    """
+    Product options (Size, Color, etc.).
+    """
+    variants: list[FulfillmentVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+
+
+class CatalogGetProductResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    product: FulfillmentDetailProduct
+    """
+    The requested product with full detail. Singular — this is a single-resource operation.
+    """
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this product response.
+    """
+    messages: list[Message] | None = None
+    """
+    Warnings or informational messages about the product (e.g., price recently changed, limited availability).
+    """
+    policies: list[Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
+
+
+class CatalogLookupResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    products: list[FulfillmentLookupProduct]
+    """
+    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
+    """
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog lookup response.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the requested items.
+    """
+    policies: list[Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
+
+
+class CatalogSearchResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    products: list[FulfillmentProduct]
+    """
+    Products matching the search criteria.
+    """
+    pagination: PaginationResponse | None = None
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog search response.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the search results.
+    """
+    policies: list[Policy] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
 
 
 class Checkout(BaseModel):

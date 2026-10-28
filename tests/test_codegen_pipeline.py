@@ -2700,5 +2700,120 @@ class LocationFilterOpenAtSemanticTest(unittest.TestCase):
                 )
 
 
+class SchemasReexportInitTest(unittest.TestCase):
+    """Tests for _write_schemas_reexport_init lazy re-export generation."""
+
+    def test_generates_lazy_reexports_and_filters_private_symbols(self) -> None:
+        pep695_lines = ""
+        expected = ["Alpha", "Amount", "Beta", "Label"]
+        if hasattr(ast, "TypeAlias"):
+            pep695_lines = "type Zeta = str\ntype _HiddenAlias = int\n"
+            expected.append("Zeta")
+
+        generated_src = (
+            "from __future__ import annotations\n\n"
+            "class Beta:\n"
+            "    pass\n\n"
+            "class Alpha:\n"
+            "    pass\n\n"
+            "class _InternalModel:\n"
+            "    pass\n\n"
+            "Amount = int\n"
+            "_CACHE = {}\n"
+            "Label: type = str\n"
+            f"{pep695_lines}"
+            "def _helper() -> None:\n"
+            "    return None\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_root = Path(tmp)
+            schemas_dir = pkg_root / "temp_schemas_pkg" / "schemas"
+            schemas_dir.mkdir(parents=True)
+            (pkg_root / "temp_schemas_pkg" / "__init__.py").write_text(
+                "", encoding="utf-8"
+            )
+            (schemas_dir / "_generated.py").write_text(
+                generated_src, encoding="utf-8"
+            )
+            stdout = io.StringIO()
+            with (
+                mock.patch.object(
+                    postprocess_models,
+                    "OUTPUT_DIR",
+                    pkg_root / "temp_schemas_pkg",
+                ),
+                contextlib.redirect_stdout(stdout),
+            ):
+                rc_first = postprocess_models._write_schemas_reexport_init()
+                rc_second = postprocess_models._write_schemas_reexport_init()
+
+            self.assertEqual(rc_first, 1)
+            self.assertEqual(rc_second, 0)
+            init_text = (schemas_dir / "__init__.py").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("if TYPE_CHECKING:", init_text)
+            self.assertNotIn("_InternalModel", init_text)
+            self.assertNotIn("_CACHE", init_text)
+            self.assertNotIn("_helper", init_text)
+
+            import importlib
+            import sys
+
+            sys.path.insert(0, str(pkg_root))
+            try:
+                pkg = importlib.import_module("temp_schemas_pkg.schemas")
+                self.assertEqual(pkg.__all__, sorted(expected))
+                self.assertNotIn(
+                    "temp_schemas_pkg.schemas._generated", sys.modules
+                )
+                self.assertTrue(set(expected).issubset(dir(pkg)))
+                self.assertNotIn(
+                    "temp_schemas_pkg.schemas._generated", sys.modules
+                )
+                alpha_cls = pkg.Alpha
+                self.assertIn(
+                    "temp_schemas_pkg.schemas._generated", sys.modules
+                )
+                self.assertEqual(alpha_cls.__name__, "Alpha")
+                with self.assertRaises(AttributeError):
+                    _ = pkg.NonExistent
+                with self.assertRaises(AttributeError):
+                    _ = pkg._InternalModel
+            finally:
+                sys.path.remove(str(pkg_root))
+                for mod_name in list(sys.modules):
+                    if mod_name == "temp_schemas_pkg" or mod_name.startswith(
+                        "temp_schemas_pkg."
+                    ):
+                        sys.modules.pop(mod_name, None)
+
+    def test_empty_generated_module_produces_valid_idempotent_init(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            schemas_dir = Path(tmp) / "schemas"
+            schemas_dir.mkdir(parents=True)
+            (schemas_dir / "_generated.py").write_text(
+                "_PRIVATE = 1\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(postprocess_models, "OUTPUT_DIR", Path(tmp)),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(
+                    postprocess_models._write_schemas_reexport_init(), 1
+                )
+                self.assertEqual(
+                    postprocess_models._write_schemas_reexport_init(), 0
+                )
+            init_text = (schemas_dir / "__init__.py").read_text(
+                encoding="utf-8"
+            )
+            ast.parse(init_text)
+            self.assertIn("__all__: list[str] = []", init_text)
+            self.assertNotIn("TYPE_CHECKING", init_text)
+
+
 if __name__ == "__main__":
     unittest.main()

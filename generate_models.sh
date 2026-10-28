@@ -39,17 +39,24 @@ if [ -n "${UCP_SCHEMA_BIN:-}" ] && [ ! -x "$UCP_SCHEMA_BIN" ]; then
     echo "Error: UCP_SCHEMA_BIN='$UCP_SCHEMA_BIN' is not executable."
     exit 1
 elif [ -n "${UCP_SCHEMA_BIN:-}" ]; then
-    :
+    if ! "$UCP_SCHEMA_BIN" generate-types --help &> /dev/null; then
+        echo "Error: UCP_SCHEMA_BIN='$UCP_SCHEMA_BIN' does not support 'generate-types'."
+        exit 1
+    fi
 elif command -v ucp-schema &> /dev/null && ucp-schema generate-types --help &> /dev/null; then
     UCP_SCHEMA_BIN="$(command -v ucp-schema)"
-elif [ -x "../ucp-schema/target/release/ucp-schema" ]; then
+elif [ -x "../ucp-schema/target/release/ucp-schema" ] && "../ucp-schema/target/release/ucp-schema" generate-types --help &> /dev/null; then
     UCP_SCHEMA_BIN="../ucp-schema/target/release/ucp-schema"
-elif [ -x "../ucp-schema/target/debug/ucp-schema" ]; then
+elif [ -x "../ucp-schema/target/debug/ucp-schema" ] && "../ucp-schema/target/debug/ucp-schema" generate-types --help &> /dev/null; then
     UCP_SCHEMA_BIN="../ucp-schema/target/debug/ucp-schema"
 elif [ -f "../ucp-schema/Cargo.toml" ] && command -v cargo &> /dev/null; then
     echo "Building ucp-schema from ../ucp-schema..."
     cargo build --release --manifest-path "../ucp-schema/Cargo.toml"
     UCP_SCHEMA_BIN="../ucp-schema/target/release/ucp-schema"
+    if ! "$UCP_SCHEMA_BIN" generate-types --help &> /dev/null; then
+        echo "Error: ../ucp-schema checkout does not support 'generate-types'."
+        exit 1
+    fi
 else
     echo "Error: ucp-schema binary (with generate-types) not found. Set UCP_SCHEMA_BIN, install ucp-schema on PATH, or build ../ucp-schema."
     exit 1
@@ -76,9 +83,6 @@ if [ -n "$INPUT_ARG" ] && [ -d "$INPUT_ARG" ]; then
 elif [[ "$INPUT_ARG" == /* || "$INPUT_ARG" == ./* || "$INPUT_ARG" == ../* ]]; then
     echo "Error: Local UCP directory not found at '$INPUT_ARG'."
     exit 1
-elif [ -z "$INPUT_ARG" ] && [ -d "../ucp" ]; then
-    INPUT_DIR="../ucp"
-    echo "No version specified; using sibling ../ucp directory..."
 elif [ -z "$INPUT_ARG" ]; then
     TMP_CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ucp-clone.XXXXXX")"
     echo "No version specified, cloning main branch..."
@@ -120,7 +124,9 @@ OUTPUT_DIR="src/ucp_sdk/models/schemas"
 
 # Scope compilation to Shopping + Common + Transports so other verticals do not bleed in.
 SCOPED_SCHEMA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ucp-schemas.XXXXXX")"
-cp "$SCHEMA_DIR"/*.json "$SCOPED_SCHEMA_DIR"/
+if compgen -G "$SCHEMA_DIR/*.json" > /dev/null; then
+    cp "$SCHEMA_DIR"/*.json "$SCOPED_SCHEMA_DIR"/
+fi
 for dir in common transports shopping; do
     if [ -d "$SCHEMA_DIR/$dir" ]; then
         cp -R "$SCHEMA_DIR/$dir" "$SCOPED_SCHEMA_DIR/$dir"
@@ -160,7 +166,7 @@ uv run python postprocess_models.py "$TMP_TYPES_JSON" src/ucp_sdk/models "$SCOPE
 
 echo "Formatting generated models..."
 uv run ruff check --fix src/ucp_sdk/models
-uv run ruff format
+uv run ruff format src/ucp_sdk/models
 
 # Normalize file endings (as pre-commit's end-of-file-fixer does)
 python3 - <<'PY'

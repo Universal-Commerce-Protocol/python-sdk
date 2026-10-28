@@ -2774,7 +2774,7 @@ def _patch_datetime_patterns():
 
 
 def _write_schemas_reexport_init():
-    """Write schemas/__init__.py re-exporting public symbols from _generated.py."""
+    """Write schemas/__init__.py lazily re-exporting public symbols from _generated.py."""
     candidates = (
         OUTPUT_DIR / "schemas" / "_generated.py",
         OUTPUT_DIR / "_generated.py",
@@ -2784,6 +2784,7 @@ def _write_schemas_reexport_init():
         return 0
     tree = ast.parse(generated_path.read_text(encoding="utf-8"))
     exports = []
+    type_alias_cls = getattr(ast, "TypeAlias", ())
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
             exports.append(node.name)
@@ -2801,10 +2802,27 @@ def _write_schemas_reexport_init():
             and not node.target.id.startswith("_")
         ):
             exports.append(node.target.id)
+            continue
+        if (
+            isinstance(node, type_alias_cls)
+            and isinstance(node.name, ast.Name)
+            and not node.name.id.startswith("_")
+        ):
+            exports.append(node.name.id)
     exports = sorted(dict.fromkeys(exports))
     init_path = generated_path.parent / "__init__.py"
-    imports_block = ",\n    ".join(exports)
-    all_block = ",\n    ".join(f'"{name}"' for name in exports)
+    if exports:
+        typing_imports = "from typing import TYPE_CHECKING, Any\n\n"
+        imports_block = ",\n        ".join(exports)
+        all_block = ",\n    ".join(f'"{name}"' for name in exports)
+        exports_section = (
+            "if TYPE_CHECKING:\n"
+            f"    from ._generated import (\n        {imports_block},\n    )\n\n"
+            f"__all__ = [\n    {all_block},\n]\n"
+        )
+    else:
+        typing_imports = "from typing import Any\n\n"
+        exports_section = "__all__: list[str] = []\n"
     content = (
         "# Copyright 2026 UCP Authors\n"
         "#\n"
@@ -2820,9 +2838,25 @@ def _write_schemas_reexport_init():
         "# See the License for the specific language governing permissions and\n"
         "# limitations under the License.\n\n"
         '"""Generated UCP schema models."""\n\n'
-        f"from ._generated import (\n    {imports_block},\n)\n\n"
-        f"__all__ = [\n    {all_block},\n]\n"
+        "from __future__ import annotations\n\n"
+        "import importlib\n"
+        f"{typing_imports}"
+        f"{exports_section}\n\n"
+        "def __getattr__(name: str) -> Any:\n"
+        '    """Import public schema models and type aliases on first access."""\n'
+        "    if name not in __all__:\n"
+        '        msg = f"module {__name__!r} has no attribute {name!r}"\n'
+        "        raise AttributeError(msg)\n"
+        '    module = importlib.import_module("._generated", __name__)\n'
+        "    value = getattr(module, name)\n"
+        "    globals()[name] = value\n"
+        "    return value\n\n\n"
+        "def __dir__() -> list[str]:\n"
+        '    """Return module attributes including lazily re-exported schema names."""\n'
+        "    return sorted({*globals(), *__all__})\n"
     )
+    if init_path.is_file() and init_path.read_text(encoding="utf-8") == content:
+        return 0
     init_path.write_text(content, encoding="utf-8")
     sys.stdout.write(
         f"  re-export index ({len(exports)} symbols) -> {init_path}\n"
