@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   schema-preprocessing:
-    name: Schema preprocessing (Python ${{ matrix.python-version }})
+    name: Unit tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,7 +42,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install package (generated-model tests import it)
         run: pip install -e .
-      - name: Run preprocessing tests
+      - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py"
 
   model-drift:
@@ -58,10 +58,19 @@ jobs:
         with:
           enable-cache: true
       - name: Install ucp-schema CLI
-        # Pinned to an immutable commit on main + Cargo.lock (includes
-        # ucp-schema#81-#89); switch to `cargo install ucp-schema@<version>
-        # --locked` once a crates.io release > 1.4.1 is published.
-        run: cargo install --git https://github.com/Universal-Commerce-Protocol/ucp-schema.git --rev 2ce04ccdcd529416808160b8419e97a91483a1f7 --locked ucp-schema
+        env:
+          UCP_SCHEMA_VERSION: "2.0.0"
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
+          curl -fsSL --retry 3 -o "$tmp_dir/ucp-schema-linux-x86_64" "${base_url}/ucp-schema-linux-x86_64"
+          curl -fsSL --retry 3 -o "$tmp_dir/SHA256SUMS" "${base_url}/SHA256SUMS"
+          (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Regenerate models from the pinned spec version
         # SDK 0.6.x targets UCP 2026-08-25 (see the README compatibility
         # table). Bump this pin together with the SDK version line.
