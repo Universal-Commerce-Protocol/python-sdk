@@ -1,0 +1,253 @@
+# Copyright 2026 UCP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Cut SDK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec_version:
+        description: "UCP specification version (YYYY-MM-DD, >= 2026-10-01)"
+        required: true
+        type: string
+      bump:
+        description: "Version bump mode"
+        required: true
+        type: choice
+        options:
+          - initial
+          - patch
+          - minor
+        default: initial
+      ucp_sha:
+        description: "Optional 40-char commit SHA on ucp release/<spec_version> (defaults to HEAD)"
+        required: false
+        type: string
+        default: ""
+      publish_release:
+        description: "Create tag v<NEW_VERSION> and publish GitHub Release to trigger PyPI publish"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  cut-release:
+    name: Cut and tag SDK release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate inputs and clone UCP specification
+        env:
+          SPEC_VERSION: ${{ inputs.spec_version }}
+          BUMP_MODE: ${{ inputs.bump }}
+          INPUT_UCP_SHA: ${{ inputs.ucp_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SPEC_VERSION" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]]; then
+            echo "::error::spec_version '$SPEC_VERSION' must match YYYY-MM-DD"
+            exit 1
+          fi
+          EPOCH="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+          if (( 10#$EPOCH < 20261001 )); then
+            echo "::error::spec_version '$SPEC_VERSION' has epoch $EPOCH < 20261001 (CalVer applies forward-only from 2026-10-01)"
+            exit 1
+          fi
+          if [[ "$BUMP_MODE" != "initial" && "$BUMP_MODE" != "patch" && "$BUMP_MODE" != "minor" ]]; then
+            echo "::error::bump must be initial, patch, or minor (got '$BUMP_MODE')"
+            exit 1
+          fi
+
+          rm -rf "$RUNNER_TEMP/ucp-spec"
+          git clone https://github.com/Universal-Commerce-Protocol/ucp.git "$RUNNER_TEMP/ucp-spec"
+          if ! git -C "$RUNNER_TEMP/ucp-spec" show-ref --verify --quiet "refs/remotes/origin/release/${SPEC_VERSION}"; then
+            echo "::error::Branch release/${SPEC_VERSION} does not exist in Universal-Commerce-Protocol/ucp"
+            exit 1
+          fi
+
+          if [ -z "$INPUT_UCP_SHA" ]; then
+            RESOLVED_UCP_SHA="$(git -C "$RUNNER_TEMP/ucp-spec" rev-parse "origin/release/${SPEC_VERSION}")"
+          else
+            if [[ ! "$INPUT_UCP_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::ucp_sha '$INPUT_UCP_SHA' must be a 40-char lowercase hex commit SHA"
+              exit 1
+            fi
+            if ! git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$INPUT_UCP_SHA" "origin/release/${SPEC_VERSION}"; then
+              echo "::error::ucp_sha '$INPUT_UCP_SHA' is not an ancestor of origin/release/${SPEC_VERSION} in ucp"
+              exit 1
+            fi
+            RESOLVED_UCP_SHA="$INPUT_UCP_SHA"
+          fi
+          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$RESOLVED_UCP_SHA"
+
+      - name: Prepare SDK release branch and compute CalVer
+        id: prep
+        env:
+          SPEC_VERSION: ${{ inputs.spec_version }}
+          BUMP_MODE: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          EPOCH="${SPEC_VERSION//-/}"
+          RELEASE_BRANCH="release/${SPEC_VERSION}"
+
+          if [ "$BUMP_MODE" = "initial" ]; then
+            if git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
+              echo "::error::Branch ${RELEASE_BRANCH} already exists; use bump=patch or bump=minor"
+              exit 1
+            fi
+            git checkout -B "$RELEASE_BRANCH" origin/main
+            NEW_VERSION="${EPOCH}.0.0"
+          else
+            if ! git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
+              echo "::error::Branch ${RELEASE_BRANCH} does not exist; use bump=initial first"
+              exit 1
+            fi
+            git checkout -B "$RELEASE_BRANCH" "origin/${RELEASE_BRANCH}"
+            CURRENT_VERSION="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+          m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+          if not m:
+              sys.exit(1)
+          print(m.group(1))
+          PY
+          )"
+            if [[ ! "$CURRENT_VERSION" =~ ^${EPOCH}\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "::error::Current pyproject.toml version '$CURRENT_VERSION' does not match ${EPOCH}.MINOR.PATCH"
+              exit 1
+            fi
+            MINOR="${BASH_REMATCH[1]}"
+            PATCH="${BASH_REMATCH[2]}"
+            if [ "$BUMP_MODE" = "patch" ]; then
+              NEW_VERSION="${EPOCH}.${MINOR}.$((PATCH + 1))"
+            else
+              NEW_VERSION="${EPOCH}.$((MINOR + 1)).0"
+            fi
+          fi
+
+          UCP_SCHEMA_VERSION="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          lock_path = Path("ucp-lock.json")
+          if lock_path.is_file():
+              data = json.loads(lock_path.read_text(encoding="utf-8"))
+              print(str(data.get("ucp_schema_version", "2.0.0")).strip() or "2.0.0")
+          else:
+              print("2.0.0")
+          PY
+          )"
+
+          echo "release_branch=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install ucp-schema CLI
+        env:
+          UCP_SCHEMA_VERSION: ${{ steps.prep.outputs.ucp_schema_version }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
+          curl -fsSL --retry 3 -o "$tmp_dir/ucp-schema-linux-x86_64" "${base_url}/ucp-schema-linux-x86_64"
+          curl -fsSL --retry 3 -o "$tmp_dir/SHA256SUMS" "${base_url}/SHA256SUMS"
+          (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate models, update version, and run tests
+        env:
+          RELEASE_BRANCH: ${{ steps.prep.outputs.release_branch }}
+          NEW_VERSION: ${{ steps.prep.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          ./generate_models.sh "$RUNNER_TEMP/ucp-spec" --channel release --ref "$RELEASE_BRANCH" --write-lock
+
+          NEW_VERSION="$NEW_VERSION" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          new_version = os.environ["NEW_VERSION"]
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          updated, count = re.subn(
+              r'(?m)^(version\s*=\s*)"[^"]+"',
+              rf'\1"{new_version}"',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError("Failed to update version in pyproject.toml")
+          path.write_text(updated, encoding="utf-8")
+          PY
+
+          uv run python -m unittest discover -s tests -p "test_*.py"
+          uv build
+          rm -rf dist
+
+      - name: Commit, push release branch, and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_BRANCH: ${{ steps.prep.outputs.release_branch }}
+          NEW_VERSION: ${{ steps.prep.outputs.new_version }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+          BOT_NAME="${APP_SLUG:-ucp-automation}[bot]"
+          git config user.name "$BOT_NAME"
+          git config user.email "${BOT_NAME}@users.noreply.github.com"
+
+          git add -- pyproject.toml ucp-lock.json src/ucp_sdk/models/schemas
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): v${NEW_VERSION}"
+          fi
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${RELEASE_BRANCH}"
+
+          if [ "$PUBLISH_RELEASE" = "true" ]; then
+            git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "refs/tags/v${NEW_VERSION}"
+            gh release create "v${NEW_VERSION}" \
+              --repo "$REPOSITORY" \
+              --target "$RELEASE_BRANCH" \
+              --title "v${NEW_VERSION}" \
+              --generate-notes
+          fi
