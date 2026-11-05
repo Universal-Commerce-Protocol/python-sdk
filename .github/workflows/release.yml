@@ -1,8 +1,23 @@
+# Copyright 2026 UCP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: Publish to PyPI
 
 on:
   release:
     types: [published]
+
 permissions:
   contents: read
 
@@ -18,19 +33,130 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      # Installs uv (and manages Python automatically)
       - name: Install uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          enable-cache: true
+          enable-cache: false
 
-      # 'uv build' automatically creates the sdist and wheel in 'dist/'
+      - name: Verify CalVer tag, manifest version, lockfile channel, and branch ancestry
+        id: verify
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]{4})([0-9]{2})([0-9]{2})\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' must match vYYYYMMDD.MINOR.PATCH"
+            exit 1
+          fi
+          YYYY="${BASH_REMATCH[1]}"
+          MM="${BASH_REMATCH[2]}"
+          DD="${BASH_REMATCH[3]}"
+          MINOR="${BASH_REMATCH[4]}"
+          PATCH="${BASH_REMATCH[5]}"
+          EPOCH="${YYYY}${MM}${DD}"
+          if (( 10#$EPOCH < 20261001 )); then
+            echo "::error::Release tag '$RELEASE_TAG' has epoch $EPOCH < 20261001 (CalVer applies forward-only from 2026-10-01)"
+            exit 1
+          fi
+          EXPECTED_VERSION="${EPOCH}.${MINOR}.${PATCH}"
+          EXPECTED_BRANCH="release/${YYYY}-${MM}-${DD}"
+
+          if [ ! -f ucp-lock.json ]; then
+            echo "::error::ucp-lock.json is missing"
+            exit 1
+          fi
+
+          UCP_SCHEMA_VERSION="$(EXPECTED_VERSION="$EXPECTED_VERSION" EXPECTED_BRANCH="$EXPECTED_BRANCH" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+
+          expected_version = os.environ["EXPECTED_VERSION"]
+          expected_branch = os.environ["EXPECTED_BRANCH"]
+
+          pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+          m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject_text)
+          if not m:
+              print("::error::Could not parse project.version from pyproject.toml", file=sys.stderr)
+              sys.exit(1)
+          pkg_version = m.group(1)
+          if pkg_version.startswith("0.0.0"):
+              print(f"::error::Cannot publish draft version '{pkg_version}' to PyPI", file=sys.stderr)
+              sys.exit(1)
+          if pkg_version != expected_version:
+              print(
+                  f"::error::pyproject.toml version '{pkg_version}' does not match tag version '{expected_version}'",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          lock = json.loads(Path("ucp-lock.json").read_text(encoding="utf-8"))
+          if lock.get("channel") != "release":
+              print(
+                  f"::error::ucp-lock.json channel must be 'release', got {lock.get('channel')!r}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          if lock.get("ucp_ref") != expected_branch:
+              print(
+                  f"::error::ucp-lock.json ucp_ref must be {expected_branch!r}, got {lock.get('ucp_ref')!r}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          ucp_sha = lock.get("ucp_sha", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", str(ucp_sha)):
+              print(
+                  f"::error::ucp-lock.json ucp_sha must be a 40-char lowercase hex SHA, got {ucp_sha!r}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          schema_version = str(lock.get("ucp_schema_version", "")).strip()
+          if not schema_version:
+              print("::error::ucp-lock.json is missing ucp_schema_version", file=sys.stderr)
+              sys.exit(1)
+          print(schema_version)
+          PY
+          )"
+
+          git fetch origin "+refs/heads/${EXPECTED_BRANCH}:refs/remotes/origin/${EXPECTED_BRANCH}"
+          if ! git merge-base --is-ancestor HEAD "origin/${EXPECTED_BRANCH}"; then
+            echo "::error::Release commit HEAD is not an ancestor of origin/${EXPECTED_BRANCH}"
+            exit 1
+          fi
+
+          echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install ucp-schema CLI
+        env:
+          UCP_SCHEMA_VERSION: ${{ steps.verify.outputs.ucp_schema_version }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
+          curl -fsSL --retry 3 -o "$tmp_dir/ucp-schema-linux-x86_64" "${base_url}/ucp-schema-linux-x86_64"
+          curl -fsSL --retry 3 -o "$tmp_dir/SHA256SUMS" "${base_url}/SHA256SUMS"
+          (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run unit tests and verify model drift
+        run: |
+          set -euo pipefail
+          uv run python -m unittest discover -s tests -p "test_*.py"
+          ./generate_models.sh --from-lock
+          git diff --exit-code
+
       - name: Build package
-        run: uv build
+        run: rm -rf dist && uv build
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
