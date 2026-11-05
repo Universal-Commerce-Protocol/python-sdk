@@ -16,9 +16,9 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
 
 permissions:
   contents: read
@@ -53,13 +53,27 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read lockfile provenance
+        id: lock
+        run: |
+          set -euo pipefail
+          read -r UCP_SHA UCP_SCHEMA_VERSION < <(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          lock = json.loads(Path("ucp-lock.json").read_text(encoding="utf-8"))
+          print(lock["ucp_sha"], lock["ucp_schema_version"])
+          PY
+          )
+          echo "ucp_sha=${UCP_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          enable-cache: true
+          enable-cache: false
       - name: Install ucp-schema CLI
         env:
-          UCP_SCHEMA_VERSION: "2.0.0"
+          UCP_SCHEMA_VERSION: ${{ steps.lock.outputs.ucp_schema_version }}
         run: |
           set -euo pipefail
           tmp_dir="$(mktemp -d)"
@@ -71,28 +85,23 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Regenerate models from the pinned spec version
-        # SDK 0.6.x targets UCP 2026-08-25 (see the README compatibility
-        # table). Bump this pin together with the SDK version line.
-        run: ./generate_models.sh 2026-08-25
-      - name: Normalize file endings (as pre-commit's end-of-file-fixer does)
+      - name: Checkout pinned UCP spec and regenerate models from ucp-lock.json
+        env:
+          UCP_SHA: ${{ steps.lock.outputs.ucp_sha }}
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          for path in Path("src/ucp_sdk/models/schemas").rglob("*.py"):
-              text = path.read_text(encoding="utf-8")
-              fixed = text.rstrip("\n") + "\n" if text.strip() else ""
-              if fixed != text:
-                  path.write_text(fixed, encoding="utf-8")
-          PY
+          set -euo pipefail
+          rm -rf .ucp-spec
+          trap 'rm -rf .ucp-spec' EXIT
+          git clone https://github.com/Universal-Commerce-Protocol/ucp .ucp-spec
+          git -C .ucp-spec checkout --detach "$UCP_SHA"
+          ./generate_models.sh --from-lock --spec-dir .ucp-spec
       - name: Fail if regeneration does not reproduce the committed models
         run: |
-          git add -A -- src/ucp_sdk/models/schemas
-          if ! git diff --cached --quiet -- src/ucp_sdk/models/schemas; then
-            echo "::error::Committed models differ from regeneration against the pinned UCP spec. Either the generation pipeline is broken, or the models were edited without regenerating. Run ./generate_models.sh 2026-08-25 and commit the result."
-            git --no-pager diff --cached --stat -- src/ucp_sdk/models/schemas
-            git --no-pager diff --cached -- src/ucp_sdk/models/schemas
+          git add -A -- src/ucp_sdk/models/schemas ucp-lock.json
+          if ! git diff --cached --quiet -- src/ucp_sdk/models/schemas ucp-lock.json; then
+            echo "::error::Committed models differ from regeneration against ucp-lock.json. Run ./generate_models.sh --from-lock and commit the result."
+            git --no-pager diff --cached --stat -- src/ucp_sdk/models/schemas ucp-lock.json
+            git --no-pager diff --cached -- src/ucp_sdk/models/schemas ucp-lock.json
             exit 1
           fi
           echo "Committed models match regeneration."

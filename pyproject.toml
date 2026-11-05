@@ -1,6 +1,6 @@
 [project]
 name = "ucp-sdk"
-version = "0.6.0"
+version = "0.0.0.dev0"
 description = "UCP Python SDK"
 readme = "README.md"
 license = {file = "LICENSE"}

@@ -37,29 +37,49 @@ Python.
 
 ### UCP Version Compatibility
 
-Each version of the Python SDK is generated against a specific version of the
-UCP schema:
+Starting with the `2026-10+` UCP specification cycle, PyPI releases use
+spec-aligned `YYYYMMDD.MINOR.PATCH` versioning (for example, `20261028.0.0` for
+UCP `2026-10-28`), while `main` tracks the `draft` UCP schema (`0.0.0.dev0`)
+pinned in [`ucp-lock.json`](ucp-lock.json):
 
-| SDK Version       | UCP Schema Version |
-| ----------------- | ------------------ |
-| **`0.6.x`**       | **`2026-08-25`**   |
-| `0.5.x`           | `2026-08-25`       |
-| `0.4.x`           | `2026-04-08`       |
-| `0.3.x`           | `2026-01-23`       |
-| `0.2.x` / `0.1.x` | `2026-01-11`       |
+| SDK Version                      | UCP Schema Version                 | Channel      |
+| -------------------------------- | ---------------------------------- | ------------ |
+| **`YYYYMMDD.MINOR.PATCH`**       | **`YYYY-MM-DD`** (`2026-10+`)      | PyPI         |
+| `0.0.0.dev0` (`main` git commit) | `draft` (`ucp@main` in `ucp-lock`) | Git (`main`) |
+| `0.5.x`                          | `2026-08-25`                       | PyPI         |
+| `0.4.x`                          | `2026-04-08`                       | PyPI         |
+| `0.3.x`                          | `2026-01-23`                       | PyPI         |
+| `0.2.x` / `0.1.x`                | `2026-01-11`                       | PyPI         |
 
 ## Installation
 
-To use this SDK in your own project, install it from PyPI:
+### Published Releases (PyPI)
+
+Install the latest published UCP release from PyPI:
 
 ```bash
 pip install ucp-sdk
 ```
 
-Or, if you are managing your project with [uv](https://docs.astral.sh/uv/):
+Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv add ucp-sdk
+```
+
+To pin a specific UCP specification release epoch (for example, `2026-10-28`):
+
+```bash
+uv add "ucp-sdk>=20261028.0.0,<20261029.0.0"
+```
+
+### Unreleased `draft` Schemas (Git-Native)
+
+To build against unreleased `draft` schemas on `main`, install directly from a
+commit SHA on `Universal-Commerce-Protocol/python-sdk`:
+
+```bash
+uv add "ucp-sdk @ git+https://github.com/Universal-Commerce-Protocol/python-sdk.git@<commit-sha>"
 ```
 
 ## Usage
@@ -165,20 +185,23 @@ uv sync
 ### Generating Pydantic Models
 
 The models are automatically generated from the JSON schemas in the UCP
-Specification using `ucp-schema generate-types` and `datamodel-codegen`.
+Specification using `ucp-schema generate-types` and `datamodel-codegen`, with
+provenance recorded in [`ucp-lock.json`](ucp-lock.json).
 
 To regenerate the models:
 
 ```bash
 uv sync
-./generate_models.sh <version-or-path>
+
+# Reproduce committed models from the exact commit pinned in ucp-lock.json
+./generate_models.sh --from-lock
+
+# Advance ucp-lock.json and regenerate models from ucp@main (draft channel)
+./generate_models.sh draft
+
+# Pin ucp-lock.json to a release branch, commit SHA, or local UCP checkout
+./generate_models.sh <YYYY-MM-DD | git-sha | local-ucp-dir>
 ```
-
-Where `<version-or-path>` is a UCP release version (for example, `2026-08-25`),
-a branch or commit SHA, or a path to a local UCP repository checkout.
-
-If no argument is specified, the `main` branch of the
-[UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.
 
 The generated code is automatically formatted using `ruff`.
 

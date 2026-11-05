@@ -16,20 +16,28 @@
 
 from __future__ import annotations
 
+import importlib
+from importlib.metadata import PackageNotFoundError
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any
 import unittest
+from unittest.mock import patch
 
 from pydantic import TypeAdapter, ValidationError
+import ucp_sdk
 import ucp_sdk.models as models_module
 from ucp_sdk.models import (
     Ap2WithCheckoutMandateCompleteRequest,
     Checkout,
     CheckoutCompleteRequest,
     CheckoutCreateRequest,
+    CheckoutCreateRequestCartId,
+    CheckoutCreateRequestLineItems,
     FulfillmentDestination,
     FulfillmentDestinationBase,
     FulfillmentMethod,
@@ -176,7 +184,7 @@ class CheckoutRequestModelTest(unittest.TestCase):
         assert isinstance(req.ap2, Ap2WithCheckoutMandateCompleteRequest)
         self.assertEqual(req.ap2.checkout_mandate, mandate)
 
-    def test_complete_request_buyer_optional_and_cart_id_deprecated(
+    def test_complete_request_buyer_optional_and_cart_id_omitted_from_schema(
         self,
     ) -> None:
         req = CheckoutCompleteRequest.model_validate(
@@ -188,62 +196,53 @@ class CheckoutRequestModelTest(unittest.TestCase):
         self.assertIsNotNone(req.buyer)
         assert req.buyer is not None
         self.assertEqual(str(req.buyer.email), "buyer@example.com")
-        self.assertTrue(
-            CheckoutCompleteRequest.model_fields["cart_id"].deprecated
-        )
-        with self.assertWarns(DeprecationWarning):
-            self.assertIsNone(req.cart_id)
+        self.assertNotIn("cart_id", CheckoutCompleteRequest.model_fields)
 
-    def test_complete_request_explicit_cart_id_and_extra_fields(self) -> None:
+    def test_complete_request_preserves_extra_fields(self) -> None:
         req = CheckoutCompleteRequest.model_validate(
             {
                 "payment": self.PAYMENT_PAYLOAD,
-                "cart_id": "cart_123",
                 "com.example.trace_id": "trace_abc",
             }
         )
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(req.cart_id, "cart_123")
         dumped = req.model_dump(exclude_none=True)
-        self.assertEqual(dumped["cart_id"], "cart_123")
         self.assertEqual(dumped["com.example.trace_id"], "trace_abc")
 
+    def test_create_request_validation_and_line_items_or_cart_id_variants(
+        self,
+    ) -> None:
+        create_adapter: TypeAdapter[Any] = TypeAdapter(CheckoutCreateRequest)
         with self.assertRaises(ValidationError):
-            CheckoutCompleteRequest.model_validate(
-                {"payment": self.PAYMENT_PAYLOAD, "cart_id": 12345}
-            )
-
-    def test_create_request_validation_and_non_deprecated_cart_id(self) -> None:
-        with self.assertRaises(ValidationError) as ctx:
-            CheckoutCreateRequest.model_validate({})
-        error_locs = [err["loc"] for err in ctx.exception.errors()]
-        self.assertIn(("line_items",), error_locs)
+            create_adapter.validate_python({})
 
         for bad_line_item in (
             {"item": {"id": "sku_1"}, "quantity": 0},
             {"quantity": 1},
         ):
             with self.assertRaises(ValidationError):
-                CheckoutCreateRequest.model_validate(
-                    {"line_items": [bad_line_item]}
-                )
+                create_adapter.validate_python({"line_items": [bad_line_item]})
 
-        self.assertFalse(
-            bool(CheckoutCreateRequest.model_fields["cart_id"].deprecated)
-        )
-        req = CheckoutCreateRequest.model_validate(
+        req_both = create_adapter.validate_python(
             {
                 "line_items": [{"item": {"id": "sku_1"}, "quantity": 2}],
                 "cart_id": "cart_live_1",
                 "com.example.channel": "mobile_web",
             }
         )
-        self.assertEqual(req.cart_id, "cart_live_1")
-        self.assertEqual(len(req.line_items), 1)
-        self.assertEqual(req.line_items[0].item.id, "sku_1")
-        self.assertEqual(req.line_items[0].quantity, 2)
-        dumped = req.model_dump(exclude_none=True)
+        self.assertIsInstance(req_both, CheckoutCreateRequestLineItems)
+        assert isinstance(req_both, CheckoutCreateRequestLineItems)
+        self.assertEqual(req_both.cart_id, "cart_live_1")
+        self.assertEqual(len(req_both.line_items), 1)
+        self.assertEqual(req_both.line_items[0].item.id, "sku_1")
+        self.assertEqual(req_both.line_items[0].quantity, 2)
+        dumped = req_both.model_dump(exclude_none=True)
         self.assertEqual(dumped["com.example.channel"], "mobile_web")
+
+        req_cart = create_adapter.validate_python({"cart_id": "cart_only_1"})
+        self.assertIsInstance(req_cart, CheckoutCreateRequestCartId)
+        assert isinstance(req_cart, CheckoutCreateRequestCartId)
+        self.assertEqual(req_cart.cart_id, "cart_only_1")
+        self.assertIsNone(req_cart.line_items)
 
 
 class MediaModelTest(unittest.TestCase):
@@ -963,6 +962,53 @@ class PureDtoStructureAndOpennessTest(unittest.TestCase):
         self.assertEqual(
             rc.model_dump(exclude_none=True)["com.example.meta"], 42
         )
+
+
+class LockfileAndVersionContractTest(unittest.TestCase):
+    """Tests for ucp-lock.json provenance invariants and ucp_sdk.__version__."""
+
+    def test_ucp_lock_json_schema_and_formatting_invariants(self) -> None:
+        assert models_module.__file__ is not None
+        repo_root = Path(models_module.__file__).resolve().parents[3]
+        lock_path = repo_root / "ucp-lock.json"
+        self.assertTrue(lock_path.is_file(), "ucp-lock.json must exist at root")
+        raw = lock_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        self.assertEqual(raw, json.dumps(data, indent=2) + "\n")
+        self.assertEqual(
+            list(data.keys()),
+            [
+                "channel",
+                "ucp_ref",
+                "ucp_sha",
+                "ucp_schema_version",
+                "vertical",
+            ],
+        )
+        channel = data["channel"]
+        self.assertIn(channel, ("draft", "release"))
+        if channel == "draft":
+            self.assertEqual(data["ucp_ref"], "main")
+        else:
+            self.assertRegex(
+                data["ucp_ref"], r"^release/[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            )
+        self.assertIsNotNone(re.fullmatch(r"[0-9a-f]{40}", data["ucp_sha"]))
+        self.assertIsNotNone(
+            re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", data["ucp_schema_version"])
+        )
+        self.assertEqual(data["vertical"], "shopping")
+
+    def test_package_version_resolution_and_fallback(self) -> None:
+        self.assertIsInstance(ucp_sdk.__version__, str)
+        self.assertTrue(len(ucp_sdk.__version__) > 0)
+        with patch(
+            "importlib.metadata.version",
+            side_effect=PackageNotFoundError("ucp-sdk"),
+        ):
+            importlib.reload(ucp_sdk)
+            self.assertEqual(ucp_sdk.__version__, "0.0.0.dev0")
+        importlib.reload(ucp_sdk)
 
 
 if __name__ == "__main__":

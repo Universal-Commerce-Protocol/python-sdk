@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, Any, Literal
 
 from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
@@ -362,6 +362,24 @@ class DailyHour(BaseModel):
     """
 
 
+class DateInterval(BaseModel):
+    """
+    Represents a closed date range defined by start and end dates.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    start_date: date
+    """
+    Start date of the interval in ISO 8601 format.
+    """
+    end_date: date
+    """
+    End date of the interval in ISO 8601 format. MUST be on or after `start_date`.
+    """
+
+
 class Description(BaseModel):
     """
     Description content in one or more formats. At least one format must be provided.
@@ -444,6 +462,14 @@ class DiscountsObjectUpdateRequest(BaseModel):
     """
     Discount codes to apply. Case-insensitive. Replaces previously submitted codes. Send empty array to clear.
     """
+
+
+Duration = TypeAliasType(
+    "Duration", Annotated[timedelta, Field(..., title="Duration")]
+)
+"""
+A length of time as an ISO 8601 duration (RFC 3339 Appendix A grammar) with whole-number components greater than zero: weeks alone, or years, months, and days in that order, optionally followed by `T` and hours, minutes, and seconds in that order, each at most once (e.g., `P30D` is 30 days, `PT30M` is 30 minutes, `P1M` is one month; `T` separates date units from time units, so `M` before it means months and after it minutes). It states a length, not an instant; resolving it to a calendar time is up to the schema that uses it.
+"""
 
 
 class EmbeddedConfig(BaseModel):
@@ -550,6 +576,24 @@ class Extension(BaseModel):
     """
     Extension parameters such as advertised UCP capabilities.
     """
+
+
+Amount1 = TypeAliasType(
+    "Amount1",
+    Annotated[int, Field(..., ge=0, le=9007199254740991, title="Amount")],
+)
+"""
+Estimated maximum flat charge, in ISO 4217 minor units of the currency the covered items are priced in, charged per the unit of the fee `type`. `0` states that nothing is charged. Mutually exclusive with `basis_points`.
+"""
+
+
+Amount2 = TypeAliasType(
+    "Amount2",
+    Annotated[int, Field(..., ge=1, le=9007199254740991, title="Amount")],
+)
+"""
+Cap on a `basis_points` charge: the charge is at most this amount, in ISO 4217 minor units of the currency the covered items are priced in, per the unit of the fee `type`. Requires `basis_points`.
+"""
 
 
 class FulfillmentAvailableMethod(BaseModel):
@@ -1932,6 +1976,44 @@ class PlatformFulfillmentConfig(BaseModel):
     """
 
 
+class PoliciesItemBase(BaseModel):
+    """
+    A `policies[]` entry; validates against `return_policy` when `type` is `dev.ucp.shopping.policy.return`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str = Field(
+        ...,
+        examples=[
+            "dev.ucp.shopping.checkout",
+            "dev.ucp.common.identity_linking",
+            "com.example.loyalty_gold",
+            "com.example-shop.checkout",
+            "com.2example.cart",
+            "uk.co.example-shop.checkout",
+            "xn--p1ai.example.checkout",
+        ],
+        pattern="^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$",
+    )
+    """
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+
+
 class PostalAddress(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -2109,6 +2191,32 @@ class Rating(BaseModel):
     count: int | None = Field(None, ge=0)
     """
     Number of reviews contributing to the rating.
+    """
+
+
+class ReturnEligibility(BaseModel):
+    """
+    An open return eligibility statement. `window` states a guaranteed minimum period after an anchor event and, once resolved, the instant it ends; expiration does not signal non-returnability. `unlimited` states no time restriction, not unconditional eligibility. `not_accepted` states that the business's return policy does not accept returns of the covered items; it does not describe remedies under applicable law or third-party guarantees. Unknown types establish no eligibility inference; consumers may use the base policy's `description`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
+    Eligibility kind. Well-known values: `window`, `unlimited`, `not_accepted`. Unknown values establish no eligibility inference.
+    """
+    duration: Duration | None = None
+    """
+    Length of the return window after the `anchor` event. It states the term for presentation; the Business resolves the deadline as `expires_at`.
+    """
+    anchor: str | None = None
+    """
+    Event the window is measured from. Well-known values: `purchased`, `fulfilled`, `delivered`.
+    """
+    expires_at: AwareDatetime | None = None
+    """
+    RFC 3339 instant at which the window ends, resolved by the Business once the `anchor` event has occurred (e.g., on an order after delivery). When covered quantities reach the anchor at different times, it states the earliest of their deadlines. An otherwise eligible return requested no later than this instant is accepted.
     """
 
 
@@ -2826,6 +2934,7 @@ WarningCode = TypeAliasType(
                 "prop65",
                 "fulfillment_changed",
                 "payment_term_changed",
+                "totals_changed",
                 "age_restricted",
             ],
             title="WarningCode",
@@ -3639,6 +3748,44 @@ class Expectation(BaseModel):
     fulfillable_on: str | None = None
     """
     When this expectation can be fulfilled: 'now' or ISO 8601 timestamp for future date (backorder, pre-order).
+    """
+
+
+class Fee(BaseModel):
+    """
+    A charge on a return, typed by what it is for, as an estimated maximum. `amount` states a flat charge, where `0` means nothing is charged; `basis_points` states a percentage, optionally capped by `max_amount`; with neither, the fee is charged at its actual cost and no maximum is stated.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: ReverseDomainName | None = None
+    """
+    Fee kind, as a reverse-domain name. Well-known values: `dev.ucp.shopping.fee.restocking` (a deduction from the refund, charged per one whole `quantity_unit.unit` returned, for example per lb, or per `each` when `quantity_unit` is absent), `dev.ucp.shopping.fee.return_shipping` (the cost of shipping the return, charged per return shipment), `dev.ucp.shopping.fee.handling` (charged per return request). Vendor kinds use the vendor's own namespace (e.g., `com.example.fee.eco`) and are charged per return request. A vendor fee charged on another basis, such as per item, omits `amount` and states its terms in `display_text`. A fee with an unknown `type` MUST carry `display_text`. Omitted only on an entry with `amount: 0`, which states that the business charges no fee of any kind in its scope, including vendor kinds and kinds defined later.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels this fee applies to; omitted means every channel. A channel need not be listed in the policy's `methods`. When more than one entry applies to a fee on a channel, an entry that lists the channel takes precedence over one that does not; among entries that both list the channel or both do not, an entry with a `type` takes precedence over one without.
+    """
+    amount: Amount1 | None = Field(
+        None, ge=0, le=9007199254740991, title="Amount"
+    )
+    """
+    Estimated maximum flat charge, in ISO 4217 minor units of the currency the covered items are priced in, charged per the unit of the fee `type`. `0` states that nothing is charged. Mutually exclusive with `basis_points`.
+    """
+    basis_points: int | None = Field(None, ge=1, le=10000)
+    """
+    Estimated maximum charge in basis points (hundredths of a percent; `1250` = 12.5%) of the amount paid for the returned quantity, after item-level discounts and excluding tax, shipping, and other fees. On catalog surfaces, where no amount has been paid, it applies to the covered product's price. Mutually exclusive with `amount`.
+    """
+    max_amount: Amount2 | None = Field(
+        None, ge=1, le=9007199254740991, title="Amount"
+    )
+    """
+    Cap on a `basis_points` charge: the charge is at most this amount, in ISO 4217 minor units of the currency the covered items are priced in, per the unit of the fee `type`. Requires `basis_points`.
+    """
+    display_text: str | None = None
+    """
+    Human-readable fee label, naming any condition under which the fee applies (e.g., '15% restocking fee on opened items'). Required when `type` is not a well-known fee kind, and when the fee has neither `amount` nor `basis_points`.
     """
 
 
@@ -4771,7 +4918,7 @@ class Policy(BaseModel):
     )
     type: ReverseDomainName
     """
-    Policy type discriminator. Open reverse-DNS vocabulary. Well-known values: `dev.ucp.shopping.policy.return` (return terms), `dev.ucp.shopping.policy.warranty` (warranty terms). Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
     """
     description: Description
     """
@@ -4839,6 +4986,74 @@ class Requires(BaseModel):
     capabilities: dict[ReverseDomainName, VersionConstraint] | None = None
     """
     Required capability versions, keyed by capability name. Keys must be a subset of the extension's $defs keys.
+    """
+
+
+class ReturnBody(BaseModel):
+    """
+    Return terms for a `dev.ucp.shopping.policy.return` policy.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    eligibility: ReturnEligibility | None = None
+    """
+    Structured return eligibility statement. Omitted means eligibility is not stated structurally, not that returns are unlimited or not accepted. When `type` is `not_accepted`, the business's return policy does not accept returns of the covered items, and `supported_resolutions`, `methods`, and `fees` MUST be omitted.
+    """
+    supported_resolutions: list[str] | None = Field(None, min_length=1)
+    """
+    Return outcomes guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `original_payment_method`, `store_credit`, `gift_card`, `exchange`, `replacement`.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `in_store`, `by_mail`, `kiosk`. Omit when channels are not stated structurally.
+    """
+    fees: list[Fee] | None = Field(None, min_length=1)
+    """
+    Estimated maximum charges on a return, each typed by what it is for and optionally scoped to channels; not an exhaustive list. Omitted means fees are not stated structurally, not that none are charged.
+    """
+
+
+class ReturnPolicy(BaseModel):
+    """
+    A return policy statement with type `dev.ucp.shopping.policy.return`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["dev.ucp.shopping.policy.return"]
+    """
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+    eligibility: ReturnEligibility | None = None
+    """
+    Structured return eligibility statement. Omitted means eligibility is not stated structurally, not that returns are unlimited or not accepted. When `type` is `not_accepted`, the business's return policy does not accept returns of the covered items, and `supported_resolutions`, `methods`, and `fees` MUST be omitted.
+    """
+    supported_resolutions: list[str] | None = Field(None, min_length=1)
+    """
+    Return outcomes guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `original_payment_method`, `store_credit`, `gift_card`, `exchange`, `replacement`.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `in_store`, `by_mail`, `kiosk`. Omit when channels are not stated structurally.
+    """
+    fees: list[Fee] | None = Field(None, min_length=1)
+    """
+    Estimated maximum charges on a return, each typed by what it is for and optionally scoped to channels; not an exhaustive list. Omitted means fees are not stated structurally, not that none are charged.
     """
 
 
@@ -6048,6 +6263,17 @@ class PickupMethod(BaseModel):
     """
 
 
+PoliciesItem = TypeAliasType(
+    "PoliciesItem",
+    Annotated[
+        ReturnPolicy | PoliciesItemBase, Field(..., title="PoliciesItem")
+    ],
+)
+"""
+A `policies[]` entry; validates against `return_policy` when `type` is `dev.ucp.shopping.policy.return`.
+"""
+
+
 class ResponseAskSchema(BaseModel):
     """
     UCP metadata for ask responses.
@@ -6078,6 +6304,41 @@ class ResponseAskSchema(BaseModel):
     payment_handlers: (
         dict[ReverseDomainName, list[PaymentHandlerBase]] | None
     ) = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseBookingSchema(BaseModel):
+    """
+    UCP metadata for booking responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    map_order: MapOrder | None = None
+    """
+    Preferred key-traversal order for sibling registry fields inside the root `ucp` envelope (`services`, `capabilities`, and `payment_handlers`).
+    """
+    status: Literal["success", "error"] | None = "success"
+    """
+    Application-level status of the UCP operation.
+    """
+    services: dict[ReverseDomainName, list[ServiceResponseSchema]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: (
+        dict[ReverseDomainName, list[CapabilityResponseSchema]] | None
+    ) = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: dict[
+        ReverseDomainName, list[PaymentHandlerResponseSchema]
+    ]
     """
     Payment handler registry keyed by reverse-domain name.
     """
@@ -7062,7 +7323,7 @@ class Order(BaseModel):
     """
     Different totals for the order.
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Snapshot of the policies that applied to the items at checkout, captured on the order as a durable record. `applies_to` targets are relative to the response root.
     """
@@ -7291,7 +7552,7 @@ class Cart(BaseModel):
     """
     Optional merchant links (policies, FAQs).
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the items in this cart. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7375,14 +7636,10 @@ class CheckoutCompleteRequest(BaseModel):
     """
     Payment details with available and selected payment terms.
     """
-    cart_id: str | None = Field(None, deprecated=True)
-    """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
-    """
     ap2: Ap2WithCheckoutMandateCompleteRequest | None = None
 
 
-class CheckoutCreateRequest(BaseModel):
+class CheckoutCreateRequestLineItems(BaseModel):
     """
     Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
     """
@@ -7392,7 +7649,11 @@ class CheckoutCreateRequest(BaseModel):
     )
     line_items: list[LineItemCreateRequest]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
+    """
+    cart_id: str | None = None
+    """
+    Cart ID for checkout initialization. The Business MUST reject requests using it without negotiated Cart support. Cart contents take precedence over overlapping checkout fields; line_items may be omitted or empty.
     """
     buyer: Buyer | None = None
     """
@@ -7405,15 +7666,57 @@ class CheckoutCreateRequest(BaseModel):
     """
     Payment details with available and selected payment terms.
     """
-    cart_id: str | None = None
+    discounts: DiscountsObjectCreateRequest | None = None
+    fulfillment: FulfillmentCreateRequest | None = None
     """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
+    Fulfillment details.
+    """
+
+
+class CheckoutCreateRequestCartId(BaseModel):
+    """
+    Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    line_items: list[LineItemCreateRequest] | None = None
+    """
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
+    """
+    cart_id: str
+    """
+    Cart ID for checkout initialization. The Business MUST reject requests using it without negotiated Cart support. Cart contents take precedence over overlapping checkout fields; line_items may be omitted or empty.
+    """
+    buyer: Buyer | None = None
+    """
+    Buyer with consent tracking.
+    """
+    context: Context | None = None
+    signals: Signals | None = None
+    attribution: Attribution | None = None
+    payment: PaymentCreateRequest | None = None
+    """
+    Payment details with available and selected payment terms.
     """
     discounts: DiscountsObjectCreateRequest | None = None
     fulfillment: FulfillmentCreateRequest | None = None
     """
     Fulfillment details.
     """
+
+
+CheckoutCreateRequest = TypeAliasType(
+    "CheckoutCreateRequest",
+    Annotated[
+        CheckoutCreateRequestLineItems | CheckoutCreateRequestCartId,
+        Field(..., title="CheckoutCreateRequest"),
+    ],
+)
+"""
+Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
+"""
 
 
 class CheckoutUpdateRequest(BaseModel):
@@ -7426,7 +7729,7 @@ class CheckoutUpdateRequest(BaseModel):
     )
     line_items: list[LineItemUpdateRequest]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
     """
     buyer: Buyer | None = None
     """
@@ -7683,7 +7986,7 @@ class CatalogGetProductResponse(BaseModel):
     """
     Warnings or informational messages about the product (e.g., price recently changed, limited availability).
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7707,7 +8010,7 @@ class CatalogLookupResponse(BaseModel):
     """
     Errors, warnings, or informational messages about the requested items.
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7732,7 +8035,7 @@ class CatalogSearchResponse(BaseModel):
     """
     Errors, warnings, or informational messages about the search results.
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7754,7 +8057,7 @@ class Checkout(BaseModel):
     """
     line_items: list[LineItem]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
     """
     buyer: Buyer | None = None
     """
@@ -7794,7 +8097,7 @@ class Checkout(BaseModel):
     """
     Links to be displayed by the platform (Privacy Policy, TOS). Mandatory for legal compliance.
     """
-    policies: list[Policy] | None = None
+    policies: list[PoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the items in this checkout. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7813,10 +8116,6 @@ class Checkout(BaseModel):
     order: OrderConfirmation | None = None
     """
     Details about an order created for this checkout session.
-    """
-    cart_id: str | None = None
-    """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
     """
     loyalty: Loyalty | None = None
     ap2: Ap2 | None = None
