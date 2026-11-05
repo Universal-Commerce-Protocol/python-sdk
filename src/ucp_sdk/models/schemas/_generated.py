@@ -100,6 +100,28 @@ Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to th
 """
 
 
+class AskResponseAnswer(BaseModel):
+    """
+    Answer provided by the Business. Plain text is required; Markdown and HTML are optional alternative encodings.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    plain: str
+    """
+    Plain text content.
+    """
+    html: str | None = None
+    """
+    HTML-formatted content. Security: Platforms MUST sanitize before rendering—strip scripts, event handlers, and untrusted elements. Treat all rich text as untrusted input.
+    """
+    markdown: str | None = None
+    """
+    Markdown-formatted content.
+    """
+
+
 Attribution = TypeAliasType("Attribution", dict[str, str])
 """
 Platform-emitted referral and conversion-event context — campaign identifiers, click IDs, source/medium markers, etc. The same parameters platforms communicate via URL query parameters in browser-based flows.
@@ -294,6 +316,20 @@ class ContentPart(BaseModel):
     )
     type: str
     text: str | None = None
+
+
+class Conversation(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Opaque, business-issued conversation identifier.
+    """
+    expires_at: AwareDatetime | None = None
+    """
+    RFC 3339 timestamp after which the conversation context may be discarded. Optional.
+    """
 
 
 class DailyHour(BaseModel):
@@ -996,6 +1032,10 @@ class Link(BaseModel):
     title: str | None = None
     """
     Optional display text for the link. When provided, use this instead of generating from type.
+    """
+    id: str | None = None
+    """
+    Optional identifier for the linked resource when it is an addressable UCP resource (for example, a product or variant), so a platform can act on it through the capability that owns it. Omit for resources without a UCP identifier, such as a policy page.
     """
 
 
@@ -5390,6 +5430,26 @@ class Arguments(BaseModel):
     meta: Meta | None = None
 
 
+class AskRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    query: str
+    """
+    Natural-language question.
+    """
+    conversation: Conversation | None = None
+    """
+    Provide a conversation to continue it on a follow-up; omit to start a new one.
+    """
+    ids: list[str] | None = None
+    """
+    Optional identifiers that ground the question in any Business resource. A Business SHOULD accept its own Global IDs (GIDs) and MAY accept recognized secondary identifiers such as SKU, handle, or URL. GIDs self-describe to the Business; a Platform may send them as opaque grounding references. Examples include a product, location, cart, order, or booking.
+    """
+    context: Context | None = None
+    signals: Signals | None = None
+
+
 class AvailablePaymentInstrument(BaseModel):
     """
     An instrument type available from a payment handler with optional constraints.
@@ -5988,6 +6048,41 @@ class PickupMethod(BaseModel):
     """
 
 
+class ResponseAskSchema(BaseModel):
+    """
+    UCP metadata for ask responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    map_order: MapOrder | None = None
+    """
+    Preferred key-traversal order for sibling registry fields inside the root `ucp` envelope (`services`, `capabilities`, and `payment_handlers`).
+    """
+    status: Literal["success", "error"] | None = "success"
+    """
+    Application-level status of the UCP operation.
+    """
+    services: dict[ReverseDomainName, list[ServiceBase]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: (
+        dict[ReverseDomainName, list[CapabilityResponseSchema]] | None
+    ) = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: (
+        dict[ReverseDomainName, list[PaymentHandlerBase]] | None
+    ) = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
 class ResponseCartSchema(BaseModel):
     """
     UCP metadata for cart responses. No payment handlers needed pre-checkout.
@@ -6453,6 +6548,29 @@ class Variant(BaseModel):
     seller: VariantSeller | None = Field(None, title="VariantSeller")
     """
     Optional seller context for this variant.
+    """
+
+
+class AskResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseAskSchema
+    answer: AskResponseAnswer = Field(..., title="AskResponseAnswer")
+    """
+    Answer provided by the Business. Plain text is required; Markdown and HTML are optional alternative encodings.
+    """
+    conversation: Conversation | None = None
+    """
+    Business-issued conversation for multi-turn continuation. When returned, the business SHOULD retain its history until `expires_at` (or per its own policy) so a follow-up with the same `id` builds on it. An unresolved `id` starts a new conversation and is noted in `messages`.
+    """
+    links: list[Link] | None = None
+    """
+    Optional links and references related to the answer. When a link refers to an addressable UCP resource, the Business SHOULD include its GID in the link's `id`.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the answer or its grounding.
     """
 
 

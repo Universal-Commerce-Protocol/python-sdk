@@ -932,30 +932,36 @@ class PureDtoStructureAndOpennessTest(unittest.TestCase):
             err.model_dump(exclude_none=True)["com.example.trace"], "t_1"
         )
 
+        jr = models_module.JsonrpcRequest.model_validate(
+            {
+                "jsonrpc": "2.0",
+                "method": "checkout/get",
+                "com.example.trace": "t_2",
+            }
+        )
+        self.assertEqual(
+            jr.model_dump(exclude_none=True)["com.example.trace"], "t_2"
+        )
+
         rc = models_module.RequestConstraints.model_validate(
-            {"path": "$.buyer", "com.example.meta": 42}
+            {
+                "path": "$.buyer",
+                "properties": {
+                    "currency": {"const": "USD"},
+                    "brands": {"enum": ["visa", "mc"]},
+                },
+                "com.example.meta": 42,
+            }
+        )
+        assert rc.properties is not None
+        self.assertIsInstance(
+            rc.properties["currency"], models_module.ValueConstraintConst
+        )
+        self.assertIsInstance(
+            rc.properties["brands"], models_module.ValueConstraintEnum
         )
         self.assertEqual(
             rc.model_dump(exclude_none=True)["com.example.meta"], 42
-        )
-
-        vc_adapter: TypeAdapter[Any] = TypeAdapter(
-            models_module.ValueConstraint
-        )
-        vc_enum = vc_adapter.validate_python(
-            {"enum": ["a", "b"], "com.example.extra": True}
-        )
-        self.assertIsInstance(vc_enum, models_module.ValueConstraintEnum)
-        self.assertIs(
-            vc_enum.model_dump(exclude_none=True)["com.example.extra"], True
-        )
-
-        vc_const = vc_adapter.validate_python(
-            {"const": "a", "com.example.extra": "ok"}
-        )
-        self.assertIsInstance(vc_const, models_module.ValueConstraintConst)
-        self.assertEqual(
-            vc_const.model_dump(exclude_none=True)["com.example.extra"], "ok"
         )
 
 
