@@ -92,19 +92,54 @@ both `ucp_sdk.models` and `ucp_sdk.models.schemas`:
 
 ### Validation
 
-All models support Pydantic validation and serialization:
+Pydantic models in `ucp_sdk.models` provide Tier 1 wire DTO structural typing
+and tolerant-reader deserialization (preserving unknown extension fields for
+forward compatibility) rather than full UCP protocol conformance.
+
+To enforce normative UCP constraints (capability profile composition,
+directional `ucp_request` / `ucp_response` visibility, `dependentRequired`,
+`if`/`then`, `uniqueItems`, `contains`, `propertyNames`, `not.enum`, and
+closed-schema rules):
+
+1. **In-Memory Runtime Validation (Production Services)**: Compile your UCP
+   discovery profile once at build or startup time into a standard JSON Schema
+   Draft 2020-12 bundle
+   (`ucp-schema generate-types --profile profile.json -o ucp.types.json`) or
+   OpenAPI 3.1 specification
+   (`ucp-schema generate-openapi --profile profile.json -o openapi.json`).
+   Because `ucp-schema` resolves all UCP-specific annotations and capability
+   extensions into standard JSON Schema 2020-12, you can validate incoming
+   payloads in memory on every request using
+   [`jsonschema`](https://python-jsonschema.readthedocs.io/) or OpenAPI ASGI
+   middleware before deserializing into Pydantic DTOs:
 
 ```python
-from pydantic import ValidationError
+import json
+from pathlib import Path
+from jsonschema import Draft202012Validator
 from ucp_sdk.models import Checkout
 
-# Validate data against UCP schemas
-try:
-    checkout = Checkout.model_validate(checkout_data)
-    # Serialize to JSON-compatible dict
-    checkout_dict = checkout.model_dump(exclude_none=True)
-except ValidationError as e:
-    print(e.errors())
+# At startup: load the pre-compiled schema bundle once into memory
+bundle = json.loads(Path("ucp.types.json").read_text(encoding="utf-8"))
+checkout_validator = Draft202012Validator(
+    {**bundle["$defs"]["Checkout"], "$defs": bundle["$defs"]}
+)
+
+# Per request: validate in-memory, then parse into typed Pydantic DTO
+checkout_validator.validate(raw_payload)
+checkout = Checkout.model_validate(raw_payload)
+```
+
+2. **CLI & CI Conformance Testing**: Verify fixture payloads or live traffic
+   dumps from the command line or CI pipelines with
+   [`ucp-schema validate`](https://crates.io/crates/ucp-schema):
+
+```bash
+# Self-describing response or JSON-RPC envelope
+ucp-schema validate payload.json --op read
+
+# REST request against a discovery profile (or --schema checkout.json --request --op create)
+ucp-schema validate payload.json --profile profile.json --op create
 ```
 
 ## Development
@@ -145,7 +180,7 @@ a branch or commit SHA, or a path to a local UCP repository checkout.
 If no argument is specified, the `main` branch of the
 [UCP repo](https://github.com/Universal-Commerce-Protocol/ucp) will be used.
 
-The generated code is automatically post-processed and formatted using `ruff`.
+The generated code is automatically formatted using `ruff`.
 
 ### Running Tests
 
