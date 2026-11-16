@@ -2426,10 +2426,22 @@ def find_forbidden_keys(schema_dir):
         for def_name, def_node in (node.get("$defs") or {}).items():
             if isinstance(def_node, dict):
                 walk(def_node, _to_camel_case(def_name), is_def=True)
-        for key in ("allOf", "anyOf", "oneOf"):
+        if isinstance(node.get("allOf"), list):
+            for item in node["allOf"]:
+                walk(item, current_class_name)
+        for key in ("anyOf", "oneOf"):
             if isinstance(node.get(key), list):
-                for item in node[key]:
-                    walk(item, current_class_name)
+                for idx, item in enumerate(node[key], start=1):
+                    if not isinstance(item, dict):
+                        continue
+                    item_title = item.get("title")
+                    branch_class = (
+                        _alias_name(item_title)
+                        if isinstance(item_title, str)
+                        and _alias_name(item_title) != current_class_name
+                        else f"{current_class_name}{idx}"
+                    )
+                    walk(item, branch_class, is_def=True)
 
     for path in _iter_schema_files(schema_dir):
         try:
