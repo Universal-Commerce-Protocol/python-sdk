@@ -96,6 +96,12 @@ Pydantic models in `ucp_sdk.models` provide Tier 1 wire DTO structural typing
 and tolerant-reader deserialization (preserving unknown extension fields for
 forward compatibility) rather than full UCP protocol conformance.
 
+In particular, open discriminated unions (such as `FulfillmentDestination`,
+`FulfillmentMethod`, and `Provider`) are emitted as untagged unions with an open
+`*Base` fallback (`type: str`), so payloads carrying a known `type`
+discriminator that fail a variant-specific field constraint will deserialize
+into `*Base` unless validated upfront against the compiled JSON Schema.
+
 To enforce normative UCP constraints (capability profile composition,
 directional `ucp_request` / `ucp_response` visibility, `dependentRequired`,
 `if`/`then`, `uniqueItems`, `contains`, `propertyNames`, `not.enum`, and
@@ -110,8 +116,11 @@ closed-schema rules):
    Because `ucp-schema` resolves all UCP-specific annotations and capability
    extensions into standard JSON Schema 2020-12, you can validate incoming
    payloads in memory on every request using
-   [`jsonschema`](https://python-jsonschema.readthedocs.io/) or OpenAPI ASGI
-   middleware before deserializing into Pydantic DTOs:
+   [`jsonschema`](https://python-jsonschema.readthedocs.io/) (install
+   `pip install "jsonschema[format-nongpl]"` to enable `uri` and `date-time`
+   format validation via MIT-licensed validators without pulling in GPL
+   dependencies) or OpenAPI ASGI middleware before deserializing into Pydantic
+   DTOs:
 
 ```python
 import json
@@ -122,7 +131,8 @@ from ucp_sdk.models import Checkout
 # At startup: load the pre-compiled schema bundle once into memory
 bundle = json.loads(Path("ucp.types.json").read_text(encoding="utf-8"))
 checkout_validator = Draft202012Validator(
-    {**bundle["$defs"]["Checkout"], "$defs": bundle["$defs"]}
+    {**bundle["$defs"]["Checkout"], "$defs": bundle["$defs"]},
+    format_checker=Draft202012Validator.FORMAT_CHECKER,
 )
 
 # Per request: validate in-memory, then parse into typed Pydantic DTO

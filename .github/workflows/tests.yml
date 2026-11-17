@@ -75,17 +75,6 @@ jobs:
         # SDK 0.6.x targets UCP 2026-08-25 (see the README compatibility
         # table). Bump this pin together with the SDK version line.
         run: ./generate_models.sh 2026-08-25
-      - name: Normalize file endings (as pre-commit's end-of-file-fixer does)
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          for path in Path("src/ucp_sdk/models/schemas").rglob("*.py"):
-              text = path.read_text(encoding="utf-8")
-              fixed = text.rstrip("\n") + "\n" if text.strip() else ""
-              if fixed != text:
-                  path.write_text(fixed, encoding="utf-8")
-          PY
       - name: Fail if regeneration does not reproduce the committed models
         run: |
           git add -A -- src/ucp_sdk/models/schemas
