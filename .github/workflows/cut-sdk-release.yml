@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       spec_version:
-        description: "UCP specification version (YYYY-MM-DD, >= 2026-10-01)"
+        description: "UCP specification version (YYYY-MM-DD, >= 2026-08-25)"
         required: true
         type: string
       bump:
@@ -75,8 +75,8 @@ jobs:
             exit 1
           fi
           EPOCH="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
-          if (( 10#$EPOCH < 20261001 )); then
-            echo "::error::spec_version '$SPEC_VERSION' has epoch $EPOCH < 20261001 (CalVer applies forward-only from 2026-10-01)"
+          if (( 10#$EPOCH < 20260825 )); then
+            echo "::error::spec_version '$SPEC_VERSION' has epoch $EPOCH < 20260825 (CalVer applies forward-only from 2026-08-25)"
             exit 1
           fi
           if [[ "$BUMP_MODE" != "initial" && "$BUMP_MODE" != "patch" && "$BUMP_MODE" != "minor" ]]; then

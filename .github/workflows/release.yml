@@ -59,8 +59,8 @@ jobs:
           MINOR="${BASH_REMATCH[4]}"
           PATCH="${BASH_REMATCH[5]}"
           EPOCH="${YYYY}${MM}${DD}"
-          if (( 10#$EPOCH < 20261001 )); then
-            echo "::error::Release tag '$RELEASE_TAG' has epoch $EPOCH < 20261001 (CalVer applies forward-only from 2026-10-01)"
+          if (( 10#$EPOCH < 20260825 )); then
+            echo "::error::Release tag '$RELEASE_TAG' has epoch $EPOCH < 20260825 (CalVer applies forward-only from 2026-08-25)"
             exit 1
           fi
           EXPECTED_VERSION="${EPOCH}.${MINOR}.${PATCH}"
