@@ -29,6 +29,7 @@ on:
           - initial
           - patch
           - minor
+          - publish-existing
         default: initial
       ucp_sha:
         description: "Optional 40-char commit SHA on ucp release/<spec_version> (defaults to HEAD)"
@@ -52,6 +53,7 @@ jobs:
   cut-release:
     name: Cut and tag SDK release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,91 +61,71 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate inputs and clone UCP specification
-        env:
-          SPEC_VERSION: ${{ inputs.spec_version }}
-          BUMP_MODE: ${{ inputs.bump }}
-          INPUT_UCP_SHA: ${{ inputs.ucp_sha }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$SPEC_VERSION" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]]; then
-            echo "::error::spec_version '$SPEC_VERSION' must match YYYY-MM-DD"
-            exit 1
-          fi
-          EPOCH="${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
-          if (( 10#$EPOCH < 20260825 )); then
-            echo "::error::spec_version '$SPEC_VERSION' has epoch $EPOCH < 20260825 (CalVer applies forward-only from 2026-08-25)"
-            exit 1
-          fi
-          if [[ "$BUMP_MODE" != "initial" && "$BUMP_MODE" != "patch" && "$BUMP_MODE" != "minor" ]]; then
-            echo "::error::bump must be initial, patch, or minor (got '$BUMP_MODE')"
-            exit 1
-          fi
-
-          rm -rf "$RUNNER_TEMP/ucp-spec"
-          git clone https://github.com/Universal-Commerce-Protocol/ucp.git "$RUNNER_TEMP/ucp-spec"
-          if ! git -C "$RUNNER_TEMP/ucp-spec" show-ref --verify --quiet "refs/remotes/origin/release/${SPEC_VERSION}"; then
-            echo "::error::Branch release/${SPEC_VERSION} does not exist in Universal-Commerce-Protocol/ucp"
-            exit 1
-          fi
-
-          if [ -z "$INPUT_UCP_SHA" ]; then
-            RESOLVED_UCP_SHA="$(git -C "$RUNNER_TEMP/ucp-spec" rev-parse "origin/release/${SPEC_VERSION}")"
-          else
-            if [[ ! "$INPUT_UCP_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::ucp_sha '$INPUT_UCP_SHA' must be a 40-char lowercase hex commit SHA"
-              exit 1
-            fi
-            if ! git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$INPUT_UCP_SHA" "origin/release/${SPEC_VERSION}"; then
-              echo "::error::ucp_sha '$INPUT_UCP_SHA' is not an ancestor of origin/release/${SPEC_VERSION} in ucp"
-              exit 1
-            fi
-            RESOLVED_UCP_SHA="$INPUT_UCP_SHA"
-          fi
-          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$RESOLVED_UCP_SHA"
-
-      - name: Prepare SDK release branch and compute CalVer
+      - name: Validate inputs, clone UCP specification, and prepare release branch
         id: prep
         env:
           SPEC_VERSION: ${{ inputs.spec_version }}
           BUMP_MODE: ${{ inputs.bump }}
+          INPUT_UCP_SHA: ${{ inputs.ucp_sha }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
+          if [[ ! "$SPEC_VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+            || [ "$(date -u -d "$SPEC_VERSION" +%Y-%m-%d 2>/dev/null || true)" != "$SPEC_VERSION" ]; then
+            echo "::error::Invalid calendar date spec_version '$SPEC_VERSION' (expected YYYY-MM-DD)"
+            exit 1
+          fi
           EPOCH="${SPEC_VERSION//-/}"
+          (( 10#$EPOCH >= 20260825 )) || { echo "::error::spec_version '$SPEC_VERSION' has epoch $EPOCH < 20260825"; exit 1; }
+          case "$BUMP_MODE" in
+            initial|patch|minor) ;;
+            publish-existing)
+              [ "$PUBLISH_RELEASE" = "true" ] || { echo "::error::bump=publish-existing requires publish_release=true"; exit 1; }
+              ;;
+            *) echo "::error::Unsupported bump '$BUMP_MODE'"; exit 1 ;;
+          esac
+
           RELEASE_BRANCH="release/${SPEC_VERSION}"
+          rm -rf "$RUNNER_TEMP/ucp-spec"
+          git clone --filter=blob:none --no-checkout \
+            "${UCP_REMOTE_URL:-https://github.com/Universal-Commerce-Protocol/ucp.git}" "$RUNNER_TEMP/ucp-spec"
+          git -C "$RUNNER_TEMP/ucp-spec" show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}" \
+            || { echo "::error::Branch ${RELEASE_BRANCH} does not exist in Universal-Commerce-Protocol/ucp"; exit 1; }
+
+          if [ -z "$INPUT_UCP_SHA" ]; then
+            RESOLVED_UCP_SHA="$(git -C "$RUNNER_TEMP/ucp-spec" rev-parse "origin/${RELEASE_BRANCH}")"
+          else
+            [[ "$INPUT_UCP_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid 40-char ucp_sha '$INPUT_UCP_SHA'"; exit 1; }
+            git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${INPUT_UCP_SHA}^{commit}" 2>/dev/null \
+              || { echo "::error::ucp_sha '$INPUT_UCP_SHA' does not exist in ucp"; exit 1; }
+            git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$INPUT_UCP_SHA" "origin/${RELEASE_BRANCH}" \
+              || { echo "::error::ucp_sha '$INPUT_UCP_SHA' is not an ancestor of origin/${RELEASE_BRANCH} in ucp"; exit 1; }
+            RESOLVED_UCP_SHA="$INPUT_UCP_SHA"
+          fi
+          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$RESOLVED_UCP_SHA"
 
           if [ "$BUMP_MODE" = "initial" ]; then
-            if git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
-              echo "::error::Branch ${RELEASE_BRANCH} already exists; use bump=patch or bump=minor"
-              exit 1
-            fi
+            ! git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}" \
+              || { echo "::error::Branch ${RELEASE_BRANCH} already exists; use patch, minor, or publish-existing"; exit 1; }
             git checkout -B "$RELEASE_BRANCH" origin/main
             NEW_VERSION="${EPOCH}.0.0"
           else
-            if ! git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
-              echo "::error::Branch ${RELEASE_BRANCH} does not exist; use bump=initial first"
-              exit 1
-            fi
+            git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}" \
+              || { echo "::error::Branch ${RELEASE_BRANCH} does not exist; use bump=initial first"; exit 1; }
             git checkout -B "$RELEASE_BRANCH" "origin/${RELEASE_BRANCH}"
-            CURRENT_VERSION="$(python3 - <<'PY'
-          from pathlib import Path
-          import sys
-          import tomllib
-
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          version = data.get("project", {}).get("version")
-          if not isinstance(version, str) or not version:
-              sys.exit(1)
-          print(version)
-          PY
-          )"
-            if [[ ! "$CURRENT_VERSION" =~ ^${EPOCH}\.([0-9]+)\.([0-9]+)$ ]]; then
-              echo "::error::Current pyproject.toml version '$CURRENT_VERSION' does not match ${EPOCH}.MINOR.PATCH"
+            CURRENT_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+            if [[ ! "$CURRENT_VERSION" =~ ^${EPOCH}\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "::error::pyproject.toml version '$CURRENT_VERSION' does not match canonical ${EPOCH}.MINOR.PATCH"
               exit 1
             fi
-            MINOR="${BASH_REMATCH[1]}"
-            PATCH="${BASH_REMATCH[2]}"
-            if [ "$BUMP_MODE" = "patch" ]; then
+            MINOR="${BASH_REMATCH[1]}"; PATCH="${BASH_REMATCH[2]}"
+            if [ "$BUMP_MODE" = "publish-existing" ]; then
+              NEW_VERSION="$CURRENT_VERSION"
+              [ -f ucp-lock.json ] || { echo "::error::ucp-lock.json is missing on ${RELEASE_BRANCH}"; exit 1; }
+              jq -e --arg ref "$RELEASE_BRANCH" --arg sha "$RESOLVED_UCP_SHA" \
+                '.channel == "release" and .ucp_ref == $ref and .ucp_sha == $sha' ucp-lock.json >/dev/null \
+                || { echo "::error::ucp-lock.json does not match prepared ${RELEASE_BRANCH} @ ${RESOLVED_UCP_SHA}"; exit 1; }
+            elif [ "$BUMP_MODE" = "patch" ]; then
               NEW_VERSION="${EPOCH}.${MINOR}.$((PATCH + 1))"
             else
               NEW_VERSION="${EPOCH}.$((MINOR + 1)).0"
@@ -152,38 +134,25 @@ jobs:
 
           prep_tag_rc=0
           git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null || prep_tag_rc=$?
-          if [ "$prep_tag_rc" -eq 0 ]; then
-            echo "::error::Tag v${NEW_VERSION} already exists on origin"
-            exit 1
-          elif [ "$prep_tag_rc" -ne 2 ]; then
-            echo "::error::Failed to query remote tags for v${NEW_VERSION} (exit ${prep_tag_rc})"
-            exit 1
+          [ "$prep_tag_rc" -eq 2 ] || { echo "::error::Tag v${NEW_VERSION} already exists or remote check failed (rc=${prep_tag_rc})"; exit 1; }
+
+          UCP_SCHEMA_VERSION="2.0.0"
+          if [ -f ucp-lock.json ]; then
+            UCP_SCHEMA_VERSION="$(jq -er '.ucp_schema_version // "2.0.0" | select(type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' ucp-lock.json)"
           fi
-
-          UCP_SCHEMA_VERSION="$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          lock_path = Path("ucp-lock.json")
-          if lock_path.is_file():
-              data = json.loads(lock_path.read_text(encoding="utf-8"))
-              print(str(data.get("ucp_schema_version", "2.0.0")).strip() or "2.0.0")
-          else:
-              print("2.0.0")
-          PY
-          )"
-
-          echo "release_branch=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
+          printf 'release_branch=%s\nnew_version=%s\nucp_schema_version=%s\n' \
+            "$RELEASE_BRANCH" "$NEW_VERSION" "$UCP_SCHEMA_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
 
-      - name: Install ucp-schema CLI
+      - name: Regenerate models, update version, and run tests
         env:
+          BUMP_MODE: ${{ inputs.bump }}
+          RELEASE_BRANCH: ${{ steps.prep.outputs.release_branch }}
+          NEW_VERSION: ${{ steps.prep.outputs.new_version }}
           UCP_SCHEMA_VERSION: ${{ steps.prep.outputs.ucp_schema_version }}
         run: |
           set -euo pipefail
@@ -195,45 +164,19 @@ jobs:
           (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
           mkdir -p "$HOME/.local/bin"
           install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
 
-      - name: Regenerate models, update version, and run tests
-        env:
-          RELEASE_BRANCH: ${{ steps.prep.outputs.release_branch }}
-          NEW_VERSION: ${{ steps.prep.outputs.new_version }}
-        run: |
-          set -euo pipefail
-          ./generate_models.sh "$RUNNER_TEMP/ucp-spec" --channel release --ref "$RELEASE_BRANCH" --write-lock
-
-          NEW_VERSION="$NEW_VERSION" python3 - <<'PY'
-          import os
-          from pathlib import Path
-          import re
-          import tomllib
-
-          new_version = os.environ["NEW_VERSION"]
-          path = Path("pyproject.toml")
-          text = path.read_text(encoding="utf-8")
-          section_match = re.search(r"(?m)^\[project\]\s*$", text)
-          if not section_match:
-              raise RuntimeError("Missing [project] table in pyproject.toml")
-          start = section_match.end()
-          next_section = re.search(r"(?m)^\[", text[start:])
-          end = start + next_section.start() if next_section else len(text)
-          project_block, count = re.subn(
-              r'(?m)^(version\s*=\s*)"[^"]+"',
-              rf'\1"{new_version}"',
-              text[start:end],
-              count=1,
-          )
-          if count != 1:
-              raise RuntimeError("Failed to update [project].version in pyproject.toml")
-          updated = text[:start] + project_block + text[end:]
-          parsed = tomllib.loads(updated)
-          if parsed.get("project", {}).get("version") != new_version:
-              raise RuntimeError("Verified [project].version mismatch after update")
-          path.write_text(updated, encoding="utf-8")
-          PY
+          if [ "$BUMP_MODE" = "publish-existing" ]; then
+            ./generate_models.sh --from-lock --spec-dir "$RUNNER_TEMP/ucp-spec"
+            if [ -n "$(git status --porcelain -- src/ucp_sdk pyproject.toml ucp-lock.json)" ]; then
+              echo "::error::Prepared release commit on ${RELEASE_BRANCH} has model drift against ucp-lock.json"
+              git status --short -- src/ucp_sdk pyproject.toml ucp-lock.json
+              exit 1
+            fi
+          else
+            ./generate_models.sh --spec-dir "$RUNNER_TEMP/ucp-spec" --channel release --ref "$RELEASE_BRANCH" --write-lock
+            uv version --frozen "$NEW_VERSION"
+          fi
 
           uv run python -m unittest discover -s tests -p "test_*.py"
           uv build
@@ -252,42 +195,45 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           REPOSITORY: ${{ github.repository }}
+          SPEC_VERSION: ${{ inputs.spec_version }}
+          BUMP_MODE: ${{ inputs.bump }}
           RELEASE_BRANCH: ${{ steps.prep.outputs.release_branch }}
           NEW_VERSION: ${{ steps.prep.outputs.new_version }}
           PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
+          EPOCH="${SPEC_VERSION//-/}"
           tag_rc=0
           git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null || tag_rc=$?
-          if [ "$tag_rc" -eq 0 ]; then
-            echo "::error::Tag v${NEW_VERSION} already exists on origin"
-            exit 1
-          elif [ "$tag_rc" -ne 2 ]; then
-            echo "::error::Failed to query remote tags for v${NEW_VERSION} (exit ${tag_rc})"
-            exit 1
-          fi
+          [ "$tag_rc" -eq 2 ] || { echo "::error::Tag v${NEW_VERSION} already exists or remote check failed (rc=${tag_rc})"; exit 1; }
 
           BOT_NAME="${APP_SLUG:-ucp-automation}[bot]"
           BOT_ID="$(gh api "/users/${BOT_NAME}" --jq .id)"
-          if [[ ! "$BOT_ID" =~ ^[0-9]+$ ]]; then
-            echo "::error::Failed to resolve numeric GitHub user ID for ${BOT_NAME}"
-            exit 1
-          fi
+          [[ "$BOT_ID" =~ ^[0-9]+$ ]] || { echo "::error::Invalid bot user ID for ${BOT_NAME}"; exit 1; }
           git config user.name "$BOT_NAME"
           git config user.email "${BOT_ID}+${BOT_NAME}@users.noreply.github.com"
 
-          git add -- pyproject.toml ucp-lock.json src/ucp_sdk/models/schemas
-          if ! git diff --cached --quiet; then
+          if [ "$BUMP_MODE" = "publish-existing" ]; then
+            git fetch origin "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+            [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/${RELEASE_BRANCH}")" ] \
+              || { echo "::error::origin/${RELEASE_BRANCH} changed during run"; exit 1; }
+          else
+            git add -- pyproject.toml ucp-lock.json src/ucp_sdk/models/schemas
+            ! git diff --cached --quiet || { echo "::error::Expected changes for v${NEW_VERSION}, but staged diff is empty"; exit 1; }
             git commit -m "chore(release): v${NEW_VERSION}"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${RELEASE_BRANCH}"
           fi
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${RELEASE_BRANCH}"
 
           if [ "$PUBLISH_RELEASE" = "true" ]; then
+            LATEST_RELEASE_EPOCH="$(gh api --paginate "/repos/${REPOSITORY}/releases?per_page=100" | jq -sr '
+              [.[][] | select((.draft | not) and (.prerelease | not)) | .tag_name
+                | capture("^v(?<e>[0-9]{8})\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$").e | tonumber] | max // 0
+            ')"
+            LATEST_FLAG="--latest"
+            if (( 10#$EPOCH < 10#$LATEST_RELEASE_EPOCH )); then LATEST_FLAG="--latest=false"; fi
+
             git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
             git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "refs/tags/v${NEW_VERSION}"
-            gh release create "v${NEW_VERSION}" \
-              --repo "$REPOSITORY" \
-              --target "$RELEASE_BRANCH" \
-              --title "v${NEW_VERSION}" \
-              --generate-notes
+            gh release create "v${NEW_VERSION}" --repo "$REPOSITORY" --verify-tag \
+              --title "v${NEW_VERSION}" --generate-notes "$LATEST_FLAG"
           fi
