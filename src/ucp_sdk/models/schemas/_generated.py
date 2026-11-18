@@ -20,24 +20,15 @@
 
 from __future__ import annotations
 
-import operator
-
-import re
-
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import (
-    AnyUrl,
-    AwareDatetime,
-    BaseModel,
-    ConfigDict,
-    Field,
-    model_validator,
-    AfterValidator,
-    field_validator,
-)
+from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
+
+UCPSchemaTypes = TypeAliasType(
+    "UCPSchemaTypes", Annotated[Any, Field(..., title="UCP Schema Types")]
+)
 
 
 class ActionsDeviceDataCollectionConfig(BaseModel):
@@ -107,6 +98,28 @@ Amount = TypeAliasType(
 """
 Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to the currency's exponent to determine minor-to-major ratio (e.g., 2 for USD, 0 for JPY, 3 for KWD).
 """
+
+
+class AskResponseAnswer(BaseModel):
+    """
+    Answer provided by the Business. Plain text is required; Markdown and HTML are optional alternative encodings.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    plain: str
+    """
+    Plain text content.
+    """
+    html: str | None = None
+    """
+    HTML-formatted content. Security: Platforms MUST sanitize before rendering—strip scripts, event handlers, and untrusted elements. Treat all rich text as untrusted input.
+    """
+    markdown: str | None = None
+    """
+    Markdown-formatted content.
+    """
 
 
 Attribution = TypeAliasType("Attribution", dict[str, str])
@@ -305,6 +318,20 @@ class ContentPart(BaseModel):
     text: str | None = None
 
 
+class Conversation(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Opaque, business-issued conversation identifier.
+    """
+    expires_at: AwareDatetime | None = None
+    """
+    RFC 3339 timestamp after which the conversation context may be discarded. Optional.
+    """
+
+
 class DailyHour(BaseModel):
     """
     A regular weekly operating interval. Its `day`, `opens`, and `closes` are recurring local civil values interpreted in the containing Location's `timezone`. Multiple entries for the same day support split shifts.
@@ -334,22 +361,6 @@ class DailyHour(BaseModel):
     A stable UCP day-of-week identifier for the day on which this recurring local civil-time interval begins in the containing Location's `timezone`. It is not localized display text.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"closes": ["opens"], "opens": ["closes"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
 
 class Description(BaseModel):
     """
@@ -371,17 +382,6 @@ class Description(BaseModel):
     """
     Markdown-formatted content.
     """
-
-    @model_validator(mode="after")
-    def _enforce_min_properties(self) -> Any:
-        """JSON Schema minProperties: require at least 1
-        provided property."""
-        provided = self.model_fields_set | set(self.model_extra or {})
-        if len(provided) < 1:
-            raise ValueError(
-                "At least 1 property must be provided (schema minProperties=1)"
-            )
-        return self
 
 
 class DetailOptionValue(BaseModel):
@@ -518,22 +518,6 @@ class ExceptionHour(BaseModel):
     The last local civil date to which this exception applies, interpreted in the containing Location's `timezone`.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"closes": ["opens"], "opens": ["closes"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
 
 class ExpectationLineItem(BaseModel):
     model_config = ConfigDict(
@@ -610,19 +594,6 @@ class FulfillmentDestinationBase(BaseModel):
     """
     Fulfillment destination identifier.
     """
-
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in [
-            "business_location",
-            "shipping_address",
-        ]:
-            raise ValueError(
-                "Field 'type' must not be one of ['business_location', 'shipping_address'] "
-                "(schema not.enum)"
-            )
-        return self
 
 
 class FulfillmentDestinationFilter(BaseModel):
@@ -768,32 +739,6 @@ class FulfillmentMethodCreateRequestBase(BaseModel):
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"destinations": ["type"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in ["pickup", "shipping"]:
-            raise ValueError(
-                "Field 'type' must not be one of ['pickup', 'shipping'] "
-                "(schema not.enum)"
-            )
-        return self
-
 
 class FulfillmentMethodUpdateRequestBase(BaseModel):
     """
@@ -823,32 +768,6 @@ class FulfillmentMethodUpdateRequestBase(BaseModel):
     """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
-
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"destinations": ["type"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in ["pickup", "shipping"]:
-            raise ValueError(
-                "Field 'type' must not be one of ['pickup', 'shipping'] "
-                "(schema not.enum)"
-            )
-        return self
 
 
 class FulfillmentOptionBase(BaseModel):
@@ -1008,7 +927,7 @@ class JsonrpcErrorResponse(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     jsonrpc: Literal["2.0"]
     """
@@ -1024,7 +943,7 @@ class JsonrpcRequest(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     jsonrpc: Literal["2.0"]
     """
@@ -1047,7 +966,7 @@ class JsonrpcSuccessResponse(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     jsonrpc: Literal["2.0"]
     """
@@ -1097,86 +1016,6 @@ class JwkPublicKey(BaseModel):
     JWK public key use. UCP examples use sig for signatures.
     """
 
-    @model_validator(mode="after")
-    def _enforce_conditional_required(self) -> Any:
-        """JSON Schema if/then: enforce conditionally required fields."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "kty",
-                "values": ["EC"],
-                "required": ["crv", "x", "y"],
-            },
-            {
-                "discriminator": "kty",
-                "values": ["OKP"],
-                "required": ["crv", "x"],
-            },
-        ]
-        for rule in rules:
-            if getattr(self, rule["discriminator"], None) not in rule["values"]:
-                continue
-            for field in rule["required"]:
-                if field not in self.model_fields_set:
-                    raise ValueError(
-                        f"Field {field!r} is required by a schema condition"
-                    )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "crv",
-                "values": ["P-256"],
-                "bounds": {"alg": {"const": "ES256"}},
-            },
-            {
-                "discriminator": "crv",
-                "values": ["P-384"],
-                "bounds": {"alg": {"const": "ES384"}},
-            },
-            {
-                "discriminator": "crv",
-                "values": ["Ed25519"],
-                "bounds": {"alg": {"const": "EdDSA"}},
-            },
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_forbidden_keys(self) -> Any:
-        """JSON Schema not: reject forbidden property keys."""
-        _present = self.model_fields_set | set(self.model_extra or {})
-        for _key in ["d", "dp", "dq", "k", "oth", "p", "q", "qi"]:
-            if _key in _present:
-                raise ValueError(
-                    f"Field {_key!r} is forbidden by schema 'not' constraint"
-                )
-        return self
-
 
 class Link(BaseModel):
     model_config = ConfigDict(
@@ -1193,6 +1032,10 @@ class Link(BaseModel):
     title: str | None = None
     """
     Optional display text for the link. When provided, use this instead of generating from type.
+    """
+    id: str | None = None
+    """
+    Optional identifier for the linked resource when it is an addressable UCP resource (for example, a product or variant), so a platform can act on it through the capability that owns it. Omit for resources without a UCP identifier, such as a policy page.
     """
 
 
@@ -1248,17 +1091,6 @@ class LocationFilterHours(BaseModel):
     """
     The RFC 3339 instant at which matching Locations must be open, expressed with `Z` or a numeric offset. The Platform selects the instant that represents the Buyer's intent. The Business evaluates it exactly as supplied using each Location's authoritative `timezone`; the supplied offset does not identify that timezone.
     """
-
-    @field_validator("open_at", mode="before")
-    def _enforce_datetime_pattern_open_at(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema pattern: match the raw date-time string, since
-        pydantic cannot apply a regex to the parsed datetime."""
-        pattern = "(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
-        if isinstance(value, str) and re.search(pattern, value) is None:
-            raise ValueError(
-                f"{value!r} does not match the schema pattern {pattern}"
-            )
-        return value
 
 
 LocationFilterItem = TypeAliasType(
@@ -1358,28 +1190,6 @@ class LocationServes(BaseModel):
     Coarse locality of the service target.
     """
 
-    @model_validator(mode="after")
-    def _enforce_min_properties(self) -> Any:
-        """JSON Schema minProperties: require at least 1
-        provided property."""
-        provided = self.model_fields_set | set(self.model_extra or {})
-        if len(provided) < 1:
-            raise ValueError(
-                "At least 1 property must be provided (schema minProperties=1)"
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_max_properties(self) -> Any:
-        """JSON Schema maxProperties: allow at most 1
-        provided property."""
-        provided = self.model_fields_set | set(self.model_extra or {})
-        if len(provided) > 1:
-            raise ValueError(
-                "At most 1 property may be provided (schema maxProperties=1)"
-            )
-        return self
-
 
 class LookupLocationInput(BaseModel):
     model_config = ConfigDict(
@@ -1420,6 +1230,10 @@ Preferred key order for map-valued fields in the scope annotated by the containi
 
 
 class McpToolCallResponseResult(BaseModel):
+    """
+    Successful transport result. UCP bindings define the nested result payload.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
@@ -1430,7 +1244,7 @@ class McpToolCallResponseResult(BaseModel):
     content: list[ContentPart] | None = None
 
 
-class McpToolCallResponse(JsonrpcSuccessResponse):
+class McpToolCallResponse(BaseModel):
     """
     MCP tools/call response envelope. UCP payloads are carried in result.structuredContent; content is compatibility output.
     """
@@ -1438,9 +1252,17 @@ class McpToolCallResponse(JsonrpcSuccessResponse):
     model_config = ConfigDict(
         extra="allow",
     )
-    result: McpToolCallResponseResult | None = Field(
-        None, title="McpToolCallResponseResult"
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id
+    result: McpToolCallResponseResult = Field(
+        ..., title="McpToolCallResponseResult"
     )
+    """
+    Successful transport result. UCP bindings define the nested result payload.
+    """
 
 
 class Measure(BaseModel):
@@ -1467,40 +1289,6 @@ class Measure(BaseModel):
     """
     Integer count of `10^-scale` units of `unit`.
     """
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "unit",
-                "values": ["C62"],
-                "bounds": {"scale": {"const": 0}},
-            }
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
 
 
 class MediaBasePreview(BaseModel):
@@ -1797,20 +1585,6 @@ class Oauth2Provider(BaseModel):
     OIDC Core §5.1 claim names the business requires in the JWT authorization grant from this provider (e.g. 'email'). Optional pre-filter hint: platforms SHOULD skip this provider during selection when their upstream identity lacks any of the listed claim names. Reactive enforcement at the token endpoint remains mandatory regardless; this field expresses claim presence only, not value constraints.
     """
 
-    @field_validator("required_claims", mode="after")
-    def _enforce_unique_items_required_claims(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
-
 
 class OptionValue(BaseModel):
     """
@@ -1926,26 +1700,6 @@ class PaginationResponse(BaseModel):
     """
     Total number of matching items, if available.
     """
-
-    @model_validator(mode="after")
-    def _enforce_conditional_required(self) -> Any:
-        """JSON Schema if/then: enforce conditionally required fields."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "has_next_page",
-                "values": [True],
-                "required": ["cursor"],
-            }
-        ]
-        for rule in rules:
-            if getattr(self, rule["discriminator"], None) not in rule["values"]:
-                continue
-            for field in rule["required"]:
-                if field not in self.model_fields_set:
-                    raise ValueError(
-                        f"Field {field!r} is required by a schema condition"
-                    )
-        return self
 
 
 class PanCredential(BaseModel):
@@ -2305,15 +2059,6 @@ class ProviderBase(BaseModel):
     Provider mechanism discriminator. 'oauth2' for OAuth 2.0 / OIDC authorization servers. Additional values MAY be defined by future versions; the value is an open string, not a closed enum, so unrecognized types remain valid and are filtered at runtime.
     """
 
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in ["oauth2"]:
-            raise ValueError(
-                "Field 'type' must not be one of ['oauth2'] (schema not.enum)"
-            )
-        return self
-
 
 class QuantityUnit(BaseModel):
     """
@@ -2339,40 +2084,6 @@ class QuantityUnit(BaseModel):
     """
     Ordering granularity, denominated in steps: the Business sells this item in integer multiples of `increment` steps. Its effective value is the provided value or 1. Advisory merchandising policy, not a representational bound: Platform-authored quantities SHOULD be integer multiples of the effective increment; the Business MAY accept, revise, or reject an off-increment request with a recoverable business outcome and MUST NOT silently reinterpret it. Business-authored quantities (checkout revisions, fulfillment events, adjustments) are bounded only by `scale`.
     """
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "unit",
-                "values": ["C62"],
-                "bounds": {"scale": {"const": 0}},
-            }
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
 
 
 class Rating(BaseModel):
@@ -2801,19 +2512,6 @@ class Signals(BaseModel):
     Client's HTTP User-Agent header or equivalent.
     """
 
-    @model_validator(mode="after")
-    def _enforce_property_names(self) -> Any:
-        """JSON Schema propertyNames: every extra key must match the
-        declared reverse-domain pattern (schema propertyNames)."""
-        pattern = "^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$"
-        for key in self.model_extra or {}:
-            if re.fullmatch(pattern, key) is None:
-                raise ValueError(
-                    f"Property name {key!r} does not match the schema "
-                    f"propertyNames pattern {pattern}"
-                )
-        return self
-
 
 SignedAmount = TypeAliasType(
     "SignedAmount",
@@ -2845,22 +2543,6 @@ class TimeInterval(BaseModel):
     """
     Closing time in 24-hour HH:MM format.
     """
-
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"opens": ["closes"], "closes": ["opens"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
 
 
 class TokenCredential(BaseModel):
@@ -2894,45 +2576,6 @@ class Total(BaseModel):
     Text to display against the amount. Should reflect appropriate method (e.g., 'Shipping', 'Delivery').
     """
     amount: SignedAmount
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "type",
-                "values": ["discount", "items_discount"],
-                "bounds": {"amount": {"exclusiveMaximum": 0}},
-            },
-            {
-                "discriminator": "type",
-                "values": ["subtotal", "fulfillment", "tax", "fee"],
-                "bounds": {"amount": {"minimum": 0}},
-            },
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
 
 
 class TotalsItemLine(BaseModel):
@@ -2968,141 +2611,9 @@ class TotalsItem(BaseModel):
     Optional itemized breakdown. The parent entry is always rendered; lines are supplementary. Sum of line amounts MUST equal the parent entry amount.
     """
 
-    @model_validator(mode="after")
-    def _enforce_item_required_condition(self) -> Any:
-        """JSON Schema if/then: require ['display_text'] when 'type' is custom."""
-        if getattr(self, "type", None) not in [
-            "subtotal",
-            "items_discount",
-            "discount",
-            "fulfillment",
-            "tax",
-            "fee",
-            "total",
-        ]:
-            _present = self.model_fields_set | set(self.model_extra or {})
-            for _req in ["display_text"]:
-                if _req not in _present:
-                    raise ValueError(
-                        f"Field {_req!r} is required for custom type"
-                    )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "type",
-                "values": ["discount", "items_discount"],
-                "bounds": {"amount": {"exclusiveMaximum": 0}},
-            },
-            {
-                "discriminator": "type",
-                "values": ["subtotal", "fulfillment", "tax", "fee"],
-                "bounds": {"amount": {"minimum": 0}},
-            },
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
-
-
-def _enforce_contains_totals(value: list[Any]) -> list[Any]:
-    """JSON Schema contains/minContains/maxContains (see #49)."""
-    _matched_0 = sum(
-        1
-        for _item in value
-        if (
-            _item.get("type")
-            if isinstance(_item, dict)
-            else getattr(_item, "type", None)
-        )
-        == "subtotal"
-    )
-    if _matched_0 < 1:
-        raise ValueError(
-            "Array must contain at least 1 entry "
-            "matching type=='subtotal' (schema minContains=1)"
-        )
-    if _matched_0 > 1:
-        raise ValueError(
-            "Array must contain at most 1 entry "
-            "matching type=='subtotal' (schema maxContains=1)"
-        )
-    _matched_1 = sum(
-        1
-        for _item in value
-        if (
-            _item.get("type")
-            if isinstance(_item, dict)
-            else getattr(_item, "type", None)
-        )
-        == "total"
-    )
-    if _matched_1 < 1:
-        raise ValueError(
-            "Array must contain at least 1 entry "
-            "matching type=='total' (schema minContains=1)"
-        )
-    if _matched_1 > 1:
-        raise ValueError(
-            "Array must contain at most 1 entry "
-            "matching type=='total' (schema maxContains=1)"
-        )
-    _excluded = [
-        "subtotal",
-        "items_discount",
-        "discount",
-        "fulfillment",
-        "tax",
-        "fee",
-        "total",
-    ]
-    for _item in value:
-        _actual = (
-            _item.get("type")
-            if isinstance(_item, dict)
-            else getattr(_item, "type", None)
-        )
-        if _actual in _excluded:
-            continue
-        if isinstance(_item, dict) and "display_text" not in _item:
-            raise ValueError("Field 'display_text' is required for custom type")
-        if not isinstance(_item, dict) and "display_text" not in (
-            _item.model_fields_set | set(_item.model_extra or {})
-        ):
-            raise ValueError("Field 'display_text' is required for custom type")
-    return value
-
 
 Totals = TypeAliasType(
-    "Totals",
-    Annotated[
-        list[TotalsItem],
-        Field(..., title="Totals"),
-        AfterValidator(_enforce_contains_totals),
-    ],
+    "Totals", Annotated[list[TotalsItem], Field(..., title="Totals")]
 )
 """
 Pricing breakdown provided by the business. MUST contain exactly one subtotal and one total entry. Detail types (tax, fee, discount, fulfillment) may appear multiple times for itemization. Platforms MUST render all entries in order using display_text and amount.
@@ -3144,40 +2655,6 @@ class Unit(BaseModel):
     Required printable unit label provided by the Business. The Platform MUST use it when it does not recognize `unit`; for a recognized UN/CEFACT Rec 20 Common Code, the Platform MAY substitute its own localized label. It does not participate in unit identity or mismatch comparison.
     """
 
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "unit",
-                "values": ["C62"],
-                "bounds": {"scale": {"const": 0}},
-            }
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
-
 
 class UnitPriceMeasure(BaseModel):
     """
@@ -3204,40 +2681,6 @@ class UnitPriceMeasure(BaseModel):
     Integer count of `10^-scale` units of `unit`.
     """
 
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "unit",
-                "values": ["C62"],
-                "bounds": {"scale": {"const": 0}},
-            }
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
-
 
 class UnitPriceReference(BaseModel):
     """
@@ -3263,40 +2706,6 @@ class UnitPriceReference(BaseModel):
     """
     Integer count of `10^-scale` units of `unit`.
     """
-
-    @model_validator(mode="after")
-    def _enforce_conditional_bounds(self) -> Any:
-        """JSON Schema if/then: enforce conditional numeric bounds."""
-        rules: list[dict[str, Any]] = [
-            {
-                "discriminator": "unit",
-                "values": ["C62"],
-                "bounds": {"scale": {"const": 0}},
-            }
-        ]
-        checks = {
-            "minimum": (">=", "lt"),
-            "maximum": ("<=", "gt"),
-            "exclusiveMinimum": (">", "le"),
-            "exclusiveMaximum": ("<", "ge"),
-            "const": ("==", "ne"),
-        }
-        for rule in rules:
-            actual = getattr(self, rule["discriminator"], None)
-            if actual not in rule["values"]:
-                continue
-            for field, bounds in rule["bounds"].items():
-                value = getattr(self, field, None)
-                if value is None:
-                    continue
-                for keyword, limit in bounds.items():
-                    symbol, op_name = checks[keyword]
-                    if getattr(operator, op_name)(value, limit):
-                        raise ValueError(
-                            f"Field {field!r} must be {symbol} {limit} "
-                            f"when {rule['discriminator']} is {actual!r}"
-                        )
-        return self
 
 
 class UnitPrice(BaseModel):
@@ -3339,20 +2748,6 @@ class ValueConstraintEnum(BaseModel):
     """
     const: Any | None = None
 
-    @field_validator("enum", mode="after")
-    def _enforce_unique_items_enum(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
-
 
 class ValueConstraintConst(BaseModel):
     """
@@ -3367,20 +2762,6 @@ class ValueConstraintConst(BaseModel):
     A non-empty array of unique JSON values.
     """
     const: Any
-
-    @field_validator("enum", mode="after")
-    def _enforce_unique_items_enum(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
 
 
 ValueConstraint = TypeAliasType(
@@ -3475,13 +2856,17 @@ class A2aMessageMessage(BaseModel):
 
 
 class A2aMessageRequestParams(BaseModel):
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
     message: A2aMessageMessage
 
 
-class A2aMessageRequest(JsonrpcRequest):
+class A2aMessageRequest(BaseModel):
     """
     A2A message/send JSON-RPC request whose params carry a UCP-bearing Message from the platform to the business agent.
     """
@@ -3489,13 +2874,24 @@ class A2aMessageRequest(JsonrpcRequest):
     model_config = ConfigDict(
         extra="allow",
     )
-    method: Literal["message/send"] = "message/send"
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id | None = None
+    method: Literal["message/send"] = Field(..., min_length=1)
+    """
+    Transport method name. Binding-specific schemas constrain the method namespace.
+    """
     params: A2aMessageRequestParams = Field(
         ..., title="A2aMessageRequestParams"
     )
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
 
 
-class A2aMessageResponse(JsonrpcSuccessResponse):
+class A2aMessageResponse(BaseModel):
     """
     JSON-RPC success response whose result is an A2A Message from the business agent.
     """
@@ -3503,7 +2899,15 @@ class A2aMessageResponse(JsonrpcSuccessResponse):
     model_config = ConfigDict(
         extra="allow",
     )
-    result: A2aMessageMessage | None = None
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id
+    result: A2aMessageMessage
+    """
+    Successful transport result. UCP bindings define the nested result payload.
+    """
 
 
 class Actions(BaseModel):
@@ -3529,19 +2933,6 @@ class Actions(BaseModel):
     """
     A 3DS challenge Action.
     """
-
-    @model_validator(mode="after")
-    def _enforce_property_names(self) -> Any:
-        """JSON Schema propertyNames: every extra key must match the
-        declared reverse-domain pattern (schema propertyNames)."""
-        pattern = "^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$"
-        for key in self.model_extra or {}:
-            if re.fullmatch(pattern, key) is None:
-                raise ValueError(
-                    f"Property name {key!r} does not match the schema "
-                    f"propertyNames pattern {pattern}"
-                )
-        return self
 
 
 class AdjustmentLineItem(BaseModel):
@@ -4028,7 +3419,7 @@ class ConstraintExpression(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     required: list[str] | None = Field(None, min_length=1)
     """
@@ -4042,20 +3433,6 @@ class ConstraintExpression(BaseModel):
     """
     Alternative Object Constraints. The constrained object must satisfy at least one. A branch must be non-empty: an empty branch is satisfied by every object and neutralizes the alternation.
     """
-
-    @field_validator("required", mode="after")
-    def _enforce_unique_items_required(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
 
 
 class ContextPayment(BaseModel):
@@ -4116,20 +3493,6 @@ class Context(BaseModel):
     """
     Buyer-preferred payment handlers in priority order (most preferred first). Each entry names a handler advertised in the Business profile's `ucp.payment_handlers`, optionally narrowed to preferred instrument types. The Business SHOULD use it to preselect or prioritize the handler (and type, when given) and MAY ignore unavailable or ineligible entries; unrecognized values MUST be ignored without error.
     """
-
-    @field_validator("eligibility", mode="after")
-    def _enforce_unique_items_eligibility(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
 
 
 class DiscountsObject(BaseModel):
@@ -4203,7 +3566,7 @@ JSON-RPC transport-level error response for EP messages. Application-level failu
 """
 
 
-class EmbeddedMessageRequest(JsonrpcRequest):
+class EmbeddedMessageRequest(BaseModel):
     """
     Embedded Protocol request or notification envelope. Messages with id expect a response; messages without id are notifications.
     """
@@ -4211,14 +3574,22 @@ class EmbeddedMessageRequest(JsonrpcRequest):
     model_config = ConfigDict(
         extra="allow",
     )
-    method: Method | None = None
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id | None = None
+    method: Method
+    """
+    Transport method name. Binding-specific schemas constrain the method namespace.
+    """
     params: dict[str, Any]
     """
     Capability-specific EP parameters.
     """
 
 
-class EmbeddedMessageResponse(JsonrpcSuccessResponse):
+class EmbeddedMessageResponse(BaseModel):
     """
     Embedded Protocol success response envelope. UCP application-level success and error outcomes are both carried in result.ucp.status.
     """
@@ -4226,7 +3597,12 @@ class EmbeddedMessageResponse(JsonrpcSuccessResponse):
     model_config = ConfigDict(
         extra="allow",
     )
-    result: dict[str, Any] | None = None
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id
+    result: dict[str, Any]
     """
     Capability-specific EP result. Application-level status is defined by capability schemas; see Embedded Protocol response handling.
     """
@@ -4661,22 +4037,6 @@ class Location(BaseModel):
     The Business-owned IANA Time Zone Database identifier (e.g., 'America/New_York') defining this Location's canonical local civil-time frame for all returned schedule day, time, and date fields. The Business does not vary this canonical framing by the requesting Platform's or Buyer's timezone. Required when hours or exception_hours is present.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"exception_hours": ["timezone"], "hours": ["timezone"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
 
 class LocationDestination(BaseModel):
     """
@@ -4724,20 +4084,6 @@ class LocationFilter(BaseModel):
     """
     Current item-availability filter. A candidate Location matches only when the Business can currently provide every referenced item at that Location; all references combine with AND.
     """
-
-    @field_validator("items", mode="after")
-    def _enforce_unique_items_items(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
 
 
 class LocationLookupRequest(BaseModel):
@@ -4858,22 +4204,6 @@ class LookupLocation(BaseModel):
     Which request identifiers resolved to this Location. Each entry preserves one identifier exactly as supplied in the request.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"exception_hours": ["timezone"], "hours": ["timezone"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
 
 class MediaBase(BaseModel):
     """
@@ -4919,21 +4249,6 @@ class MediaBase(BaseModel):
     """
     Alternate renditions of the resource at `url`. The Business SHOULD include the rendition at `url`.
     """
-
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in [
-            "external_video",
-            "image",
-            "model_3d",
-            "video",
-        ]:
-            raise ValueError(
-                "Field 'type' must not be one of ['external_video', 'image', 'model_3d', 'video'] "
-                "(schema not.enum)"
-            )
-        return self
 
 
 class MediaExternalVideo(BaseModel):
@@ -5487,7 +4802,7 @@ class RequestConstraints(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     path: str | None = None
     """
@@ -5507,20 +4822,6 @@ class RequestConstraints(BaseModel):
     """
     Alternative Object Constraints. The constrained object must satisfy at least one. A branch must be non-empty: an empty branch is satisfied by every object and neutralizes the alternation.
     """
-
-    @field_validator("required", mode="after")
-    def _enforce_unique_items_required(cls, value: Any) -> Any:  # noqa: N805
-        """JSON Schema uniqueItems: reject duplicate entries."""
-        if value is None:
-            return value
-        seen: list[Any] = []
-        for item in value:
-            if item in seen:
-                raise ValueError(
-                    "Items must be unique (schema uniqueItems=true)"
-                )
-            seen.append(item)
-        return value
 
 
 class Requires(BaseModel):
@@ -6129,6 +5430,26 @@ class Arguments(BaseModel):
     meta: Meta | None = None
 
 
+class AskRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    query: str
+    """
+    Natural-language question.
+    """
+    conversation: Conversation | None = None
+    """
+    Provide a conversation to continue it on a follow-up; omit to start a new one.
+    """
+    ids: list[str] | None = None
+    """
+    Optional identifiers that ground the question in any Business resource. A Business SHOULD accept its own Global IDs (GIDs) and MAY accept recognized secondary identifiers such as SKU, handle, or URL. GIDs self-describe to the Business; a Platform may send them as opaque grounding references. Examples include a product, location, cart, order, or booking.
+    """
+    context: Context | None = None
+    signals: Signals | None = None
+
+
 class AvailablePaymentInstrument(BaseModel):
     """
     An instrument type available from a payment handler with optional constraints.
@@ -6355,32 +5676,6 @@ class FulfillmentMethodBase(BaseModel):
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
 
-    @model_validator(mode="after")
-    def _enforce_dependent_required(self) -> Any:
-        """JSON Schema dependentRequired: enforce dependent fields."""
-        rules = {"destinations": ["type"]}
-        provided = self.model_fields_set | set(self.model_extra or {})
-        for field, required_fields in rules.items():
-            if field not in provided:
-                continue
-            for required in required_fields:
-                if required not in provided:
-                    raise ValueError(
-                        f"Field {required!r} is required when {field!r} "
-                        "is provided (schema dependentRequired)"
-                    )
-        return self
-
-    @model_validator(mode="after")
-    def _enforce_not_enum(self) -> Any:
-        """JSON Schema not.enum: reject known variant discriminator values on open-union fallback."""
-        if getattr(self, "type", None) in ["pickup", "shipping"]:
-            raise ValueError(
-                "Field 'type' must not be one of ['pickup', 'shipping'] "
-                "(schema not.enum)"
-            )
-        return self
-
 
 class IdentityLinkingBusinessSchemaConfig(BaseModel):
     """
@@ -6471,6 +5766,10 @@ class LoyaltyMembership(BaseModel):
 
 
 class McpToolCallRequestParams(BaseModel):
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
@@ -6481,7 +5780,7 @@ class McpToolCallRequestParams(BaseModel):
     arguments: Arguments
 
 
-class McpToolCallRequest(JsonrpcRequest):
+class McpToolCallRequest(BaseModel):
     """
     MCP tools/call request envelope for invoking a UCP operation.
     """
@@ -6489,10 +5788,21 @@ class McpToolCallRequest(JsonrpcRequest):
     model_config = ConfigDict(
         extra="allow",
     )
-    method: Literal["tools/call"] = "tools/call"
+    jsonrpc: Literal["2.0"]
+    """
+    JSON-RPC protocol version.
+    """
+    id: Id | None = None
+    method: Literal["tools/call"] = Field(..., min_length=1)
+    """
+    Transport method name. Binding-specific schemas constrain the method namespace.
+    """
     params: McpToolCallRequestParams = Field(
         ..., title="McpToolCallRequestParams"
     )
+    """
+    Method parameters. Binding-specific schemas define the object shape.
+    """
 
 
 Media = TypeAliasType(
@@ -6735,6 +6045,41 @@ class PickupMethod(BaseModel):
     groups: list[FulfillmentGroup] | None = None
     """
     Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
+    """
+
+
+class ResponseAskSchema(BaseModel):
+    """
+    UCP metadata for ask responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    map_order: MapOrder | None = None
+    """
+    Preferred key-traversal order for sibling registry fields inside the root `ucp` envelope (`services`, `capabilities`, and `payment_handlers`).
+    """
+    status: Literal["success", "error"] | None = "success"
+    """
+    Application-level status of the UCP operation.
+    """
+    services: dict[ReverseDomainName, list[ServiceBase]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: (
+        dict[ReverseDomainName, list[CapabilityResponseSchema]] | None
+    ) = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: (
+        dict[ReverseDomainName, list[PaymentHandlerBase]] | None
+    ) = None
+    """
+    Payment handler registry keyed by reverse-domain name.
     """
 
 
@@ -7206,6 +6551,29 @@ class Variant(BaseModel):
     """
 
 
+class AskResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseAskSchema
+    answer: AskResponseAnswer = Field(..., title="AskResponseAnswer")
+    """
+    Answer provided by the Business. Plain text is required; Markdown and HTML are optional alternative encodings.
+    """
+    conversation: Conversation | None = None
+    """
+    Business-issued conversation for multi-turn continuation. When returned, the business SHOULD retain its history until `expires_at` (or per its own policy) so a follow-up with the same `id` builds on it. An unresolved `id` starts a new conversation and is noted in `messages`.
+    """
+    links: list[Link] | None = None
+    """
+    Optional links and references related to the answer. When a link refers to an addressable UCP resource, the Business SHOULD include its GID in the link's `id`.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the answer or its grounding.
+    """
+
+
 Consent = TypeAliasType(
     "Consent",
     Annotated[
@@ -7293,7 +6661,7 @@ class ErrorResponse(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     ucp: UcpError
     """
