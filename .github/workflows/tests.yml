@@ -16,9 +16,9 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
 
 permissions:
   contents: read
@@ -40,7 +40,7 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package (generated-model tests import it)
+      - name: Install package
         run: pip install -e .
       - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py"
@@ -56,12 +56,17 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          enable-cache: true
-      - name: Install ucp-schema CLI
-        env:
-          UCP_SCHEMA_VERSION: "2.0.0"
+          enable-cache: false
+      - name: Regenerate models from ucp-lock.json and verify zero drift
         run: |
           set -euo pipefail
+          LOCK_FIELDS="$(jq -er '
+            (.ucp_sha | select(type == "string" and test("^[0-9a-f]{40}$"))) as $sha |
+            (.ucp_schema_version | select(type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) as $ver |
+            "\($sha) \($ver)"
+          ' ucp-lock.json)"
+          read -r UCP_SHA UCP_SCHEMA_VERSION <<< "$LOCK_FIELDS"
+
           tmp_dir="$(mktemp -d)"
           trap 'rm -rf "$tmp_dir"' EXIT
           base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
@@ -70,18 +75,16 @@ jobs:
           (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
           mkdir -p "$HOME/.local/bin"
           install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Regenerate models from the pinned spec version
-        # SDK 0.6.x targets UCP 2026-08-25 (see the README compatibility
-        # table). Bump this pin together with the SDK version line.
-        run: ./generate_models.sh 2026-08-25
-      - name: Fail if regeneration does not reproduce the committed models
-        run: |
-          git add -A -- src/ucp_sdk/models/schemas
-          if ! git diff --cached --quiet -- src/ucp_sdk/models/schemas; then
-            echo "::error::Committed models differ from regeneration against the pinned UCP spec. Either the generation pipeline is broken, or the models were edited without regenerating. Run ./generate_models.sh 2026-08-25 and commit the result."
-            git --no-pager diff --cached --stat -- src/ucp_sdk/models/schemas
-            git --no-pager diff --cached -- src/ucp_sdk/models/schemas
+          export PATH="$HOME/.local/bin:$PATH"
+
+          rm -rf "$RUNNER_TEMP/ucp-spec"
+          git clone --filter=blob:none --no-checkout https://github.com/Universal-Commerce-Protocol/ucp.git "$RUNNER_TEMP/ucp-spec"
+          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$UCP_SHA"
+          ./generate_models.sh --from-lock --spec-dir "$RUNNER_TEMP/ucp-spec"
+
+          if [ -n "$(git status --porcelain -- src/ucp_sdk pyproject.toml ucp-lock.json)" ]; then
+            echo "::error::Committed models differ from regeneration against ucp-lock.json. Run ./generate_models.sh --from-lock and commit the result."
+            git status --short -- src/ucp_sdk pyproject.toml ucp-lock.json
+            git --no-pager diff -- src/ucp_sdk pyproject.toml ucp-lock.json
             exit 1
           fi
-          echo "Committed models match regeneration."

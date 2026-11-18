@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, Any, Literal
 
 from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
@@ -362,6 +362,24 @@ class DailyHour(BaseModel):
     """
 
 
+class DateInterval(BaseModel):
+    """
+    Represents a closed date range defined by start and end dates.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    start_date: date
+    """
+    Start date of the interval in ISO 8601 format.
+    """
+    end_date: date
+    """
+    End date of the interval in ISO 8601 format. MUST be on or after `start_date`.
+    """
+
+
 class Description(BaseModel):
     """
     Description content in one or more formats. At least one format must be provided.
@@ -446,6 +464,14 @@ class DiscountsObjectUpdateRequest(BaseModel):
     """
 
 
+Duration = TypeAliasType(
+    "Duration", Annotated[timedelta, Field(..., title="Duration")]
+)
+"""
+A length of time as an ISO 8601 duration (RFC 3339 Appendix A grammar) with whole-number components greater than zero: weeks alone, or years, months, and days in that order, optionally followed by `T` and hours, minutes, and seconds in that order, each at most once (e.g., `P30D` is 30 days, `PT30M` is 30 minutes, `P1M` is one month; `T` separates date units from time units, so `M` before it means months and after it minutes). It states a length, not an instant; resolving it to a calendar time is up to the schema that uses it.
+"""
+
+
 class EmbeddedConfig(BaseModel):
     """
     Per-session configuration for embedded transport binding. Allows businesses to vary EP availability and delegations based on cart contents, agent authorization, or policy.
@@ -479,6 +505,7 @@ ErrorCode = TypeAliasType(
                 "eligibility_invalid",
                 "identity_required",
                 "insufficient_scope",
+                "purchase_option_unavailable",
             ],
             title="ErrorCode",
         ),
@@ -550,6 +577,24 @@ class Extension(BaseModel):
     """
     Extension parameters such as advertised UCP capabilities.
     """
+
+
+Amount1 = TypeAliasType(
+    "Amount1",
+    Annotated[int, Field(..., ge=0, le=9007199254740991, title="Amount")],
+)
+"""
+Estimated maximum flat charge, in ISO 4217 minor units of the currency the covered items are priced in, charged per the unit of the fee `type`. `0` states that nothing is charged. Mutually exclusive with `basis_points`.
+"""
+
+
+Amount2 = TypeAliasType(
+    "Amount2",
+    Annotated[int, Field(..., ge=1, le=9007199254740991, title="Amount")],
+)
+"""
+Cap on a `basis_points` charge: the charge is at most this amount, in ISO 4217 minor units of the currency the covered items are priced in, per the unit of the fee `type`. Requires `basis_points`.
+"""
 
 
 class FulfillmentAvailableMethod(BaseModel):
@@ -1932,6 +1977,44 @@ class PlatformFulfillmentConfig(BaseModel):
     """
 
 
+class PolicyReturnPoliciesItemBase(BaseModel):
+    """
+    A `policies[]` entry; validates against `return_policy` when `type` is `dev.ucp.shopping.policy.return`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str = Field(
+        ...,
+        examples=[
+            "dev.ucp.shopping.checkout",
+            "dev.ucp.common.identity_linking",
+            "com.example.loyalty_gold",
+            "com.example-shop.checkout",
+            "com.2example.cart",
+            "uk.co.example-shop.checkout",
+            "xn--p1ai.example.checkout",
+        ],
+        pattern="^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$",
+    )
+    """
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+
+
 class PostalAddress(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -2060,6 +2143,68 @@ class ProviderBase(BaseModel):
     """
 
 
+class PurchaseOptionsDetailProductOption(DetailProductOption):
+    pass
+
+
+class PurchaseOptionsLookupVariantBarcode(FulfillmentLookupVariantBarcode):
+    pass
+
+
+class PurchaseOptionsLookupVariantSeller(LookupVariantSeller):
+    """
+    Optional seller context for this variant.
+    """
+
+
+class PurchaseOptionsPoliciesItemBase(BaseModel):
+    """
+    A `policies[]` entry; validates against `subscription_policy` when `type` is `dev.ucp.shopping.policy.subscription`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str = Field(
+        ...,
+        examples=[
+            "dev.ucp.shopping.checkout",
+            "dev.ucp.common.identity_linking",
+            "com.example.loyalty_gold",
+            "com.example-shop.checkout",
+            "com.2example.cart",
+            "uk.co.example-shop.checkout",
+            "xn--p1ai.example.checkout",
+        ],
+        pattern="^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9_-]*[a-z0-9_])?)+$",
+    )
+    """
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+
+
+class PurchaseOptionsVariantBarcode(FulfillmentLookupVariantBarcode):
+    pass
+
+
+class PurchaseOptionsVariantSeller(LookupVariantSeller):
+    """
+    Optional seller context for this variant.
+    """
+
+
 class QuantityUnit(BaseModel):
     """
     Sale-basis descriptor for quantities: the shared unit descriptor plus the Business's ordering policy. Its unit-descriptor machine identity remains (`unit`, effective `scale`); `display_text` and `increment` are excluded from identity and mismatch comparison.
@@ -2109,6 +2254,32 @@ class Rating(BaseModel):
     count: int | None = Field(None, ge=0)
     """
     Number of reviews contributing to the rating.
+    """
+
+
+class ReturnEligibility(BaseModel):
+    """
+    An open return eligibility statement. `window` states a guaranteed minimum period after an anchor event and, once resolved, the instant it ends; expiration does not signal non-returnability. `unlimited` states no time restriction, not unconditional eligibility. `not_accepted` states that the business's return policy does not accept returns of the covered items; it does not describe remedies under applicable law or third-party guarantees. Unknown types establish no eligibility inference; consumers may use the base policy's `description`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: str
+    """
+    Eligibility kind. Well-known values: `window`, `unlimited`, `not_accepted`. Unknown values establish no eligibility inference.
+    """
+    duration: Duration | None = None
+    """
+    Length of the return window after the `anchor` event. It states the term for presentation; the Business resolves the deadline as `expires_at`.
+    """
+    anchor: str | None = None
+    """
+    Event the window is measured from. Well-known values: `purchased`, `fulfilled`, `delivered`.
+    """
+    expires_at: AwareDatetime | None = None
+    """
+    RFC 3339 instant at which the window ends, resolved by the Business once the `anchor` event has occurred (e.g., on an order after delivery). When covered quantities reach the anchor at different times, it states the earliest of their deadlines. An otherwise eligible return requested no later than this instant is accepted.
     """
 
 
@@ -2527,6 +2698,32 @@ Monetary amount in the currency's minor unit as defined by ISO 4217. Refer to th
 """
 
 
+class SubscriptionPolicy(BaseModel):
+    """
+    A policy of type `dev.ucp.shopping.policy.subscription`: the terms of the recurring orders a line results in — until when, how the buyer cancels, and where they manage it. Targets the line items it governs. Adds no fields to the base policy.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["dev.ucp.shopping.policy.subscription"]
+    """
+    Policy discriminator for subscription terms.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+
+
 class TimeInterval(BaseModel):
     """
     Reusable opening and closing time fields for a containing schedule schema. Containing schemas determine whether the `opens` and `closes` pair is required; this fragment's standalone `{}` is not an interval.
@@ -2826,6 +3023,8 @@ WarningCode = TypeAliasType(
                 "prop65",
                 "fulfillment_changed",
                 "payment_term_changed",
+                "purchase_option_changed",
+                "totals_changed",
                 "age_restricted",
             ],
             title="WarningCode",
@@ -3642,6 +3841,44 @@ class Expectation(BaseModel):
     """
 
 
+class Fee(BaseModel):
+    """
+    A charge on a return, typed by what it is for, as an estimated maximum. `amount` states a flat charge, where `0` means nothing is charged; `basis_points` states a percentage, optionally capped by `max_amount`; with neither, the fee is charged at its actual cost and no maximum is stated.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: ReverseDomainName | None = None
+    """
+    Fee kind, as a reverse-domain name. Well-known values: `dev.ucp.shopping.fee.restocking` (a deduction from the refund, charged per one whole `quantity_unit.unit` returned, for example per lb, or per `each` when `quantity_unit` is absent), `dev.ucp.shopping.fee.return_shipping` (the cost of shipping the return, charged per return shipment), `dev.ucp.shopping.fee.handling` (charged per return request). Vendor kinds use the vendor's own namespace (e.g., `com.example.fee.eco`) and are charged per return request. A vendor fee charged on another basis, such as per item, omits `amount` and states its terms in `display_text`. A fee with an unknown `type` MUST carry `display_text`. Omitted only on an entry with `amount: 0`, which states that the business charges no fee of any kind in its scope, including vendor kinds and kinds defined later.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels this fee applies to; omitted means every channel. A channel need not be listed in the policy's `methods`. When more than one entry applies to a fee on a channel, an entry that lists the channel takes precedence over one that does not; among entries that both list the channel or both do not, an entry with a `type` takes precedence over one without.
+    """
+    amount: Amount1 | None = Field(
+        None, ge=0, le=9007199254740991, title="Amount"
+    )
+    """
+    Estimated maximum flat charge, in ISO 4217 minor units of the currency the covered items are priced in, charged per the unit of the fee `type`. `0` states that nothing is charged. Mutually exclusive with `basis_points`.
+    """
+    basis_points: int | None = Field(None, ge=1, le=10000)
+    """
+    Estimated maximum charge in basis points (hundredths of a percent; `1250` = 12.5%) of the amount paid for the returned quantity, after item-level discounts and excluding tax, shipping, and other fees. On catalog surfaces, where no amount has been paid, it applies to the covered product's price. Mutually exclusive with `amount`.
+    """
+    max_amount: Amount2 | None = Field(
+        None, ge=1, le=9007199254740991, title="Amount"
+    )
+    """
+    Cap on a `basis_points` charge: the charge is at most this amount, in ISO 4217 minor units of the currency the covered items are priced in, per the unit of the fee `type`. Requires `basis_points`.
+    """
+    display_text: str | None = None
+    """
+    Human-readable fee label, naming any condition under which the fee applies (e.g., '15% restocking fee on opened items'). Required when `type` is not a well-known fee kind, and when the fee has neither `amount` nor `basis_points`.
+    """
+
+
 class FulfillmentBusinessSchema(BaseModel):
     """
     Business-level fulfillment capability configuration
@@ -3875,6 +4112,10 @@ class Item(BaseModel):
     """
     Unit price in ISO 4217 minor units. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`.
     """
+    list_price: Amount | None = None
+    """
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. On an Order, this is the value captured at Checkout.
+    """
     quantity_unit: QuantityUnit | None = None
     """
     Sale basis this item's `quantity` is denominated in. On an authoritative Business response, absence encodes the default `each` machine identity (`C62`, 0); the Business MUST include this descriptor for every non-`each` response. On Platform requests, omission makes no assertion: the Business interprets `quantity` using the item's authoritative sale basis. If the Platform includes this descriptor, it asserts the unit-descriptor machine identity. The Business MUST compare that machine identity (`unit`, effective `scale`), ignore `display_text` and `increment`, and resolve a mismatch by conversion surfaced as a visible line revision with a warning, or by rejection with a recoverable business outcome; silent reinterpretation is forbidden. An explicit `C62` descriptor at effective scale 0 matches an authoritative basis represented by an absent descriptor.
@@ -3937,30 +4178,6 @@ Common JSON-RPC 2.0 transport envelope used by UCP JSON-RPC-based bindings. This
 """
 
 
-class LineItem(BaseModel):
-    """
-    Line item object. Expected to use the currency of the parent object.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    item: Item
-    quantity: int = Field(..., ge=1, le=9007199254740991)
-    """
-    Always an integer step count. On Platform requests, steps use the item's Business-authoritative sale basis; omitting `item.quantity_unit` makes no assertion and does not imply `each`. On Business responses, `item.quantity_unit` describes the basis; if absent, it encodes the `each` machine identity (`C62`, 0) and `quantity` counts whole items.
-    """
-    totals: list[Total]
-    """
-    Line item totals breakdown.
-    """
-    parent_id: str | None = None
-    """
-    Parent line item identifier for any nested structures.
-    """
-
-
 class LineItemCreateRequest(BaseModel):
     """
     Request payload to create a new LineItem. Line item object. Expected to use the currency of the parent object.
@@ -3973,6 +4190,10 @@ class LineItemCreateRequest(BaseModel):
     quantity: int = Field(..., ge=1, le=9007199254740991)
     """
     Always an integer step count. On Platform requests, steps use the item's Business-authoritative sale basis; omitting `item.quantity_unit` makes no assertion and does not imply `each`. On Business responses, `item.quantity_unit` describes the basis; if absent, it encodes the `each` machine identity (`C62`, 0) and `quantity` counts whole items.
+    """
+    selected_purchase_option_id: str | None = None
+    """
+    ID of the selected purchase option, one of `purchase_options[].id`. The Business selects the default where the Platform made no choice, and reports any change it makes with a `purchase_option_changed` warning.
     """
 
 
@@ -3994,73 +4215,9 @@ class LineItemUpdateRequest(BaseModel):
     """
     Parent line item identifier for any nested structures.
     """
-
-
-class Location(BaseModel):
+    selected_purchase_option_id: str | None = None
     """
-    The full, rich representation of a physical business location. Builds on the Location Summary schema with discovery-centric details such as geographic coordinates, operating hours, timezone, and amenities.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Stable, opaque, Business-scoped Location identifier.
-    """
-    name: str
-    """
-    Buyer-facing, Business-owned display name.
-    """
-    address: PostalAddress | None = None
-    """
-    Physical address of the location.
-    """
-    geo: Geo | None = None
-    """
-    Geographic coordinates for the location.
-    """
-    amenities: dict[AmenityType, Amenity] | None = None
-    """
-    Static features, services, or capabilities of the Location, keyed by reverse-domain amenity identifier. Each value provides a buyer-facing description; the key alone defines amenity identity and filter matching.
-    """
-    hours: list[DailyHour] | None = None
-    """
-    Regular weekly operating hours whose day and time values use this Location's canonical local civil-time frame. Multiple entries for the same day support split shifts. An omitted day has no regular interval beginning that day; an interval beginning on the preceding day can carry into it. Omission of the entire `hours` property means the regular schedule is unknown.
-    """
-    exception_hours: list[ExceptionHour] | None = None
-    """
-    Date-specific operating-hour exceptions, including full closures, whose date and time values use this Location's canonical local civil-time frame.
-    """
-    timezone: str | None = None
-    """
-    The Business-owned IANA Time Zone Database identifier (e.g., 'America/New_York') defining this Location's canonical local civil-time frame for all returned schedule day, time, and date fields. The Business does not vary this canonical framing by the requesting Platform's or Buyer's timezone. Required when hours or exception_hours is present.
-    """
-
-
-class LocationDestination(BaseModel):
-    """
-    A business location fulfillment destination. Business-authored and response-only: the Platform selects a location via `selected_destination_id` rather than writing destinations.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    type: Literal["business_location"]
-    """
-    Destination type discriminator. Response-only.
-    """
-    id: str
-    """
-    Stable, opaque, Business-scoped Location identifier.
-    """
-    name: str
-    """
-    Buyer-facing, Business-owned display name.
-    """
-    address: PostalAddress | None = None
-    """
-    Physical address of the location.
+    ID of the selected purchase option, one of `purchase_options[].id`. The Business selects the default where the Platform made no choice, and reports any change it makes with a `purchase_option_changed` warning.
     """
 
 
@@ -4135,74 +4292,6 @@ class LocationSearchRequest(BaseModel):
     """
     filters: LocationFilter | None = None
     pagination: PaginationRequest | None = None
-
-
-class LocationSummary(BaseModel):
-    """
-    A summary of a physical business location.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Stable, opaque, Business-scoped Location identifier.
-    """
-    name: str
-    """
-    Buyer-facing, Business-owned display name.
-    """
-    address: PostalAddress | None = None
-    """
-    Physical address of the location.
-    """
-
-
-class LookupLocation(BaseModel):
-    """
-    Location with required correlation metadata for lookup responses.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Stable, opaque, Business-scoped Location identifier.
-    """
-    name: str
-    """
-    Buyer-facing, Business-owned display name.
-    """
-    address: PostalAddress | None = None
-    """
-    Physical address of the location.
-    """
-    geo: Geo | None = None
-    """
-    Geographic coordinates for the location.
-    """
-    amenities: dict[AmenityType, Amenity] | None = None
-    """
-    Static features, services, or capabilities of the Location, keyed by reverse-domain amenity identifier. Each value provides a buyer-facing description; the key alone defines amenity identity and filter matching.
-    """
-    hours: list[DailyHour] | None = None
-    """
-    Regular weekly operating hours whose day and time values use this Location's canonical local civil-time frame. Multiple entries for the same day support split shifts. An omitted day has no regular interval beginning that day; an interval beginning on the preceding day can carry into it. Omission of the entire `hours` property means the regular schedule is unknown.
-    """
-    exception_hours: list[ExceptionHour] | None = None
-    """
-    Date-specific operating-hour exceptions, including full closures, whose date and time values use this Location's canonical local civil-time frame.
-    """
-    timezone: str | None = None
-    """
-    The Business-owned IANA Time Zone Database identifier (e.g., 'America/New_York') defining this Location's canonical local civil-time frame for all returned schedule day, time, and date fields. The Business does not vary this canonical framing by the requesting Platform's or Buyer's timezone. Required when hours or exception_hours is present.
-    """
-    inputs: list[LookupLocationInput] = Field(..., min_length=1)
-    """
-    Which request identifiers resolved to this Location. Each entry preserves one identifier exactly as supplied in the request.
-    """
 
 
 class MediaBase(BaseModel):
@@ -4501,36 +4590,6 @@ class OrderFulfillment(BaseModel):
     """
 
 
-class OrderLineItem(BaseModel):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Line item identifier.
-    """
-    item: Item
-    """
-    Purchased item data, including identity, price, and sale basis.
-    """
-    quantity: OrderLineItemQuantity = Field(..., title="OrderLineItemQuantity")
-    """
-    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
-    """
-    totals: list[Total]
-    """
-    Line item totals breakdown.
-    """
-    status: Literal["processing", "partial", "fulfilled", "removed"]
-    """
-    Derived status: removed if quantity.total == 0, fulfilled if quantity.total > 0 and quantity.fulfilled == quantity.total, partial if quantity.total > 0 and quantity.fulfilled > 0, otherwise processing.
-    """
-    parent_id: str | None = None
-    """
-    Parent line item identifier for any nested structures.
-    """
-
-
 class OrderPayment(BaseModel):
     """
     Order payment details carrying the term the Buyer accepted at checkout.
@@ -4771,7 +4830,7 @@ class Policy(BaseModel):
     )
     type: ReverseDomainName
     """
-    Policy type discriminator. Open reverse-DNS vocabulary. Well-known values: `dev.ucp.shopping.policy.return` (return terms), `dev.ucp.shopping.policy.warranty` (warranty terms). Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
     """
     description: Description
     """
@@ -4793,6 +4852,18 @@ Provider = TypeAliasType(
 )
 """
 A trusted identity provider for delegated authentication, keyed by the 'type' discriminator. 'oauth2' denotes an OAuth 2.0 / OIDC authorization server. Future versions MAY define additional types (e.g. wallet attestation) as non-breaking extensions; platforms MUST treat entries whose 'type' they do not support as filtered out (see Provider Selection).
+"""
+
+
+PurchaseOptionsPoliciesItem = TypeAliasType(
+    "PurchaseOptionsPoliciesItem",
+    Annotated[
+        SubscriptionPolicy | PurchaseOptionsPoliciesItemBase,
+        Field(..., title="PurchaseOptionsPoliciesItem"),
+    ],
+)
+"""
+A `policies[]` entry; validates against `subscription_policy` when `type` is `dev.ucp.shopping.policy.subscription`.
 """
 
 
@@ -4839,6 +4910,74 @@ class Requires(BaseModel):
     capabilities: dict[ReverseDomainName, VersionConstraint] | None = None
     """
     Required capability versions, keyed by capability name. Keys must be a subset of the extension's $defs keys.
+    """
+
+
+class ReturnBody(BaseModel):
+    """
+    Return terms for a `dev.ucp.shopping.policy.return` policy.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    eligibility: ReturnEligibility | None = None
+    """
+    Structured return eligibility statement. Omitted means eligibility is not stated structurally, not that returns are unlimited or not accepted. When `type` is `not_accepted`, the business's return policy does not accept returns of the covered items, and `supported_resolutions`, `methods`, and `fees` MUST be omitted.
+    """
+    supported_resolutions: list[str] | None = Field(None, min_length=1)
+    """
+    Return outcomes guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `original_payment_method`, `store_credit`, `gift_card`, `exchange`, `replacement`.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `in_store`, `by_mail`, `kiosk`. Omit when channels are not stated structurally.
+    """
+    fees: list[Fee] | None = Field(None, min_length=1)
+    """
+    Estimated maximum charges on a return, each typed by what it is for and optionally scoped to channels; not an exhaustive list. Omitted means fees are not stated structurally, not that none are charged.
+    """
+
+
+class ReturnPolicy(BaseModel):
+    """
+    A return policy statement with type `dev.ucp.shopping.policy.return`.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["dev.ucp.shopping.policy.return"]
+    """
+    Policy type discriminator. Open reverse-DNS vocabulary. See specification documentation for the registry of well-known policy types. Businesses MAY define custom types in their own domain (e.g., `com.example.policy.price_match`). Platforms MUST tolerate unknown values.
+    """
+    description: Description
+    """
+    Human-readable policy summary in one or more formats (plain, markdown, html). Required on every policy so a platform can present it without understanding any type-specific fields. This is not the buyer-facing disclosure — display is compelled by a `messages[]` warning (see the Policies section).
+    """
+    applies_to: list[str] | None = None
+    """
+    RFC 9535 JSONPath expressions identifying the nodes this policy applies to, relative to the embedding response root (e.g., `$.line_items[0]` in cart/checkout, `$.products[2]` in catalog). Each target covers the node it names and everything nested under it, so a target on a product also covers its variants. A singular query (RFC 9535 Section 2.3.5.1; name and index selectors only) names a single node; filters, wildcards, and slices match a set. When omitted, the policy applies to the entire response. When policies of the same `type` contest a node, the narrowest target wins and overrides the rest. See the Policies section for how specificity resolves.
+    """
+    url: AnyUrl | None = None
+    """
+    Optional link to the full policy document.
+    """
+    eligibility: ReturnEligibility | None = None
+    """
+    Structured return eligibility statement. Omitted means eligibility is not stated structurally, not that returns are unlimited or not accepted. When `type` is `not_accepted`, the business's return policy does not accept returns of the covered items, and `supported_resolutions`, `methods`, and `fees` MUST be omitted.
+    """
+    supported_resolutions: list[str] | None = Field(None, min_length=1)
+    """
+    Return outcomes guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `original_payment_method`, `store_credit`, `gift_card`, `exchange`, `replacement`.
+    """
+    methods: list[str] | None = Field(None, min_length=1)
+    """
+    Return channels guaranteed for every eligible return, as an unordered set; not an exhaustive list. Well-known values: `in_store`, `by_mail`, `kiosk`. Omit when channels are not stated structurally.
+    """
+    fees: list[Fee] | None = Field(None, min_length=1)
+    """
+    Estimated maximum charges on a return, each typed by what it is for and optionally scoped to channels; not an exhaustive list. Omitted means fees are not stated structurally, not that none are charged.
     """
 
 
@@ -5377,6 +5516,36 @@ Service binding in API responses. Includes per-resource transport configuration 
 """
 
 
+class SubscriptionSchedule(BaseModel):
+    """
+    One run of recurring orders on one set of terms: a buyer-facing `description`, each order's `totals`, an optional stated regular `interval`, and when the run starts and ends.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    description: Description
+    """
+    Complete buyer-facing statement of this run: what each order costs, how often, from when, and until when. Sufficient on its own; a Platform can render it verbatim.
+    """
+    totals: list[Total] = Field(..., min_length=1)
+    """
+    Breakdown of each recurring order, as a line item's `totals`, with exactly one `total` entry. Per unit on a catalog variant; for the line at its quantity on a cart or checkout. Before taxes, fulfillment, and fees unless the Business can state them.
+    """
+    interval: Duration | None = None
+    """
+    Stated regular cadence of recurring orders in this run (e.g., `P30D`, `P1M`, `P2W`), agreeing with `description`. Omitted when cadence is not structurally stated; omission does not mean no recurrence. This is not an execution rule or a generator of order dates; the Business owns calendar arithmetic.
+    """
+    starts_at: AwareDatetime | None = None
+    """
+    RFC 3339 date-time when the first order under this schedule is placed. Supplementary to `description`; omitted where the Business cannot yet determine it.
+    """
+    ends_at: AwareDatetime | None = None
+    """
+    RFC 3339 date-time after which no order is placed under this schedule, before the next schedule's `starts_at`. On the last schedule it marks a subscription that ends on its own; omitted there, the orders continue until the buyer cancels.
+    """
+
+
 class UcpEntity(BaseModel):
     """
     Shared foundation for all UCP entities.
@@ -5605,18 +5774,6 @@ class FulfillmentCreateRequest(BaseModel):
     """
 
 
-FulfillmentDestination = TypeAliasType(
-    "FulfillmentDestination",
-    Annotated[
-        LocationDestination | ShippingDestination | FulfillmentDestinationBase,
-        Field(..., title="FulfillmentDestination"),
-    ],
-)
-"""
-A destination for fulfillment.
-"""
-
-
 class FulfillmentGroup(BaseModel):
     """
     A merchant-generated package/group of line items with fulfillment options.
@@ -5640,40 +5797,6 @@ class FulfillmentGroup(BaseModel):
     selected_option_id: str | None = None
     """
     ID of the selected fulfillment option for this group.
-    """
-
-
-class FulfillmentMethodBase(BaseModel):
-    """
-    A fulfillment method with destinations and groups.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    id: str
-    """
-    Unique fulfillment method identifier.
-    """
-    type: str
-    """
-    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
-    """
-    line_item_ids: list[str]
-    """
-    Line item IDs fulfilled via this method.
-    """
-    destinations: list[FulfillmentDestination] | None = None
-    """
-    Available destinations for this method. In Business responses, each destination carries a `type` and `id`.
-    """
-    selected_destination_id: str | None = None
-    """
-    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
-    """
-    groups: list[FulfillmentGroup] | None = None
-    """
-    Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
 
 
@@ -6014,9 +6137,21 @@ class PermalinkBusinessSchema(BaseModel):
     """
 
 
-class PickupMethod(BaseModel):
+PolicyReturnPoliciesItem = TypeAliasType(
+    "PolicyReturnPoliciesItem",
+    Annotated[
+        ReturnPolicy | PolicyReturnPoliciesItemBase,
+        Field(..., title="PolicyReturnPoliciesItem"),
+    ],
+)
+"""
+A `policies[]` entry; validates against `return_policy` when `type` is `dev.ucp.shopping.policy.return`.
+"""
+
+
+class PurchaseOption(BaseModel):
     """
-    A fulfillment method with destinations and groups.
+    One way to buy a variant: once, or as a subscription. The Business lists the options it sells; the Platform selects one by `id`.
     """
 
     model_config = ConfigDict(
@@ -6024,27 +6159,211 @@ class PickupMethod(BaseModel):
     )
     id: str
     """
-    Unique fulfillment method identifier.
+    Opaque identifier, sent back as `selected_purchase_option_id`.
     """
-    type: Literal["pickup"]
+    title: str
     """
-    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
+    Short label distinguishing this option from its siblings (e.g. 'One-time', 'Subscribe & save 15%').
     """
-    line_item_ids: list[str]
+    description: Description | None = None
     """
-    Line item IDs fulfilled via this method.
+    Supplementary buyer-facing context for the title, describing the way of buying (e.g. 'A fresh bag every month, 15% off'). Terms belong to the policy and amounts to `schedules`.
     """
-    destinations: list[LocationDestination] | None = None
+    price: Price
     """
-    Business-authored business locations able to fulfill this method. Response-only: the Platform selects one via `selected_destination_id`, never writes one.
+    What one unit costs in the current purchase under this option, before quantity, taxes, fees, and fulfillment. `0` means genuinely free. Recurring orders are stated in `schedules`.
     """
-    selected_destination_id: str | None = None
+    schedules: list[SubscriptionSchedule] | None = Field(None, min_length=1)
     """
-    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
+    The recurring orders that follow the current purchase, as consecutive schedules in the order they take effect. Present only on an option that results in recurring orders; binding once selected on a cart or checkout line.
     """
-    groups: list[FulfillmentGroup] | None = None
+
+
+class PurchaseOptionsLookupVariant(BaseModel):
     """
-    Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
+    A lookup variant (carrying input correlation) carrying purchase options.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[PurchaseOptionsLookupVariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
+    """
+    handle: str | None = None
+    """
+    URL-safe variant handle/slug.
+    """
+    title: str
+    """
+    Variant display title (e.g., 'Blue / Large').
+    """
+    description: Description
+    """
+    Variant description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical variant page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Variant categories with optional taxonomy identifiers.
+    """
+    price: Price
+    """
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
+    """
+    quantity_unit: QuantityUnit | None = None
+    """
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
+    """
+    media: list[Media] | None = None
+    """
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    rating: Rating | None = None
+    """
+    Variant rating.
+    """
+    tags: list[str] | None = None
+    """
+    Variant tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard variant model.
+    """
+    seller: PurchaseOptionsLookupVariantSeller | None = Field(
+        None, title="PurchaseOptionsLookupVariantSeller"
+    )
+    """
+    Optional seller context for this variant.
+    """
+    inputs: list[InputCorrelation] = Field(..., min_length=1)
+    """
+    Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
+    """
+    purchase_options: list[PurchaseOption] | None = Field(None, min_length=1)
+    """
+    The ways this variant can be bought, in the Business's order of preference. The first is the default, and the variant's `price` is its `price`. Absent when the variant is bought the ordinary way.
+    """
+
+
+class PurchaseOptionsVariant(BaseModel):
+    """
+    A catalog variant carrying purchase options.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this variant. Used as item.id in checkout.
+    """
+    sku: str | None = None
+    """
+    Business-assigned identifier for inventory and fulfillment.
+    """
+    barcodes: list[PurchaseOptionsVariantBarcode] | None = None
+    """
+    Industry-standard product identifiers for cross-reference and correlation.
+    """
+    handle: str | None = None
+    """
+    URL-safe variant handle/slug.
+    """
+    title: str
+    """
+    Variant display title (e.g., 'Blue / Large').
+    """
+    description: Description
+    """
+    Variant description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical variant page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Variant categories with optional taxonomy identifiers.
+    """
+    price: Price
+    """
+    Current selling price. Price is the amount per one whole `quantity_unit.unit` (for example, per lb or per hour); when `quantity_unit` is absent, it is per `each`. Line total is `price × quantity × 10^-scale`, computed and rounded once by the Business; `totals` remain authoritative.
+    """
+    quantity_unit: QuantityUnit | None = None
+    """
+    Sale basis this variant's `quantity` is denominated in. The default sale basis is `each`, whose machine identity is (`C62`, 0); `C62` is the UN/CEFACT Rec20 code for one/each. An absent catalog descriptor encodes that default. An `increment` advertises the ordering granularity in steps (for example, `scale` 2 with `increment` 25 sells in 0.25-unit multiples).
+    """
+    list_price: Price | None = None
+    """
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
+    """
+    unit_price: UnitPrice | None = None
+    """
+    Price per standard unit of measurement, for shelf-style comparison display. MAY be omitted when unit pricing does not apply.
+    """
+    availability: Availability | None = None
+    """
+    Variant availability for purchase.
+    """
+    options: list[SelectedOption] | None = None
+    """
+    Option values that define this variant (e.g., Color: Blue, Size: Large).
+    """
+    media: list[Media] | None = None
+    """
+    Variant media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    rating: Rating | None = None
+    """
+    Variant rating.
+    """
+    tags: list[str] | None = None
+    """
+    Variant tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard variant model.
+    """
+    seller: PurchaseOptionsVariantSeller | None = Field(
+        None, title="PurchaseOptionsVariantSeller"
+    )
+    """
+    Optional seller context for this variant.
+    """
+    purchase_options: list[PurchaseOption] | None = Field(None, min_length=1)
+    """
+    The ways this variant can be bought, in the Business's order of preference. The first is the default, and the variant's `price` is its `price`. Absent when the variant is bought the ordinary way.
     """
 
 
@@ -6078,6 +6397,41 @@ class ResponseAskSchema(BaseModel):
     payment_handlers: (
         dict[ReverseDomainName, list[PaymentHandlerBase]] | None
     ) = None
+    """
+    Payment handler registry keyed by reverse-domain name.
+    """
+
+
+class ResponseBookingSchema(BaseModel):
+    """
+    UCP metadata for booking responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    version: Version
+    map_order: MapOrder | None = None
+    """
+    Preferred key-traversal order for sibling registry fields inside the root `ucp` envelope (`services`, `capabilities`, and `payment_handlers`).
+    """
+    status: Literal["success", "error"] | None = "success"
+    """
+    Application-level status of the UCP operation.
+    """
+    services: dict[ReverseDomainName, list[ServiceResponseSchema]] | None = None
+    """
+    Service registry keyed by reverse-domain name.
+    """
+    capabilities: (
+        dict[ReverseDomainName, list[CapabilityResponseSchema]] | None
+    ) = None
+    """
+    Capability registry keyed by reverse-domain name.
+    """
+    payment_handlers: dict[
+        ReverseDomainName, list[PaymentHandlerResponseSchema]
+    ]
     """
     Payment handler registry keyed by reverse-domain name.
     """
@@ -6515,7 +6869,7 @@ class Variant(BaseModel):
     """
     list_price: Price | None = None
     """
-    List price before discounts (for strikethrough display).
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
     """
     unit_price: UnitPrice | None = None
     """
@@ -6548,6 +6902,20 @@ class Variant(BaseModel):
     seller: VariantSeller | None = Field(None, title="VariantSeller")
     """
     Optional seller context for this variant.
+    """
+
+
+class VariantPurchaseOptions(BaseModel):
+    """
+    The purchase option fields added to a catalog variant.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    purchase_options: list[PurchaseOption] | None = Field(None, min_length=1)
+    """
+    The ways this variant can be bought, in the Business's order of preference. The first is the default, and the variant's `price` is its `price`. Absent when the variant is bought the ordinary way.
     """
 
 
@@ -6623,7 +6991,7 @@ class DetailProduct(BaseModel):
     """
     list_price_range: PriceRange | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
     """
     media: list[Media] | None = None
     """
@@ -6727,7 +7095,7 @@ class FulfillmentLookupVariant(BaseModel):
     """
     list_price: Price | None = None
     """
-    List price before discounts (for strikethrough display).
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
     """
     unit_price: UnitPrice | None = None
     """
@@ -6768,18 +7136,6 @@ class FulfillmentLookupVariant(BaseModel):
     Which request identifiers resolved to this variant, and how. Each entry maps a request ID to its match type.
     """
     fulfillment: CatalogFulfillment | None = None
-
-
-FulfillmentMethod = TypeAliasType(
-    "FulfillmentMethod",
-    Annotated[
-        PickupMethod | ShippingMethod | FulfillmentMethodBase,
-        Field(..., title="FulfillmentMethod"),
-    ],
-)
-"""
-A fulfillment method with destinations and groups.
-"""
 
 
 class FulfillmentVariant(BaseModel):
@@ -6832,7 +7188,7 @@ class FulfillmentVariant(BaseModel):
     """
     list_price: Price | None = None
     """
-    List price before discounts (for strikethrough display).
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
     """
     unit_price: UnitPrice | None = None
     """
@@ -6871,18 +7227,111 @@ class FulfillmentVariant(BaseModel):
     fulfillment: CatalogFulfillment | None = None
 
 
-class LocationLookupResponse(BaseModel):
+class LineItem(BaseModel):
+    """
+    Line item object. Expected to use the currency of the parent object.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ResponseLocationSchema
-    locations: list[LookupLocation]
+    id: str
+    item: Item
+    quantity: int = Field(..., ge=1, le=9007199254740991)
     """
-    Locations matching the requested identifiers and refinements. May contain fewer Locations if some identifiers do not resolve or their resolved Locations are filtered out, or more if one identifier resolves to multiple Locations. When multiple identifiers resolve to the same Location, one returned Location carries all corresponding `inputs` entries.
+    Always an integer step count. On Platform requests, steps use the item's Business-authoritative sale basis; omitting `item.quantity_unit` makes no assertion and does not imply `each`. On Business responses, `item.quantity_unit` describes the basis; if absent, it encodes the `each` machine identity (`C62`, 0) and `quantity` counts whole items.
     """
-    messages: list[Message] | None = None
+    totals: list[Total]
     """
-    Errors, warnings, or informational messages about the requested Locations, including `batch_limit_applied` when the Business processes only its configured maximum number of identifiers.
+    Line item totals breakdown.
+    """
+    parent_id: str | None = None
+    """
+    Parent line item identifier for any nested structures.
+    """
+    purchase_options: list[PurchaseOption] | None = Field(None, min_length=1)
+    """
+    The ways this line's variant can be bought, priced for this cart or checkout. The selected option's price is the line's `item.price`; the others are indicative.
+    """
+    selected_purchase_option_id: str | None = None
+    """
+    ID of the selected purchase option, one of `purchase_options[].id`. The Business selects the default where the Platform made no choice, and reports any change it makes with a `purchase_option_changed` warning.
+    """
+
+
+class Location(BaseModel):
+    """
+    The full, rich representation of a physical business location. Builds on the Location Summary schema with discovery-centric details such as geographic coordinates, operating hours, timezone, and amenities.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Stable, opaque, Business-scoped Location identifier.
+    """
+    name: str
+    """
+    Buyer-facing, Business-owned display name.
+    """
+    address: PostalAddress | None = None
+    """
+    Physical address of the location.
+    """
+    media: list[Media] | None = None
+    """
+    Location media assets (e.g., images, logos, hero banners). First item is the featured media for presentation.
+    """
+    geo: Geo | None = None
+    """
+    Geographic coordinates for the location.
+    """
+    amenities: dict[AmenityType, Amenity] | None = None
+    """
+    Static features, services, or capabilities of the Location, keyed by reverse-domain amenity identifier. Each value provides a buyer-facing description; the key alone defines amenity identity and filter matching.
+    """
+    hours: list[DailyHour] | None = None
+    """
+    Regular weekly operating hours whose day and time values use this Location's canonical local civil-time frame. Multiple entries for the same day support split shifts. An omitted day has no regular interval beginning that day; an interval beginning on the preceding day can carry into it. Omission of the entire `hours` property means the regular schedule is unknown.
+    """
+    exception_hours: list[ExceptionHour] | None = None
+    """
+    Date-specific operating-hour exceptions, including full closures, whose date and time values use this Location's canonical local civil-time frame.
+    """
+    timezone: str | None = None
+    """
+    The Business-owned IANA Time Zone Database identifier (e.g., 'America/New_York') defining this Location's canonical local civil-time frame for all returned schedule day, time, and date fields. The Business does not vary this canonical framing by the requesting Platform's or Buyer's timezone. Required when hours or exception_hours is present.
+    """
+
+
+class LocationDestination(BaseModel):
+    """
+    A business location fulfillment destination. Business-authored and response-only: the Platform selects a location via `selected_destination_id` rather than writing destinations.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    type: Literal["business_location"]
+    """
+    Destination type discriminator. Response-only.
+    """
+    id: str
+    """
+    Stable, opaque, Business-scoped Location identifier.
+    """
+    name: str
+    """
+    Buyer-facing, Business-owned display name.
+    """
+    address: PostalAddress | None = None
+    """
+    Physical address of the location.
+    """
+    media: list[Media] | None = None
+    """
+    Location media assets (e.g., images, logos, hero banners). First item is the featured media for presentation.
     """
 
 
@@ -6899,6 +7348,82 @@ class LocationSearchResponse(BaseModel):
     messages: list[Message] | None = None
     """
     Errors, warnings, or informational messages about the search results.
+    """
+
+
+class LocationSummary(BaseModel):
+    """
+    A summary of a physical business location.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Stable, opaque, Business-scoped Location identifier.
+    """
+    name: str
+    """
+    Buyer-facing, Business-owned display name.
+    """
+    address: PostalAddress | None = None
+    """
+    Physical address of the location.
+    """
+    media: list[Media] | None = None
+    """
+    Location media assets (e.g., images, logos, hero banners). First item is the featured media for presentation.
+    """
+
+
+class LookupLocation(BaseModel):
+    """
+    Location with required correlation metadata for lookup responses.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Stable, opaque, Business-scoped Location identifier.
+    """
+    name: str
+    """
+    Buyer-facing, Business-owned display name.
+    """
+    address: PostalAddress | None = None
+    """
+    Physical address of the location.
+    """
+    media: list[Media] | None = None
+    """
+    Location media assets (e.g., images, logos, hero banners). First item is the featured media for presentation.
+    """
+    geo: Geo | None = None
+    """
+    Geographic coordinates for the location.
+    """
+    amenities: dict[AmenityType, Amenity] | None = None
+    """
+    Static features, services, or capabilities of the Location, keyed by reverse-domain amenity identifier. Each value provides a buyer-facing description; the key alone defines amenity identity and filter matching.
+    """
+    hours: list[DailyHour] | None = None
+    """
+    Regular weekly operating hours whose day and time values use this Location's canonical local civil-time frame. Multiple entries for the same day support split shifts. An omitted day has no regular interval beginning that day; an interval beginning on the preceding day can carry into it. Omission of the entire `hours` property means the regular schedule is unknown.
+    """
+    exception_hours: list[ExceptionHour] | None = None
+    """
+    Date-specific operating-hour exceptions, including full closures, whose date and time values use this Location's canonical local civil-time frame.
+    """
+    timezone: str | None = None
+    """
+    The Business-owned IANA Time Zone Database identifier (e.g., 'America/New_York') defining this Location's canonical local civil-time frame for all returned schedule day, time, and date fields. The Business does not vary this canonical framing by the requesting Platform's or Buyer's timezone. Required when hours or exception_hours is present.
+    """
+    inputs: list[LookupLocationInput] = Field(..., min_length=1)
+    """
+    Which request identifiers resolved to this Location. Each entry preserves one identifier exactly as supplied in the request.
     """
 
 
@@ -6952,7 +7477,7 @@ class LookupVariant(BaseModel):
     """
     list_price: Price | None = None
     """
-    List price before discounts (for strikethrough display).
+    Reference price for comparison display, typically shown as a strikethrough next to `price`, and denominated like `price`. It is not charged and is never part of `totals`; the gap against `price` is a comparison, not a discount. The Business chooses what it is measured against (for example, the price typically charged over a preceding period, or the manufacturer's suggested retail price); what is permitted varies by jurisdiction. `list_price.currency` MUST equal `price.currency`.
     """
     unit_price: UnitPrice | None = None
     """
@@ -7017,66 +7542,71 @@ UCP's MCP transport envelope for JSON-RPC tools/call messages. The schema valida
 """
 
 
-class Order(BaseModel):
+class OrderLineItem(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
     """
-    Order schema with line items, buyer-facing fulfillment expectations, and event logs.
+    Line item identifier.
+    """
+    item: Item
+    """
+    Purchased item data, including identity, price, and sale basis.
+    """
+    quantity: OrderLineItemQuantity = Field(..., title="OrderLineItemQuantity")
+    """
+    Tracks the line item's original, current active, and fulfilled quantities. All three values use the same inherited `item.quantity_unit`. When `item.quantity_unit` is absent on an authoritative order response, each step is one whole item (`each`) under the shared default.
+    """
+    totals: list[Total]
+    """
+    Line item totals breakdown.
+    """
+    status: Literal["processing", "partial", "fulfilled", "removed"]
+    """
+    Derived status: removed if quantity.total == 0, fulfilled if quantity.total > 0 and quantity.fulfilled == quantity.total, partial if quantity.total > 0 and quantity.fulfilled > 0, otherwise processing.
+    """
+    parent_id: str | None = None
+    """
+    Parent line item identifier for any nested structures.
+    """
+    purchase_option: PurchaseOption | None = None
+    """
+    The purchase option selected for this line, as it stood at checkout: a historical record, unchanged if the catalog option later changes, whose `id` need not still resolve. Its `price` is the line's `item.price`; its `schedules` are the recurring orders agreed to. Absent when the variant carried none.
+    """
+
+
+class PickupMethod(BaseModel):
+    """
+    A fulfillment method with destinations and groups.
     """
 
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ResponseOrderSchema
     id: str
     """
-    Unique order identifier.
+    Unique fulfillment method identifier.
     """
-    label: str | None = None
+    type: Literal["pickup"]
     """
-    Human-readable label for identifying the order. MUST only be provided by the business.
+    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
     """
-    checkout_id: str
+    line_item_ids: list[str]
     """
-    Associated checkout ID for reconciliation.
+    Line item IDs fulfilled via this method.
     """
-    permalink_url: AnyUrl
+    destinations: list[LocationDestination] | None = None
     """
-    Permalink to access the order on merchant site.
+    Business-authored business locations able to fulfill this method. Response-only: the Platform selects one via `selected_destination_id`, never writes one.
     """
-    line_items: list[OrderLineItem]
+    selected_destination_id: str | None = None
     """
-    Line items representing what was purchased — can change post-order via edits or exchanges.
+    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
     """
-    fulfillment: OrderFulfillment = Field(..., title="OrderFulfillment")
+    groups: list[FulfillmentGroup] | None = None
     """
-    Fulfillment data: buyer expectations and what actually happened.
-    """
-    adjustments: list[Adjustment] | None = None
-    """
-    Post-order events (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
-    """
-    currency: str
-    """
-    ISO 4217 currency code. MUST match the currency from the originating checkout session.
-    """
-    totals: Totals
-    """
-    Different totals for the order.
-    """
-    policies: list[Policy] | None = None
-    """
-    Snapshot of the policies that applied to the items at checkout, captured on the order as a durable record. `applies_to` targets are relative to the response root.
-    """
-    messages: list[Message] | None = None
-    """
-    Business outcome messages (errors, warnings, informational). Present when the business needs to communicate status or issues to the platform.
-    """
-    attribution: Attribution | None = None
-    """
-    Snapshot of the attribution associated with the originating checkout. Read-only on the order.
-    """
-    payment: OrderPayment | None = None
-    """
-    Payment details for the Order, including the accepted payment term.
+    Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
 
 
@@ -7118,7 +7648,7 @@ class Product(BaseModel):
     """
     list_price_range: PriceRange | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
     """
     media: list[Media] | None = None
     """
@@ -7218,6 +7748,208 @@ class ProfilePlatformSchema(BaseModel):
     """
 
 
+class PurchaseOptionsDetailProduct(BaseModel):
+    """
+    A get_product detail product whose variants carry purchase options. Used by get_product.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[PurchaseOptionsDetailProductOption] | None = None
+    """
+    Product options with availability signals relative to the effective selections.
+    """
+    variants: list[PurchaseOptionsVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+    selected: list[SelectedOption] | None = None
+    """
+    Effective option selections that anchor the featured variant and availability signals. Required when the product has configurable options; may be empty or omitted for products with no option axes.
+    """
+
+
+class PurchaseOptionsLookupProduct(BaseModel):
+    """
+    A lookup product whose variants carry purchase options, preserving input correlation. Used by lookup.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[ProductOption] | None = None
+    """
+    Product options (Size, Color, etc.).
+    """
+    variants: list[PurchaseOptionsLookupVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+
+
+class PurchaseOptionsProduct(BaseModel):
+    """
+    A catalog product whose variants carry purchase options. Used by search.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Global ID (GID) uniquely identifying this product.
+    """
+    handle: str | None = None
+    """
+    URL-safe slug for SEO-friendly URLs (e.g., 'blue-runner-pro'). Use id for stable API references.
+    """
+    title: str
+    """
+    Product title.
+    """
+    description: Description
+    """
+    Product description in one or more formats.
+    """
+    url: AnyUrl | None = None
+    """
+    Canonical product page URL.
+    """
+    categories: list[Category] | None = None
+    """
+    Product categories with optional taxonomy identifiers.
+    """
+    price_range: PriceRange
+    """
+    Price range across all variants.
+    """
+    list_price_range: PriceRange | None = None
+    """
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
+    """
+    media: list[Media] | None = None
+    """
+    Product media (images, videos, 3D models). First item is the featured media for listings.
+    """
+    options: list[ProductOption] | None = None
+    """
+    Product options (Size, Color, etc.).
+    """
+    variants: list[PurchaseOptionsVariant] = Field(..., min_length=1)
+    """
+    Purchasable variants of this product. First item is the featured variant for listings.
+    """
+    rating: Rating | None = None
+    """
+    Aggregate product rating.
+    """
+    tags: list[str] | None = None
+    """
+    Product tags for categorization and search.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Business-defined custom data extending the standard product model.
+    """
+
+
 class Buyer(BaseModel):
     model_config = ConfigDict(
         extra="allow",
@@ -7291,7 +8023,7 @@ class Cart(BaseModel):
     """
     Optional merchant links (policies, FAQs).
     """
-    policies: list[Policy] | None = None
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the items in this cart. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7357,6 +8089,79 @@ class CartUpdateRequest(BaseModel):
     discounts: DiscountsObjectUpdateRequest | None = None
 
 
+class CatalogGetProductResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    product: PurchaseOptionsDetailProduct
+    """
+    The requested product with full detail. Singular — this is a single-resource operation.
+    """
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this product response.
+    """
+    messages: list[Message] | None = None
+    """
+    Warnings or informational messages about the product (e.g., price recently changed, limited availability).
+    """
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
+
+
+class CatalogLookupResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    products: list[PurchaseOptionsLookupProduct]
+    """
+    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
+    """
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog lookup response.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the requested items.
+    """
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
+
+
+class CatalogSearchResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    ucp: ResponseCatalogSchema
+    products: list[PurchaseOptionsProduct]
+    """
+    Products matching the search criteria.
+    """
+    pagination: PaginationResponse | None = None
+    actions: Actions | None = None
+    """
+    Outstanding extension-defined Actions for this catalog search response.
+    """
+    messages: list[Message] | None = None
+    """
+    Errors, warnings, or informational messages about the search results.
+    """
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
+    """
+    Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    """
+    loyalty: Loyalty | None = None
+
+
 class CheckoutCompleteRequest(BaseModel):
     """
     Request payload to complete a Checkout. Base checkout schema. Extensions compose onto this using allOf.
@@ -7375,14 +8180,10 @@ class CheckoutCompleteRequest(BaseModel):
     """
     Payment details with available and selected payment terms.
     """
-    cart_id: str | None = Field(None, deprecated=True)
-    """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
-    """
     ap2: Ap2WithCheckoutMandateCompleteRequest | None = None
 
 
-class CheckoutCreateRequest(BaseModel):
+class CheckoutCreateRequestLineItems(BaseModel):
     """
     Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
     """
@@ -7392,7 +8193,11 @@ class CheckoutCreateRequest(BaseModel):
     )
     line_items: list[LineItemCreateRequest]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
+    """
+    cart_id: str | None = None
+    """
+    Cart ID for checkout initialization. The Business MUST reject requests using it without negotiated Cart support. Cart contents take precedence over overlapping checkout fields; line_items may be omitted or empty.
     """
     buyer: Buyer | None = None
     """
@@ -7405,15 +8210,57 @@ class CheckoutCreateRequest(BaseModel):
     """
     Payment details with available and selected payment terms.
     """
-    cart_id: str | None = None
+    discounts: DiscountsObjectCreateRequest | None = None
+    fulfillment: FulfillmentCreateRequest | None = None
     """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
+    Fulfillment details.
+    """
+
+
+class CheckoutCreateRequestCartId(BaseModel):
+    """
+    Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    line_items: list[LineItemCreateRequest] | None = None
+    """
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
+    """
+    cart_id: str
+    """
+    Cart ID for checkout initialization. The Business MUST reject requests using it without negotiated Cart support. Cart contents take precedence over overlapping checkout fields; line_items may be omitted or empty.
+    """
+    buyer: Buyer | None = None
+    """
+    Buyer with consent tracking.
+    """
+    context: Context | None = None
+    signals: Signals | None = None
+    attribution: Attribution | None = None
+    payment: PaymentCreateRequest | None = None
+    """
+    Payment details with available and selected payment terms.
     """
     discounts: DiscountsObjectCreateRequest | None = None
     fulfillment: FulfillmentCreateRequest | None = None
     """
     Fulfillment details.
     """
+
+
+CheckoutCreateRequest = TypeAliasType(
+    "CheckoutCreateRequest",
+    Annotated[
+        CheckoutCreateRequestLineItems | CheckoutCreateRequestCartId,
+        Field(..., title="CheckoutCreateRequest"),
+    ],
+)
+"""
+Request payload to create a new Checkout. Base checkout schema. Extensions compose onto this using allOf.
+"""
 
 
 class CheckoutUpdateRequest(BaseModel):
@@ -7426,7 +8273,7 @@ class CheckoutUpdateRequest(BaseModel):
     )
     line_items: list[LineItemUpdateRequest]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
     """
     buyer: Buyer | None = None
     """
@@ -7446,22 +8293,16 @@ class CheckoutUpdateRequest(BaseModel):
     """
 
 
-class Fulfillment(BaseModel):
-    """
-    Container for fulfillment methods and availability.
-    """
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    methods: list[FulfillmentMethod] | None = None
-    """
-    Fulfillment methods for cart items.
-    """
-    available_methods: list[FulfillmentAvailableMethod] | None = None
-    """
-    Inventory availability hints.
-    """
+FulfillmentDestination = TypeAliasType(
+    "FulfillmentDestination",
+    Annotated[
+        LocationDestination | ShippingDestination | FulfillmentDestinationBase,
+        Field(..., title="FulfillmentDestination"),
+    ],
+)
+"""
+A destination for fulfillment.
+"""
 
 
 class FulfillmentDetailProduct(BaseModel):
@@ -7502,7 +8343,7 @@ class FulfillmentDetailProduct(BaseModel):
     """
     list_price_range: PriceRange | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
     """
     media: list[Media] | None = None
     """
@@ -7572,7 +8413,7 @@ class FulfillmentLookupProduct(BaseModel):
     """
     list_price_range: PriceRange | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
     """
     media: list[Media] | None = None
     """
@@ -7597,6 +8438,40 @@ class FulfillmentLookupProduct(BaseModel):
     metadata: dict[str, Any] | None = None
     """
     Business-defined custom data extending the standard product model.
+    """
+
+
+class FulfillmentMethodBase(BaseModel):
+    """
+    A fulfillment method with destinations and groups.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    id: str
+    """
+    Unique fulfillment method identifier.
+    """
+    type: str
+    """
+    Fulfillment method type. Well-known values: `shipping`, `pickup`. Businesses MAY use additional values.
+    """
+    line_item_ids: list[str]
+    """
+    Line item IDs fulfilled via this method.
+    """
+    destinations: list[FulfillmentDestination] | None = None
+    """
+    Available destinations for this method. In Business responses, each destination carries a `type` and `id`.
+    """
+    selected_destination_id: str | None = None
+    """
+    ID of the selected destination. Accepts any stable, Business-scoped ID the Business recognizes for this method, including Location IDs not yet enumerated in `destinations`.
+    """
+    groups: list[FulfillmentGroup] | None = None
+    """
+    Fulfillment groups for selecting options. Agent sets selected_option_id on groups to choose shipping method.
     """
 
 
@@ -7638,7 +8513,7 @@ class FulfillmentProduct(BaseModel):
     """
     list_price_range: PriceRange | None = None
     """
-    List price range before discounts (for strikethrough display).
+    Range of variant `list_price` values across all variants; see `variant.list_price`. The range MUST use the same currency as `price_range`.
     """
     media: list[Media] | None = None
     """
@@ -7666,77 +8541,112 @@ class FulfillmentProduct(BaseModel):
     """
 
 
-class CatalogGetProductResponse(BaseModel):
+class LocationLookupResponse(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ResponseCatalogSchema
-    product: FulfillmentDetailProduct
+    ucp: ResponseLocationSchema
+    locations: list[LookupLocation]
     """
-    The requested product with full detail. Singular — this is a single-resource operation.
-    """
-    actions: Actions | None = None
-    """
-    Outstanding extension-defined Actions for this product response.
+    Locations matching the requested identifiers and refinements. May contain fewer Locations if some identifiers do not resolve or their resolved Locations are filtered out, or more if one identifier resolves to multiple Locations. When multiple identifiers resolve to the same Location, one returned Location carries all corresponding `inputs` entries.
     """
     messages: list[Message] | None = None
     """
-    Warnings or informational messages about the product (e.g., price recently changed, limited availability).
+    Errors, warnings, or informational messages about the requested Locations, including `batch_limit_applied` when the Business processes only its configured maximum number of identifiers.
     """
-    policies: list[Policy] | None = None
-    """
-    Policies (e.g., return/refund terms) that apply to this product. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
-    """
-    loyalty: Loyalty | None = None
 
 
-class CatalogLookupResponse(BaseModel):
+class Order(BaseModel):
+    """
+    Order schema with line items, buyer-facing fulfillment expectations, and event logs.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ResponseCatalogSchema
-    products: list[FulfillmentLookupProduct]
+    ucp: ResponseOrderSchema
+    id: str
     """
-    Products matching the requested identifiers. May contain fewer items if some identifiers not found, or more if identifiers match multiple products.
+    Unique order identifier.
     """
-    actions: Actions | None = None
+    label: str | None = None
     """
-    Outstanding extension-defined Actions for this catalog lookup response.
+    Human-readable label for identifying the order. MUST only be provided by the business.
+    """
+    checkout_id: str
+    """
+    Associated checkout ID for reconciliation.
+    """
+    permalink_url: AnyUrl
+    """
+    Permalink to access the order on merchant site.
+    """
+    line_items: list[OrderLineItem]
+    """
+    Line items representing what was purchased — can change post-order via edits or exchanges.
+    """
+    fulfillment: OrderFulfillment = Field(..., title="OrderFulfillment")
+    """
+    Fulfillment data: buyer expectations and what actually happened.
+    """
+    adjustments: list[Adjustment] | None = None
+    """
+    Post-order events (refunds, returns, credits, disputes, cancellations, etc.) that exist independently of fulfillment.
+    """
+    currency: str
+    """
+    ISO 4217 currency code. MUST match the currency from the originating checkout session.
+    """
+    totals: Totals
+    """
+    Different totals for the order.
+    """
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
+    """
+    Snapshot of the policies that applied to the items at checkout, captured on the order as a durable record. `applies_to` targets are relative to the response root.
     """
     messages: list[Message] | None = None
     """
-    Errors, warnings, or informational messages about the requested items.
+    Business outcome messages (errors, warnings, informational). Present when the business needs to communicate status or issues to the platform.
     """
-    policies: list[Policy] | None = None
+    attribution: Attribution | None = None
     """
-    Policies (e.g., return/refund terms) that apply to the products in this response. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
+    Snapshot of the attribution associated with the originating checkout. Read-only on the order.
     """
-    loyalty: Loyalty | None = None
+    payment: OrderPayment | None = None
+    """
+    Payment details for the Order, including the accepted payment term.
+    """
 
 
-class CatalogSearchResponse(BaseModel):
+FulfillmentMethod = TypeAliasType(
+    "FulfillmentMethod",
+    Annotated[
+        PickupMethod | ShippingMethod | FulfillmentMethodBase,
+        Field(..., title="FulfillmentMethod"),
+    ],
+)
+"""
+A fulfillment method with destinations and groups.
+"""
+
+
+class Fulfillment(BaseModel):
+    """
+    Container for fulfillment methods and availability.
+    """
+
     model_config = ConfigDict(
         extra="allow",
     )
-    ucp: ResponseCatalogSchema
-    products: list[FulfillmentProduct]
+    methods: list[FulfillmentMethod] | None = None
     """
-    Products matching the search criteria.
+    Fulfillment methods for cart items.
     """
-    pagination: PaginationResponse | None = None
-    actions: Actions | None = None
+    available_methods: list[FulfillmentAvailableMethod] | None = None
     """
-    Outstanding extension-defined Actions for this catalog search response.
+    Inventory availability hints.
     """
-    messages: list[Message] | None = None
-    """
-    Errors, warnings, or informational messages about the search results.
-    """
-    policies: list[Policy] | None = None
-    """
-    Policies (e.g., return/refund terms) that apply to the products in these search results. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
-    """
-    loyalty: Loyalty | None = None
 
 
 class Checkout(BaseModel):
@@ -7754,7 +8664,7 @@ class Checkout(BaseModel):
     """
     line_items: list[LineItem]
     """
-    List of line items being checked out.
+    List of line items being checked out. In create requests, the Platform MUST include line_items or cart_id and MAY include both. The Platform MUST include line_items in update requests and omits it from complete requests. The Business MUST include line_items in checkout responses.
     """
     buyer: Buyer | None = None
     """
@@ -7794,7 +8704,7 @@ class Checkout(BaseModel):
     """
     Links to be displayed by the platform (Privacy Policy, TOS). Mandatory for legal compliance.
     """
-    policies: list[Policy] | None = None
+    policies: list[PurchaseOptionsPoliciesItem] | None = None
     """
     Policies (e.g., return/refund terms) that apply to the items in this checkout. `applies_to` targets are relative to the response root; when absent or empty, refer to the URLs in `links[]`.
     """
@@ -7813,10 +8723,6 @@ class Checkout(BaseModel):
     order: OrderConfirmation | None = None
     """
     Details about an order created for this checkout session.
-    """
-    cart_id: str | None = None
-    """
-    Cart ID to convert to checkout. Business MUST use cart contents (line_items, context, buyer) and MUST ignore overlapping fields in checkout payload.
     """
     loyalty: Loyalty | None = None
     ap2: Ap2 | None = None
