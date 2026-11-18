@@ -120,6 +120,7 @@ jobs:
               --repo "$REPOSITORY" \
               --state open \
               --label "release-cut-needed" \
+              --search "in:title ${TARGET_BRANCH}" \
               --json number \
               --jq '.[0].number // empty')"
             BODY="Upstream UCP branch \`${UCP_REF}\` received an update (\`${REQUESTED_SHA:-HEAD}\`), but \`${TARGET_BRANCH}\` does not exist yet in \`${REPOSITORY}\`. Run \`cut-sdk-release.yml\` with \`spec_version=${SPEC_DATE}\` and \`bump=initial\` to cut the release branch. Workflow run: ${RUN_URL}"
@@ -141,9 +142,19 @@ jobs:
           read -r OLD_SHA UCP_SCHEMA_VERSION < <(python3 - <<'PY'
           import json
           from pathlib import Path
+          import re
+          import sys
 
           lock = json.loads(Path("ucp-lock.json").read_text(encoding="utf-8"))
-          print(lock["ucp_sha"], lock["ucp_schema_version"])
+          old_sha = str(lock.get("ucp_sha", ""))
+          schema_ver = str(lock.get("ucp_schema_version", "")).strip()
+          if not re.fullmatch(r"[0-9a-f]{40}", old_sha):
+              print(f"::error::Invalid ucp_sha {old_sha!r} in ucp-lock.json", file=sys.stderr)
+              sys.exit(1)
+          if not schema_ver:
+              print("::error::Missing ucp_schema_version in ucp-lock.json", file=sys.stderr)
+              sys.exit(1)
+          print(old_sha, schema_ver)
           PY
           )
 
@@ -164,6 +175,7 @@ jobs:
           echo "short_sha=${NEW_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
 
+          ROLLING_BRANCH="chore/sync-models-${SAFE_TARGET}"
           if [ "$FORCE" != "true" ]; then
             if [ "$OLD_SHA" = "$NEW_SHA" ]; then
               echo "ucp-lock.json is already at ${NEW_SHA}; nothing to sync."
@@ -172,6 +184,30 @@ jobs:
             if ! git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$OLD_SHA" "$NEW_SHA"; then
               echo "::notice::Incoming ucp_sha ${NEW_SHA} is not a descendant of locked ${OLD_SHA}; skipping out-of-order dispatch."
               exit 0
+            fi
+            if git show-ref --verify --quiet "refs/remotes/origin/${ROLLING_BRANCH}"; then
+              ROLLING_LOCK="$(git show "origin/${ROLLING_BRANCH}:ucp-lock.json" 2>/dev/null || true)"
+              if [ -n "$ROLLING_LOCK" ]; then
+                ROLLING_SHA="$(ROLLING_LOCK="$ROLLING_LOCK" python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          try:
+              data = json.loads(os.environ["ROLLING_LOCK"])
+          except json.JSONDecodeError:
+              data = {}
+          sha = str(data.get("ucp_sha", ""))
+          print(sha if re.fullmatch(r"[0-9a-f]{40}", sha) else "")
+          PY
+          )"
+                if [ -n "$ROLLING_SHA" ] \
+                  && git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${ROLLING_SHA}^{commit}" 2>/dev/null \
+                  && git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$NEW_SHA" "$ROLLING_SHA"; then
+                  echo "::notice::Rolling branch ${ROLLING_BRANCH} (${ROLLING_SHA}) is already at or ahead of ${NEW_SHA}; skipping out-of-order or duplicate dispatch."
+                  exit 0
+                fi
+              fi
             fi
           fi
 
@@ -250,11 +286,20 @@ jobs:
         run: |
           set -euo pipefail
           BOT_NAME="${APP_SLUG:-ucp-automation}[bot]"
+          BOT_ID="$(gh api "/users/${BOT_NAME}" --jq .id)"
+          if [[ ! "$BOT_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::Failed to resolve numeric GitHub user ID for ${BOT_NAME}"
+            exit 1
+          fi
           git config user.name "$BOT_NAME"
-          git config user.email "${BOT_NAME}@users.noreply.github.com"
+          git config user.email "${BOT_ID}+${BOT_NAME}@users.noreply.github.com"
 
           ROLLING_BRANCH="chore/sync-models-${SAFE_TARGET}"
           git add -- ucp-lock.json src/ucp_sdk/models/schemas
+          if git diff --cached --quiet; then
+            echo "No staged changes against ${TARGET_BRANCH}; nothing to commit."
+            exit 0
+          fi
           git commit -m "chore(models): sync UCP schemas to ${SHORT_SHA}"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${ROLLING_BRANCH}"
 
