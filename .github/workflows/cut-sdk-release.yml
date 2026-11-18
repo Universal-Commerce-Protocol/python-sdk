@@ -44,19 +44,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: cut-sdk-release-${{ inputs.spec_version }}
+  cancel-in-progress: false
+
 jobs:
   cut-release:
     name: Cut and tag SDK release
     runs-on: ubuntu-latest
     steps:
-      - name: Generate GitHub App Token
-        id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: write
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,14 +127,14 @@ jobs:
             git checkout -B "$RELEASE_BRANCH" "origin/${RELEASE_BRANCH}"
             CURRENT_VERSION="$(python3 - <<'PY'
           from pathlib import Path
-          import re
           import sys
+          import tomllib
 
-          text = Path("pyproject.toml").read_text(encoding="utf-8")
-          m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
-          if not m:
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          version = data.get("project", {}).get("version")
+          if not isinstance(version, str) or not version:
               sys.exit(1)
-          print(m.group(1))
+          print(version)
           PY
           )"
             if [[ ! "$CURRENT_VERSION" =~ ^${EPOCH}\.([0-9]+)\.([0-9]+)$ ]]; then
@@ -152,6 +148,16 @@ jobs:
             else
               NEW_VERSION="${EPOCH}.$((MINOR + 1)).0"
             fi
+          fi
+
+          prep_tag_rc=0
+          git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null || prep_tag_rc=$?
+          if [ "$prep_tag_rc" -eq 0 ]; then
+            echo "::error::Tag v${NEW_VERSION} already exists on origin"
+            exit 1
+          elif [ "$prep_tag_rc" -ne 2 ]; then
+            echo "::error::Failed to query remote tags for v${NEW_VERSION} (exit ${prep_tag_rc})"
+            exit 1
           fi
 
           UCP_SCHEMA_VERSION="$(python3 - <<'PY'
@@ -203,24 +209,43 @@ jobs:
           import os
           from pathlib import Path
           import re
+          import tomllib
 
           new_version = os.environ["NEW_VERSION"]
           path = Path("pyproject.toml")
           text = path.read_text(encoding="utf-8")
-          updated, count = re.subn(
+          section_match = re.search(r"(?m)^\[project\]\s*$", text)
+          if not section_match:
+              raise RuntimeError("Missing [project] table in pyproject.toml")
+          start = section_match.end()
+          next_section = re.search(r"(?m)^\[", text[start:])
+          end = start + next_section.start() if next_section else len(text)
+          project_block, count = re.subn(
               r'(?m)^(version\s*=\s*)"[^"]+"',
               rf'\1"{new_version}"',
-              text,
+              text[start:end],
               count=1,
           )
           if count != 1:
-              raise RuntimeError("Failed to update version in pyproject.toml")
+              raise RuntimeError("Failed to update [project].version in pyproject.toml")
+          updated = text[:start] + project_block + text[end:]
+          parsed = tomllib.loads(updated)
+          if parsed.get("project", {}).get("version") != new_version:
+              raise RuntimeError("Verified [project].version mismatch after update")
           path.write_text(updated, encoding="utf-8")
           PY
 
           uv run python -m unittest discover -s tests -p "test_*.py"
           uv build
           rm -rf dist
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Commit, push release branch, and publish GitHub Release
         env:
@@ -232,9 +257,24 @@ jobs:
           PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
+          tag_rc=0
+          git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null || tag_rc=$?
+          if [ "$tag_rc" -eq 0 ]; then
+            echo "::error::Tag v${NEW_VERSION} already exists on origin"
+            exit 1
+          elif [ "$tag_rc" -ne 2 ]; then
+            echo "::error::Failed to query remote tags for v${NEW_VERSION} (exit ${tag_rc})"
+            exit 1
+          fi
+
           BOT_NAME="${APP_SLUG:-ucp-automation}[bot]"
+          BOT_ID="$(gh api "/users/${BOT_NAME}" --jq .id)"
+          if [[ ! "$BOT_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::Failed to resolve numeric GitHub user ID for ${BOT_NAME}"
+            exit 1
+          fi
           git config user.name "$BOT_NAME"
-          git config user.email "${BOT_NAME}@users.noreply.github.com"
+          git config user.email "${BOT_ID}+${BOT_NAME}@users.noreply.github.com"
 
           git add -- pyproject.toml ucp-lock.json src/ucp_sdk/models/schemas
           if ! git diff --cached --quiet; then

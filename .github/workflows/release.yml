@@ -77,16 +77,16 @@ jobs:
           from pathlib import Path
           import re
           import sys
+          import tomllib
 
           expected_version = os.environ["EXPECTED_VERSION"]
           expected_branch = os.environ["EXPECTED_BRANCH"]
 
-          pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
-          m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject_text)
-          if not m:
+          pyproject_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          pkg_version = pyproject_data.get("project", {}).get("version")
+          if not isinstance(pkg_version, str) or not pkg_version:
               print("::error::Could not parse project.version from pyproject.toml", file=sys.stderr)
               sys.exit(1)
-          pkg_version = m.group(1)
           if pkg_version.startswith("0.0.0"):
               print(f"::error::Cannot publish draft version '{pkg_version}' to PyPI", file=sys.stderr)
               sys.exit(1)
