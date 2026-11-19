@@ -1,15 +1,35 @@
+# Copyright 2026 UCP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: Publish to PyPI
 
 on:
   release:
     types: [published]
+
 permissions:
   contents: read
+
+concurrency:
+  group: pypi-release-publish
+  cancel-in-progress: false
 
 jobs:
   pypi-publish:
     name: Upload release to PyPI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: release
       url: https://pypi.org/p/ucp-sdk
@@ -18,19 +38,94 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      # Installs uv (and manages Python automatically)
       - name: Install uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          enable-cache: true
+          enable-cache: false
 
-      # 'uv build' automatically creates the sdist and wheel in 'dist/'
-      - name: Build package
-        run: uv build
+      - name: Verify CalVer tag, manifest version, lockfile channel, and branch ancestry
+        id: verify
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]{4})([0-9]{2})([0-9]{2})\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' must match canonical vYYYYMMDD.MINOR.PATCH"
+            exit 1
+          fi
+          DATE_STR="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+          if [ "$(date -u -d "$DATE_STR" +%Y-%m-%d 2>/dev/null || true)" != "$DATE_STR" ]; then
+            echo "::error::Invalid calendar date '${DATE_STR}' in release tag '$RELEASE_TAG'"
+            exit 1
+          fi
+          EPOCH="${DATE_STR//-/}"
+          if (( 10#$EPOCH < 20260825 )); then
+            echo "::error::Release tag '$RELEASE_TAG' has epoch $EPOCH < 20260825"
+            exit 1
+          fi
+          EXPECTED_VERSION="${EPOCH}.${BASH_REMATCH[4]}.${BASH_REMATCH[5]}"
+          EXPECTED_BRANCH="release/${DATE_STR}"
+
+          PKG_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [[ "$PKG_VERSION" == 0.0.0* || "$PKG_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "::error::pyproject.toml version '$PKG_VERSION' does not match expected release version '$EXPECTED_VERSION'"
+            exit 1
+          fi
+
+          [ -f ucp-lock.json ] || { echo "::error::ucp-lock.json is missing"; exit 1; }
+          LOCK_FIELDS="$(jq -er --arg ref "$EXPECTED_BRANCH" '
+            select(.channel == "release" and .ucp_ref == $ref) |
+            (.ucp_sha | select(type == "string" and test("^[0-9a-f]{40}$"))) as $sha |
+            (.ucp_schema_version | select(type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) as $ver |
+            "\($sha) \($ver)"
+          ' ucp-lock.json)" || { echo "::error::ucp-lock.json failed release provenance validation"; exit 1; }
+          read -r UCP_SHA UCP_SCHEMA_VERSION <<< "$LOCK_FIELDS"
+
+          git fetch origin "+refs/heads/${EXPECTED_BRANCH}:refs/remotes/origin/${EXPECTED_BRANCH}"
+          git merge-base --is-ancestor HEAD "origin/${EXPECTED_BRANCH}" \
+            || { echo "::error::Release commit HEAD is not an ancestor of origin/${EXPECTED_BRANCH}"; exit 1; }
+
+          rm -rf "$RUNNER_TEMP/ucp-spec"
+          git clone --filter=blob:none --no-checkout \
+            "${UCP_REMOTE_URL:-https://github.com/Universal-Commerce-Protocol/ucp.git}" "$RUNNER_TEMP/ucp-spec"
+          git -C "$RUNNER_TEMP/ucp-spec" show-ref --verify --quiet "refs/remotes/origin/${EXPECTED_BRANCH}" \
+            || { echo "::error::Upstream branch ${EXPECTED_BRANCH} does not exist in ucp"; exit 1; }
+          git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${UCP_SHA}^{commit}" 2>/dev/null \
+            || { echo "::error::ucp_sha '${UCP_SHA}' does not exist in ucp"; exit 1; }
+          git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$UCP_SHA" "origin/${EXPECTED_BRANCH}" \
+            || { echo "::error::ucp_sha '${UCP_SHA}' is not an ancestor of origin/${EXPECTED_BRANCH} in ucp"; exit 1; }
+          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$UCP_SHA"
+          echo "ucp_schema_version=${UCP_SCHEMA_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests, verify model drift, and build package
+        env:
+          UCP_SCHEMA_VERSION: ${{ steps.verify.outputs.ucp_schema_version }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
+          curl -fsSL --retry 3 -o "$tmp_dir/ucp-schema-linux-x86_64" "${base_url}/ucp-schema-linux-x86_64"
+          curl -fsSL --retry 3 -o "$tmp_dir/SHA256SUMS" "${base_url}/SHA256SUMS"
+          (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
+          export PATH="$HOME/.local/bin:$PATH"
+
+          uv run python -m unittest discover -s tests -p "test_*.py"
+          ./generate_models.sh --from-lock --spec-dir "$RUNNER_TEMP/ucp-spec"
+          if [ -n "$(git status --porcelain -- src/ucp_sdk pyproject.toml ucp-lock.json)" ]; then
+            echo "::error::Committed models or release metadata differ from ucp-lock.json regeneration"
+            git status --short -- src/ucp_sdk pyproject.toml ucp-lock.json
+            git --no-pager diff -- src/ucp_sdk pyproject.toml ucp-lock.json
+            exit 1
+          fi
+          rm -rf dist && uv build
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
