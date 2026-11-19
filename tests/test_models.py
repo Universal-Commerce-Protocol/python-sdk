@@ -16,14 +16,19 @@
 
 from __future__ import annotations
 
+import importlib
+from importlib.metadata import PackageNotFoundError
+import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 from typing import Any
 import unittest
+from unittest.mock import patch
 
 from pydantic import TypeAdapter, ValidationError
+import ucp_sdk
 import ucp_sdk.models as models_module
 from ucp_sdk.models import (
     Ap2WithCheckoutMandateCompleteRequest,
@@ -176,74 +181,87 @@ class CheckoutRequestModelTest(unittest.TestCase):
         assert isinstance(req.ap2, Ap2WithCheckoutMandateCompleteRequest)
         self.assertEqual(req.ap2.checkout_mandate, mandate)
 
-    def test_complete_request_buyer_optional_and_cart_id_deprecated(
+    def test_complete_request_buyer_optional_and_cart_id_channel_behavior(
         self,
     ) -> None:
+        lock = json.loads(
+            (Path(__file__).resolve().parents[1] / "ucp-lock.json").read_text(
+                encoding="utf-8"
+            )
+        )
         req = CheckoutCompleteRequest.model_validate(
             {
                 "payment": self.PAYMENT_PAYLOAD,
                 "buyer": {"email": "buyer@example.com"},
             }
         )
-        self.assertIsNotNone(req.buyer)
         assert req.buyer is not None
         self.assertEqual(str(req.buyer.email), "buyer@example.com")
-        self.assertTrue(
-            CheckoutCompleteRequest.model_fields["cart_id"].deprecated
-        )
-        with self.assertWarns(DeprecationWarning):
-            self.assertIsNone(req.cart_id)
+        if lock.get("ucp_ref") == "release/2026-08-25":
+            field = CheckoutCompleteRequest.model_fields["cart_id"]
+            self.assertIsNone(field.default)
+            self.assertTrue(bool(field.deprecated))
+            with self.assertRaises(ValidationError):
+                CheckoutCompleteRequest.model_validate(
+                    {"payment": self.PAYMENT_PAYLOAD, "cart_id": 123}
+                )
+        else:
+            self.assertNotIn("cart_id", CheckoutCompleteRequest.model_fields)
 
-    def test_complete_request_explicit_cart_id_and_extra_fields(self) -> None:
+    def test_complete_request_preserves_extra_fields(self) -> None:
         req = CheckoutCompleteRequest.model_validate(
             {
                 "payment": self.PAYMENT_PAYLOAD,
-                "cart_id": "cart_123",
                 "com.example.trace_id": "trace_abc",
             }
         )
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(req.cart_id, "cart_123")
         dumped = req.model_dump(exclude_none=True)
-        self.assertEqual(dumped["cart_id"], "cart_123")
         self.assertEqual(dumped["com.example.trace_id"], "trace_abc")
 
+    def test_create_request_validation_and_line_items_or_cart_id_variants(
+        self,
+    ) -> None:
+        create_adapter: TypeAdapter[Any] = TypeAdapter(CheckoutCreateRequest)
         with self.assertRaises(ValidationError):
-            CheckoutCompleteRequest.model_validate(
-                {"payment": self.PAYMENT_PAYLOAD, "cart_id": 12345}
-            )
-
-    def test_create_request_validation_and_non_deprecated_cart_id(self) -> None:
-        with self.assertRaises(ValidationError) as ctx:
-            CheckoutCreateRequest.model_validate({})
-        error_locs = [err["loc"] for err in ctx.exception.errors()]
-        self.assertIn(("line_items",), error_locs)
+            create_adapter.validate_python({})
 
         for bad_line_item in (
             {"item": {"id": "sku_1"}, "quantity": 0},
             {"quantity": 1},
         ):
             with self.assertRaises(ValidationError):
-                CheckoutCreateRequest.model_validate(
-                    {"line_items": [bad_line_item]}
-                )
+                create_adapter.validate_python({"line_items": [bad_line_item]})
 
-        self.assertFalse(
-            bool(CheckoutCreateRequest.model_fields["cart_id"].deprecated)
-        )
-        req = CheckoutCreateRequest.model_validate(
+        req_both = create_adapter.validate_python(
             {
                 "line_items": [{"item": {"id": "sku_1"}, "quantity": 2}],
                 "cart_id": "cart_live_1",
                 "com.example.channel": "mobile_web",
             }
         )
-        self.assertEqual(req.cart_id, "cart_live_1")
-        self.assertEqual(len(req.line_items), 1)
-        self.assertEqual(req.line_items[0].item.id, "sku_1")
-        self.assertEqual(req.line_items[0].quantity, 2)
-        dumped = req.model_dump(exclude_none=True)
+        self.assertEqual(req_both.cart_id, "cart_live_1")
+        assert req_both.line_items is not None
+        self.assertEqual(len(req_both.line_items), 1)
+        self.assertEqual(req_both.line_items[0].item.id, "sku_1")
+        self.assertEqual(req_both.line_items[0].quantity, 2)
+        dumped = req_both.model_dump(exclude_none=True)
         self.assertEqual(dumped["com.example.channel"], "mobile_web")
+
+        if hasattr(models_module, "CheckoutCreateRequestLineItems"):
+            self.assertIsInstance(
+                req_both, models_module.CheckoutCreateRequestLineItems
+            )
+            req_cart = create_adapter.validate_python(
+                {"cart_id": "cart_only_1"}
+            )
+            self.assertIsInstance(
+                req_cart, models_module.CheckoutCreateRequestCartId
+            )
+            self.assertEqual(req_cart.cart_id, "cart_only_1")
+            self.assertIsNone(req_cart.line_items)
+        else:
+            with self.assertRaises(ValidationError):
+                create_adapter.validate_python({"cart_id": "cart_only_1"})
 
 
 class MediaModelTest(unittest.TestCase):
@@ -963,6 +981,78 @@ class PureDtoStructureAndOpennessTest(unittest.TestCase):
         self.assertEqual(
             rc.model_dump(exclude_none=True)["com.example.meta"], 42
         )
+
+
+class LockfileAndVersionContractTest(unittest.TestCase):
+    """Tests for ucp-lock.json provenance invariants and ucp_sdk.__version__."""
+
+    def test_ucp_lock_json_schema_and_formatting_invariants(self) -> None:
+        lock_path = Path(__file__).resolve().parents[1] / "ucp-lock.json"
+        raw = lock_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        self.assertEqual(raw, json.dumps(data, indent=2) + "\n")
+        self.assertEqual(
+            list(data.keys()),
+            [
+                "channel",
+                "ucp_ref",
+                "ucp_sha",
+                "ucp_schema_version",
+                "vertical",
+            ],
+        )
+        self.assertIn(data["channel"], ("draft", "release"))
+        expected_ref = (
+            r"^main$"
+            if data["channel"] == "draft"
+            else r"^release/[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        )
+        self.assertRegex(data["ucp_ref"], expected_ref)
+        self.assertRegex(data["ucp_sha"], r"^[0-9a-f]{40}$")
+        self.assertRegex(
+            data["ucp_schema_version"], r"^[0-9]+\.[0-9]+\.[0-9]+$"
+        )
+        self.assertEqual(data["vertical"], "shopping")
+
+    def test_package_version_resolution_and_fallback(self) -> None:
+        self.assertTrue(ucp_sdk.__version__)
+        with patch(
+            "importlib.metadata.version",
+            side_effect=PackageNotFoundError("ucp-sdk"),
+        ):
+            importlib.reload(ucp_sdk)
+            self.assertEqual(ucp_sdk.__version__, "0.0.0.dev0")
+        importlib.reload(ucp_sdk)
+
+    def test_generate_models_cli_rejects_positionals_and_invalid_flag_combos(
+        self,
+    ) -> None:
+        script = (
+            Path(__file__).resolve().parents[1] / "scripts/generate_models.py"
+        )
+        for bad_args in (
+            ["draft"],
+            ["--unknown-flag"],
+            ["--from-lock", "--ref", "main"],
+            ["--from-lock", "--write-lock"],
+            ["--write-lock"],
+            ["--spec-dir", ".", "--write-lock"],
+            ["--channel", "draft"],
+        ):
+            proc = subprocess.run(
+                [sys.executable, str(script), *bad_args],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(proc.returncode, 0, msg=f"args={bad_args}")
+
+        bad_bin = subprocess.run(
+            [sys.executable, str(script), "--from-lock"],
+            env={**os.environ, "UCP_SCHEMA_BIN": "/nonexistent/ucp-schema"},
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(bad_bin.returncode, 0)
 
 
 if __name__ == "__main__":
