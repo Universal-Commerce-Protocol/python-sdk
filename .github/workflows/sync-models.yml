@@ -1,0 +1,358 @@
+# Copyright 2026 UCP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Sync UCP Models
+
+on:
+  repository_dispatch:
+    types: [ucp-schemas-updated]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      ucp_ref:
+        description: "Target UCP branch (main or release/YYYY-MM-DD)"
+        required: false
+        default: "main"
+        type: string
+      ucp_sha:
+        description: "Optional 40-char UCP commit SHA (defaults to branch HEAD)"
+        required: false
+        default: ""
+        type: string
+      force_resync:
+        description: "Bypass ancestry and zero-diff guards"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Resolve sync target refs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      refs: ${{ steps.resolve.outputs.refs }}
+      has_refs: ${{ steps.resolve.outputs.has_refs }}
+    steps:
+      - name: Resolve target refs
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PAYLOAD_REF: ${{ github.event.client_payload.ucp_ref }}
+          INPUT_REF: ${{ inputs.ucp_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          valid_date() { [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [ "$(date -u -d "$1" +%Y-%m-%d 2>/dev/null || true)" = "$1" ]; }
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            heads="$(git ls-remote --heads "${SDK_REMOTE_URL:-https://github.com/${REPOSITORY}.git}" 'refs/heads/release/*')"
+            refs=(main)
+            while read -r _ ref; do
+              [ -n "${ref:-}" ] || continue
+              d="${ref#refs/heads/release/}"
+              if valid_date "$d" && (( 10#${d//-/} >= 20260825 )); then refs+=("release/$d"); fi
+            done <<< "$heads"
+            printf 'refs=%s\nhas_refs=true\n' "$(printf '%s\n' "${refs[@]}" | awk '!seen[$0]++' | jq -Rsc 'split("\n")[:-1]')" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          UCP_REF="${INPUT_REF:-main}"
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then UCP_REF="${PAYLOAD_REF:-main}"; fi
+          if [ "$UCP_REF" = "main" ]; then
+            printf 'refs=["main"]\nhas_refs=true\n' >> "$GITHUB_OUTPUT"
+          elif [[ "$UCP_REF" =~ ^release/([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] && valid_date "${BASH_REMATCH[1]}"; then
+            if (( 10#${BASH_REMATCH[1]//-/} < 20260825 )); then
+              echo "::notice::Skipping legacy release branch ${UCP_REF}"
+              printf 'refs=[]\nhas_refs=false\n' >> "$GITHUB_OUTPUT"
+            else
+              printf 'refs=%s\nhas_refs=true\n' "$(jq -cn --arg r "$UCP_REF" '[$r]')" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::error::Unsupported ucp_ref '${UCP_REF}' (expected main or valid release/YYYY-MM-DD)"
+            exit 1
+          fi
+
+  sync:
+    name: Regenerate and sync UCP models (${{ matrix.ucp_ref }})
+    needs: prepare
+    if: needs.prepare.outputs.has_refs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ucp_ref: ${{ fromJson(needs.prepare.outputs.refs) }}
+    concurrency:
+      group: sync-models-${{ matrix.ucp_ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve target branch, check lockfile, and verify UCP ancestry
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          UCP_REF: ${{ matrix.ucp_ref }}
+          PAYLOAD_SHA: ${{ github.event.client_payload.ucp_sha }}
+          INPUT_SHA: ${{ inputs.ucp_sha }}
+          FORCE_RESYNC: ${{ inputs.force_resync }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          REQUESTED_SHA=""; FORCE="false"
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then REQUESTED_SHA="${PAYLOAD_SHA:-}"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then REQUESTED_SHA="${INPUT_SHA:-}"; FORCE="${FORCE_RESYNC:-false}"; fi
+          echo "force_resync=${FORCE}" >> "$GITHUB_OUTPUT"
+
+          UCP_REMOTE="${UCP_REMOTE_URL:-https://github.com/Universal-Commerce-Protocol/ucp.git}"
+          if [[ "$UCP_REF" == release/* ]] && ! git show-ref --verify --quiet "refs/remotes/origin/${UCP_REF}"; then
+            SPEC_DATE="${UCP_REF#release/}"
+            MISSING_SHA="${REQUESTED_SHA:-$(git ls-remote --exit-code "$UCP_REMOTE" "refs/heads/${UCP_REF}" | awk '{print $1}')}"
+            [[ "$MISSING_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid ucp_sha '${MISSING_SHA}'"; exit 1; }
+            echo "new_sha=${MISSING_SHA}" >> "$GITHUB_OUTPUT"
+            gh label create "release-cut-needed" --repo "$REPOSITORY" --color "d93f0b" \
+              --description "SDK release branch needs to be cut" --force || true
+            TITLE="chore(release): cut ${UCP_REF} branch for UCP ${SPEC_DATE}"
+            DECISION="$(gh issue list --repo "$REPOSITORY" --state open --label "release-cut-needed" \
+              --search "in:title ${UCP_REF}" --json number,title,body,comments | jq -r \
+              --arg t "$TITLE" --arg sub "$UCP_REF" --arg sha "$MISSING_SHA" '
+              (map(select(.title == $t))[0] // map(select((.title // "") | contains($sub)))[0]) as $m |
+              if $m == null then "create 0"
+              else (($m.comments // []) | if length > 0 then .[-1].body // "" else "" end) as $last |
+                if ((($m.body // "") | contains($sha)) or ($last | contains($sha))) then "skip \($m.number)"
+                else "comment \($m.number)" end
+              end')"
+            read -r ACTION ISSUE_NUM <<< "$DECISION"
+            BODY="Upstream UCP branch \`${UCP_REF}\` updated (\`${MISSING_SHA}\`), but \`${UCP_REF}\` does not exist in \`${REPOSITORY}\`. Run \`cut-sdk-release.yml\` with \`spec_version=${SPEC_DATE}\` and \`bump=initial\`. Run: ${RUN_URL}"
+            if [ "$ACTION" = "create" ]; then gh issue create --repo "$REPOSITORY" --title "$TITLE" --label "release-cut-needed" --body "$BODY"
+            elif [ "$ACTION" = "comment" ]; then gh issue comment "$ISSUE_NUM" --repo "$REPOSITORY" --body "$BODY"; fi
+            exit 0
+          fi
+
+          ROLLING_BRANCH="chore/sync-models-${UCP_REF/\//-}"
+          git checkout -B "$ROLLING_BRANCH" "origin/${UCP_REF}"
+          if [ ! -f ucp-lock.json ]; then echo "ucp-lock.json not present yet; skipping"; exit 0; fi
+
+          LOCK_FIELDS="$(jq -er '
+            (.ucp_sha | select(type == "string" and test("^[0-9a-f]{40}$"))) as $sha |
+            (.ucp_schema_version | select(type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) as $ver |
+            "\($sha) \($ver)"
+          ' ucp-lock.json)"
+          read -r OLD_SHA UCP_SCHEMA_VERSION <<< "$LOCK_FIELDS"
+
+          rm -rf "$RUNNER_TEMP/ucp-spec"
+          git clone --filter=blob:none --no-checkout "$UCP_REMOTE" "$RUNNER_TEMP/ucp-spec"
+          git -C "$RUNNER_TEMP/ucp-spec" show-ref --verify --quiet "refs/remotes/origin/${UCP_REF}" \
+            || { echo "::error::Upstream branch ${UCP_REF} does not exist in ucp"; exit 1; }
+
+          if [ -n "$REQUESTED_SHA" ]; then
+            [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid 40-char ucp_sha '${REQUESTED_SHA}'"; exit 1; }
+            NEW_SHA="$REQUESTED_SHA"
+          else
+            NEW_SHA="$(git -C "$RUNNER_TEMP/ucp-spec" rev-parse "origin/${UCP_REF}")"
+          fi
+          printf 'old_sha=%s\nnew_sha=%s\nucp_schema_version=%s\n' "$OLD_SHA" "$NEW_SHA" "$UCP_SCHEMA_VERSION" >> "$GITHUB_OUTPUT"
+
+          git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${NEW_SHA}^{commit}" 2>/dev/null \
+            || { echo "::error::ucp_sha '${NEW_SHA}' does not exist in Universal-Commerce-Protocol/ucp"; exit 1; }
+          git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$NEW_SHA" "origin/${UCP_REF}" \
+            || { echo "::error::ucp_sha '${NEW_SHA}' is not an ancestor of origin/${UCP_REF}"; exit 1; }
+
+          OPEN_ROLLING_PR="$(gh pr list --repo "$REPOSITORY" --state open --base "$UCP_REF" \
+            --head "$ROLLING_BRANCH" --json number --jq '.[0].number // empty')"
+          ROLLING_SHA=""; ROLLING_COVERED="false"
+          if git show-ref --verify --quiet "refs/remotes/origin/${ROLLING_BRANCH}"; then
+            ROLLING_SHA="$(git show "origin/${ROLLING_BRANCH}:ucp-lock.json" 2>/dev/null \
+              | jq -r '.ucp_sha // empty | select(test("^[0-9a-f]{40}$"))' || true)"
+            if [ -n "$ROLLING_SHA" ] && git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${ROLLING_SHA}^{commit}" 2>/dev/null \
+              && git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$ROLLING_SHA" "$NEW_SHA"; then
+              ROLLING_COVERED="true"
+            fi
+          fi
+          printf 'open_rolling_pr=%s\nrolling_covered=%s\n' "$OPEN_ROLLING_PR" "$ROLLING_COVERED" >> "$GITHUB_OUTPUT"
+
+          if [ "$FORCE" != "true" ]; then
+            if [ "$OLD_SHA" = "$NEW_SHA" ]; then
+              if [ -n "$OPEN_ROLLING_PR" ] && [ "$ROLLING_COVERED" = "true" ]; then echo "close_pr=true" >> "$GITHUB_OUTPUT"; fi
+              exit 0
+            fi
+            anc_rc=0
+            git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$OLD_SHA" "$NEW_SHA" || anc_rc=$?
+            if [ "$anc_rc" -eq 1 ]; then echo "::notice::Skipping out-of-order ${NEW_SHA} vs ${OLD_SHA}"; exit 0
+            elif [ "$anc_rc" -ne 0 ]; then echo "::error::Ancestry check failed (${anc_rc})"; exit 1; fi
+
+            if [ -n "$OPEN_ROLLING_PR" ] && [ -n "$ROLLING_SHA" ] \
+              && git -C "$RUNNER_TEMP/ucp-spec" cat-file -e "${ROLLING_SHA}^{commit}" 2>/dev/null \
+              && git -C "$RUNNER_TEMP/ucp-spec" merge-base --is-ancestor "$NEW_SHA" "$ROLLING_SHA" \
+              && { [ "$NEW_SHA" != "$ROLLING_SHA" ] || git merge-base --is-ancestor "origin/${UCP_REF}" "origin/${ROLLING_BRANCH}"; }; then
+              echo "::notice::Open PR #${OPEN_ROLLING_PR} (${ROLLING_SHA}) already covers ${NEW_SHA}; skipping."
+              exit 0
+            fi
+          fi
+          git -C "$RUNNER_TEMP/ucp-spec" checkout --detach "$NEW_SHA"
+          echo "should_continue=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        if: steps.target.outputs.should_continue == 'true'
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Regenerate models and run unit tests
+        id: codegen
+        if: steps.target.outputs.should_continue == 'true'
+        env:
+          UCP_REF: ${{ matrix.ucp_ref }}
+          UCP_SCHEMA_VERSION: ${{ steps.target.outputs.ucp_schema_version }}
+          FORCE_RESYNC: ${{ steps.target.outputs.force_resync }}
+          OPEN_ROLLING_PR: ${{ steps.target.outputs.open_rolling_pr }}
+          ROLLING_COVERED: ${{ steps.target.outputs.rolling_covered }}
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          base_url="https://github.com/Universal-Commerce-Protocol/ucp-schema/releases/download/v${UCP_SCHEMA_VERSION}"
+          curl -fsSL --retry 3 -o "$tmp_dir/ucp-schema-linux-x86_64" "${base_url}/ucp-schema-linux-x86_64"
+          curl -fsSL --retry 3 -o "$tmp_dir/SHA256SUMS" "${base_url}/SHA256SUMS"
+          (cd "$tmp_dir" && sha256sum -c --ignore-missing SHA256SUMS)
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp_dir/ucp-schema-linux-x86_64" "$HOME/.local/bin/ucp-schema"
+          export PATH="$HOME/.local/bin:$PATH"
+
+          CHANNEL="release"; if [ "$UCP_REF" = "main" ]; then CHANNEL="draft"; fi
+          ROLLING_BRANCH="chore/sync-models-${UCP_REF/\//-}"
+          ./generate_models.sh --spec-dir "$RUNNER_TEMP/ucp-spec" --channel "$CHANNEL" --ref "$UCP_REF" --write-lock
+          uv run ruff check src/ucp_sdk/models
+          uv run ruff format --check src/ucp_sdk/models
+
+          if [ "$FORCE_RESYNC" != "true" ] && git diff --quiet "origin/${UCP_REF}" -- src/ucp_sdk/models/schemas/_generated.py; then
+            git checkout -- ucp-lock.json src/ucp_sdk/models/schemas
+            if [ -n "$OPEN_ROLLING_PR" ] && [ "$ROLLING_COVERED" = "true" ]; then echo "close_pr=true" >> "$GITHUB_OUTPUT"; fi
+            exit 0
+          fi
+          if [ "$FORCE_RESYNC" != "true" ] && [ -n "$OPEN_ROLLING_PR" ] \
+            && git show-ref --verify --quiet "refs/remotes/origin/${ROLLING_BRANCH}" \
+            && git merge-base --is-ancestor "origin/${UCP_REF}" "origin/${ROLLING_BRANCH}" \
+            && git diff --quiet "origin/${ROLLING_BRANCH}" -- src/ucp_sdk/models/schemas/_generated.py; then
+            git checkout -- ucp-lock.json src/ucp_sdk/models/schemas
+            exit 0
+          fi
+          uv run python -m unittest discover -s tests -p "test_*.py"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App Token
+        id: app-token
+        if: steps.codegen.outputs.has_changes == 'true' || steps.target.outputs.close_pr == 'true' || steps.codegen.outputs.close_pr == 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Reconcile Stage 1 rolling PR
+        if: steps.codegen.outputs.has_changes == 'true' || steps.target.outputs.close_pr == 'true' || steps.codegen.outputs.close_pr == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+          UCP_REF: ${{ matrix.ucp_ref }}
+          OLD_SHA: ${{ steps.target.outputs.old_sha }}
+          NEW_SHA: ${{ steps.target.outputs.new_sha }}
+          UCP_SCHEMA_VERSION: ${{ steps.target.outputs.ucp_schema_version }}
+          OPEN_ROLLING_PR: ${{ steps.target.outputs.open_rolling_pr }}
+          HAS_CHANGES: ${{ steps.codegen.outputs.has_changes }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_CHANGES" != "true" ]; then
+            if [ -n "$OPEN_ROLLING_PR" ]; then
+              gh pr close "$OPEN_ROLLING_PR" --repo "$REPOSITORY" --delete-branch \
+                --comment "Closing sync PR because generated models at \`${NEW_SHA}\` match \`${UCP_REF}\`."
+            fi
+            exit 0
+          fi
+          BOT_NAME="${APP_SLUG:-ucp-automation}[bot]"
+          BOT_ID="$(gh api "/users/${BOT_NAME}" --jq .id)"
+          [[ "$BOT_ID" =~ ^[0-9]+$ ]] || { echo "::error::Invalid bot user ID for ${BOT_NAME}"; exit 1; }
+          git config user.name "$BOT_NAME"
+          git config user.email "${BOT_ID}+${BOT_NAME}@users.noreply.github.com"
+
+          CHANNEL="release"; if [ "$UCP_REF" = "main" ]; then CHANNEL="draft"; fi
+          SHORT_SHA="${NEW_SHA:0:7}"
+          ROLLING_BRANCH="chore/sync-models-${UCP_REF/\//-}"
+          git add -- ucp-lock.json src/ucp_sdk/models/schemas
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore(models): sync UCP schemas to ${SHORT_SHA}"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${ROLLING_BRANCH}"
+
+          PR_TITLE="chore(models): sync UCP schemas to ${SHORT_SHA}"
+          PR_BODY="$(printf '%s\n' \
+            "Automated Stage 1 schema model sync from \`Universal-Commerce-Protocol/ucp\`." "" \
+            "- **Channel**: \`${CHANNEL}\`" \
+            "- **UCP Ref**: \`${UCP_REF}\`" \
+            "- **UCP Commit**: [\`${SHORT_SHA}\`](https://github.com/Universal-Commerce-Protocol/ucp/commit/${NEW_SHA}) ([compare](https://github.com/Universal-Commerce-Protocol/ucp/compare/${OLD_SHA}...${NEW_SHA}))" \
+            "- **ucp-schema CLI**: \`v${UCP_SCHEMA_VERSION}\`")"
+          EXISTING_PR="$(gh pr list --repo "$REPOSITORY" --state open --base "$UCP_REF" \
+            --head "$ROLLING_BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr edit "$EXISTING_PR" --repo "$REPOSITORY" --title "$PR_TITLE" --body "$PR_BODY"
+          else
+            gh pr create --repo "$REPOSITORY" --base "$UCP_REF" --head "$ROLLING_BRANCH" --title "$PR_TITLE" --body "$PR_BODY"
+          fi
+
+      - name: Report sync failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          UCP_REF: ${{ matrix.ucp_ref }}
+          UCP_SHA: ${{ steps.target.outputs.new_sha || github.event.client_payload.ucp_sha || inputs.ucp_sha || 'HEAD' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$UCP_SHA" = "HEAD" ]; then
+            RESOLVED_HEAD="$(git ls-remote "${UCP_REMOTE_URL:-https://github.com/Universal-Commerce-Protocol/ucp.git}" "refs/heads/${UCP_REF}" 2>/dev/null | awk '{print $1}' || true)"
+            if [[ "$RESOLVED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then UCP_SHA="$RESOLVED_HEAD"; fi
+          fi
+          gh label create "codegen-sync-failure" --repo "$REPOSITORY" --color "b60205" \
+            --description "Automated UCP schema model sync failed" --force || true
+          TITLE="chore(models): automated schema sync failure (${UCP_REF})"
+          DECISION="$(gh issue list --repo "$REPOSITORY" --state open --label "codegen-sync-failure" \
+            --search "in:title (${UCP_REF})" --json number,title,body,comments | jq -r \
+            --arg t "$TITLE" --arg sub "(${UCP_REF})" --arg sha "$UCP_SHA" '
+            (map(select(.title == $t))[0] // map(select((.title // "") | contains($sub)))[0]) as $m |
+            if $m == null then "create 0"
+            else (($m.comments // []) | if length > 0 then .[-1].body // "" else "" end) as $last |
+              if ($sha != "" and ((($m.body // "") | contains($sha)) or ($last | contains($sha)))) then "skip \($m.number)"
+              else "comment \($m.number)" end
+            end')"
+          read -r ACTION ISSUE_NUM <<< "$DECISION"
+          MSG="Automated model sync failed for \`${UCP_REF}\` at \`${UCP_SHA}\`. Inspect workflow run: ${RUN_URL}"
+          if [ "$ACTION" = "create" ]; then gh issue create --repo "$REPOSITORY" --title "$TITLE" --label "codegen-sync-failure" --body "$MSG"
+          elif [ "$ACTION" = "comment" ]; then gh issue comment "$ISSUE_NUM" --repo "$REPOSITORY" --body "$MSG"; fi
