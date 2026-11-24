@@ -218,7 +218,7 @@ jobs:
             [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/${RELEASE_BRANCH}")" ] \
               || { echo "::error::origin/${RELEASE_BRANCH} changed during run"; exit 1; }
           else
-            git add -- pyproject.toml ucp-lock.json src/ucp_sdk/models/schemas
+            git add -- pyproject.toml ucp-lock.json src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas
             ! git diff --cached --quiet || { echo "::error::Expected changes for v${NEW_VERSION}, but staged diff is empty"; exit 1; }
             git commit -m "chore(release): v${NEW_VERSION}"
             git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${RELEASE_BRANCH}"

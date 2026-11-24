@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Generate Pydantic v2 models from UCP JSON Schemas."""
+"""Generate Pydantic v2 models from UCP OpenAPI 3.1 schemas."""
 
 from __future__ import annotations
 
@@ -30,24 +30,7 @@ from typing import NoReturn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _UCP_URL = "https://github.com/Universal-Commerce-Protocol/ucp.git"
-_WRAPPERS = {"UCPSchemaTypes", "UcpSchemaTypes"}
 _SEMVER_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
-_CODEGEN_FLAGS = (
-    "--input-file-type=jsonschema",
-    "--output-model-type=pydantic_v2.BaseModel",
-    "--use-schema-description",
-    "--field-constraints",
-    "--use-field-description",
-    "--enum-field-as-literal=all",
-    "--disable-timestamp",
-    "--use-double-quotes",
-    "--extra-fields=allow",
-    "--use-type-alias",
-    "--use-standard-collections",
-    "--reuse-model",
-    "--use-title-as-name",
-    "--additional-imports=pydantic.ConfigDict",
-)
 
 
 def _die(msg: str) -> NoReturn:
@@ -56,8 +39,13 @@ def _die(msg: str) -> NoReturn:
 
 
 def _run(*cmd: str | Path, capture: bool = False) -> str:
-    args = [str(c) for c in cmd]
-    res = subprocess.run(args, check=True, text=True, capture_output=capture)
+    res = subprocess.run(
+        [str(c) for c in cmd], text=True, capture_output=capture
+    )
+    if res.returncode:
+        if capture and res.stderr:
+            sys.stderr.write(res.stderr)
+        raise SystemExit(res.returncode)
     return res.stdout.strip() if capture else ""
 
 
@@ -67,30 +55,49 @@ def _git_head(repo: Path) -> str:
     ).lower()
 
 
-def _resolve_ucp_schema() -> tuple[str, str]:
-    env_bin = os.environ.get("UCP_SCHEMA_BIN")
-    if env_bin:
-        if not (Path(env_bin).is_file() and os.access(env_bin, os.X_OK)):
-            _die(f"UCP_SCHEMA_BIN={env_bin!r} is missing or not executable.")
-        bin_path = env_bin
-    else:
-        path_env = f"{Path.home() / '.local/bin'}:{os.environ.get('PATH', '')}"
-        bin_path = shutil.which("ucp-schema", path=path_env) or ""
-        if not bin_path:
-            _die("ucp-schema binary not found (set UCP_SCHEMA_BIN or PATH).")
-    if subprocess.run(
-        [bin_path, "generate-types", "--help"], capture_output=True
-    ).returncode:
-        _die(f"'{bin_path}' lacks 'generate-types'.")
+def _is_valid_ref(chan: object, ref: object) -> bool:
+    pat = r"main" if chan == "draft" else r"release/\d{4}-\d{2}-\d{2}"
+    return (
+        chan in ("draft", "release")
+        and isinstance(ref, str)
+        and bool(re.fullmatch(pat, ref))
+    )
+
+
+def _is_valid_lock(lock: dict[str, object], vertical: str) -> bool:
+    sha, ver = lock.get("ucp_sha"), lock.get("ucp_schema_version")
+    return (
+        _is_valid_ref(lock.get("channel"), lock.get("ucp_ref"))
+        and isinstance(sha, str)
+        and bool(re.fullmatch(r"[0-9a-f]{40}", sha))
+        and isinstance(ver, str)
+        and bool(_SEMVER_RE.fullmatch(ver))
+        and bool(re.fullmatch(r"[a-z0-9_-]+", vertical))
+    )
+
+
+def _resolve_ucp_schema(skip_ver_check: bool) -> tuple[str, str]:
+    default_path = f"{Path.home() / '.local/bin'}:{os.environ.get('PATH', '')}"
+    bin_path = os.environ.get("UCP_SCHEMA_BIN") or shutil.which(
+        "ucp-schema", path=default_path
+    )
+    if not bin_path or not (
+        Path(bin_path).is_file() and os.access(bin_path, os.X_OK)
+    ):
+        _die("ucp-schema binary not found (set UCP_SCHEMA_BIN or PATH).")
+    help_res = subprocess.run(
+        [bin_path, "generate-openapi", "--help"], capture_output=True, text=True
+    )
+    if help_res.returncode or "--vertical" not in help_res.stdout:
+        _die(
+            f"'{bin_path}' lacks 'generate-openapi --vertical' "
+            "(requires ucp-schema >= 2.1.0)."
+        )
     ver = _run(bin_path, "--version", capture=True).split()[-1]
     if not _SEMVER_RE.fullmatch(ver):
         _die(f"Invalid semver from '{bin_path} --version': {ver!r}.")
     env_ver = os.environ.get("UCP_SCHEMA_VERSION")
-    if (
-        env_ver
-        and os.environ.get("UCP_SKIP_VERSION_CHECK") != "1"
-        and ver != env_ver
-    ):
+    if env_ver and not skip_ver_check and ver != env_ver:
         _die(f"ucp-schema {ver} != UCP_SCHEMA_VERSION={env_ver}.")
     return bin_path, ver
 
@@ -109,13 +116,11 @@ def _write_lazy_index(schemas_dir: Path) -> None:
             node.target, ast.Name
         ):
             names.add(node.target.id)
-        elif isinstance(node, alias_cls) and isinstance(
-            getattr(node, "name", None), ast.Name
-        ):
-            names.add(node.name.id)
-    exports = sorted(
-        n for n in names if not n.startswith("_") and n not in _WRAPPERS
-    )
+        elif isinstance(node, alias_cls):
+            alias_name = getattr(node, "name", None)
+            if isinstance(alias_name, ast.Name):
+                names.add(alias_name.id)
+    exports = sorted(n for n in names if not n.startswith("_"))
     imports = ", ".join(exports)
     items = ", ".join(f'"{n}"' for n in exports)
     (schemas_dir / "__init__.py").write_text(
@@ -143,7 +148,8 @@ def _write_lazy_index(schemas_dir: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Parse CLI flags, synthesize UCP IR bundle, and emit Pydantic DTOs."""
+    """Parse CLI flags, compile UCP OpenAPI 3.1, and emit Pydantic DTOs."""
+    orig_cwd = Path.cwd()
     os.chdir(_REPO_ROOT)
     p = argparse.ArgumentParser(prog="./generate_models.sh")
     p.add_argument("--from-lock", action="store_true")
@@ -157,23 +163,33 @@ def main(argv: list[str] | None = None) -> None:
     if args.from_lock and args.ref is not None:
         p.error("--from-lock cannot be combined with --ref.")
     if from_lock and (args.channel is not None or args.write_lock):
-        p.error(
-            "--from-lock cannot be combined with --channel or --write-lock."
-        )
+        p.error("--from-lock cannot be combined with --channel/--write-lock.")
     if args.ref is None and (args.channel is not None or args.write_lock):
         p.error("--channel and --write-lock require --ref.")
-    if args.ref is not None and not args.ref.strip():
-        p.error("--ref must be non-empty.")
-    if args.spec_dir is not None and not args.spec_dir.is_dir():
+    if args.ref is not None and (
+        not args.ref.strip() or args.ref.startswith("-")
+    ):
+        p.error("--ref must be non-empty and must not start with '-'.")
+
+    spec_arg = (orig_cwd / args.spec_dir).resolve() if args.spec_dir else None
+    if spec_arg is not None and not spec_arg.is_dir():
         _die(f"--spec-dir '{args.spec_dir}' does not exist.")
 
-    bin_path, bin_ver = _resolve_ucp_schema()
+    vertical = "shopping"
+    target_chan = args.channel or (
+        "release" if (args.ref or "").startswith("release/") else "draft"
+    )
+    if args.write_lock and not _is_valid_ref(target_chan, args.ref):
+        _die(f"Invalid --ref {args.ref!r} for channel {target_chan!r}.")
+
+    skip_ver = os.environ.get("UCP_SKIP_VERSION_CHECK") == "1"
+    bin_path, bin_ver = _resolve_ucp_schema(skip_ver)
     url = os.environ.get("UCP_REMOTE_URL", _UCP_URL)
     lock_path = Path("ucp-lock.json")
-    vertical = "shopping"
 
     with tempfile.TemporaryDirectory(prefix="ucp-codegen-") as tmp_str:
         tmp = Path(tmp_str)
+        sha = ""
         if from_lock:
             if not lock_path.is_file():
                 _die("ucp-lock.json not found.")
@@ -183,82 +199,66 @@ def main(argv: list[str] | None = None) -> None:
                 _die(f"Invalid ucp-lock.json: {exc}")
             if not isinstance(lock, dict):
                 _die("Invalid ucp-lock.json: expected JSON object.")
-            chan, ref = lock.get("channel"), lock.get("ucp_ref")
-            sha, ver = lock.get("ucp_sha"), lock.get("ucp_schema_version")
             vertical = str(lock.get("vertical") or "shopping")
-            ref_re = (
-                r"main" if chan == "draft" else r"release/\d{4}-\d{2}-\d{2}"
-            )
-            valid = (
-                chan in ("draft", "release")
-                and isinstance(ref, str)
-                and bool(re.fullmatch(ref_re, ref))
-                and isinstance(sha, str)
-                and bool(re.fullmatch(r"[0-9a-f]{40}", sha))
-                and isinstance(ver, str)
-                and bool(_SEMVER_RE.fullmatch(ver))
-                and bool(re.fullmatch(r"[a-z0-9_-]+", vertical))
-            )
-            if not valid:
+            if not _is_valid_lock(lock, vertical):
                 _die("Invalid ucp-lock.json fields.")
-            if (
-                os.environ.get("UCP_SKIP_VERSION_CHECK") != "1"
-                and bin_ver != ver
-            ):
-                _die(f"ucp-schema {bin_ver} != ucp-lock.json {ver}.")
-            spec = args.spec_dir or (tmp / "ucp-spec")
-            if args.spec_dir is not None:
+            sha = str(lock["ucp_sha"])
+            if not skip_ver and bin_ver != lock["ucp_schema_version"]:
+                _die(f"ucp-schema {bin_ver} != {lock['ucp_schema_version']}.")
+            spec = spec_arg or (tmp / "ucp-spec")
+            if spec_arg is not None:
                 if _git_head(spec) != sha:
                     _die(f"--spec-dir HEAD != {sha}.")
             else:
-                _run(
-                    "git",
-                    "clone",
-                    "--filter=blob:none",
-                    "--no-checkout",
-                    url,
-                    spec,
-                )
+                _run("git", "clone", "--filter=blob:none", "-n", url, spec)
                 _run("git", "-C", spec, "checkout", "--detach", sha)
         elif args.ref is not None:
-            spec = args.spec_dir or (tmp / "ucp-spec")
-            if args.spec_dir is None:
+            spec = spec_arg or (tmp / "ucp-spec")
+            if spec_arg is None:
                 _run("git", "clone", "-b", args.ref, "--depth=1", url, spec)
             sha = _git_head(spec)
         else:
-            spec = args.spec_dir
+            assert spec_arg is not None
+            spec = spec_arg
 
-        sub_dirs = ("source/schemas", "spec/schemas", "schemas")
-        schema_dir = next(
-            (spec / s for s in sub_dirs if (spec / s).is_dir()),
-            spec if (spec / "ucp.json").is_file() else None,
+        schema_dir = (
+            spec / "source/schemas"
+            if (spec / "source/schemas").is_dir()
+            else spec
         )
-        if schema_dir is None:
+        if not (schema_dir / "ucp.json").is_file():
             _die(f"Could not locate schema directory under '{spec}'.")
 
-        scoped = tmp / "scoped-schemas"
-        scoped.mkdir()
-        for jf in schema_dir.glob("*.json"):
-            shutil.copy2(jf, scoped / jf.name)
-        for sub in ("common", "transports", vertical):
-            if (schema_dir / sub).is_dir():
-                shutil.copytree(schema_dir / sub, scoped / sub)
+        openapi = tmp / "ucp.openapi.json"
+        _run(
+            bin_path,
+            "generate-openapi",
+            "--schema-dir",
+            schema_dir,
+            "--vertical",
+            vertical,
+            "-o",
+            openapi,
+        )
 
-        types = tmp / "ucp-types.json"
-        _run(bin_path, "generate-types", "--schema-dir", scoped, "-o", types)
+        openapi_out = Path("src/ucp_sdk/openapi.json")
+        openapi_out.parent.mkdir(parents=True, exist_ok=True)
+        openapi_out.write_text(
+            openapi.read_text("utf-8").rstrip("\n") + "\n", encoding="utf-8"
+        )
 
         out_dir = Path("src/ucp_sdk/models/schemas")
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "_generated.py").unlink(missing_ok=True)
+        gen_py = out_dir / "_generated.py"
+        gen_py.unlink(missing_ok=True)
         _run(
             sys.executable,
             "-m",
             "datamodel_code_generator",
             "--input",
-            types,
+            openapi_out,
             "--output",
-            out_dir / "_generated.py",
-            *_CODEGEN_FLAGS,
+            gen_py,
         )
         _write_lazy_index(out_dir)
         models_dir = Path("src/ucp_sdk/models")
@@ -266,11 +266,8 @@ def main(argv: list[str] | None = None) -> None:
         _run(sys.executable, "-m", "ruff", "format", models_dir)
 
         if args.write_lock:
-            chan = args.channel or (
-                "release" if args.ref.startswith("release/") else "draft"
-            )
             data = {
-                "channel": chan,
+                "channel": target_chan,
                 "ucp_ref": args.ref,
                 "ucp_sha": sha,
                 "ucp_schema_version": bin_ver,

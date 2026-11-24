@@ -127,31 +127,39 @@ directional `ucp_request` / `ucp_response` visibility, `dependentRequired`,
 `if`/`then`, `uniqueItems`, `contains`, `propertyNames`, `not.enum`, and
 closed-schema rules):
 
-1. **In-Memory Runtime Validation (Production Services)**: Compile your UCP
-   discovery profile once at build or startup time into a standard JSON Schema
-   Draft 2020-12 bundle
-   (`ucp-schema generate-types --profile profile.json -o ucp.types.json`) or
-   OpenAPI 3.1 specification
-   (`ucp-schema generate-openapi --profile profile.json -o openapi.json`).
+1. **In-Memory Runtime Validation (Production Services)**: Load the bundled
+   Shopping OpenAPI 3.1 specification directly from `ucp_sdk` via
+   `importlib.resources.files("ucp_sdk").joinpath("openapi.json")` (no
+   `ucp-schema` CLI needed for starter Shopping validation; compile custom
+   merchant or extension profiles with
+   `ucp-schema generate-openapi --profile profile.json -o openapi.json`).
    Because `ucp-schema` resolves all UCP-specific annotations and capability
    extensions into standard JSON Schema 2020-12, you can validate incoming
    payloads in memory on every request using
-   [`jsonschema`](https://python-jsonschema.readthedocs.io/) (install
-   `pip install "jsonschema[format-nongpl]"` to enable `uri` and `date-time`
-   format validation via MIT-licensed validators without pulling in GPL
-   dependencies) or OpenAPI ASGI middleware before deserializing into Pydantic
-   DTOs:
+   [`jsonschema`](https://python-jsonschema.readthedocs.io/) (installed
+   separately from `ucp-sdk` via `pip install "jsonschema[format-nongpl]"` to
+   enable `uri` and `date-time` format validation via MIT-licensed validators
+   without pulling in GPL dependencies) or OpenAPI ASGI middleware before
+   deserializing into Pydantic DTOs:
 
 ```python
+from importlib.resources import files
 import json
-from pathlib import Path
 from jsonschema import Draft202012Validator
+from referencing import Registry
+from referencing.jsonschema import DRAFT202012
 from ucp_sdk.models import Checkout
 
-# At startup: load the pre-compiled schema bundle once into memory
-bundle = json.loads(Path("ucp.types.json").read_text(encoding="utf-8"))
+# At startup: register the bundled OpenAPI 3.1 document once in memory
+spec = json.loads(
+    files("ucp_sdk").joinpath("openapi.json").read_text(encoding="utf-8")
+)
+registry = Registry().with_resource(
+    "urn:ucp:openapi", DRAFT202012.create_resource(spec)
+)
 checkout_validator = Draft202012Validator(
-    {**bundle["$defs"]["Checkout"], "$defs": bundle["$defs"]},
+    {"$ref": "urn:ucp:openapi#/components/schemas/Checkout"},
+    registry=registry,
     format_checker=Draft202012Validator.FORMAT_CHECKER,
 )
 
@@ -178,7 +186,7 @@ ucp-schema validate payload.json --profile profile.json --op create
 
 This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management
 and [`ucp-schema`](https://crates.io/crates/ucp-schema)
-(`cargo install ucp-schema`) to synthesize the flat `$defs` bundle for model
+(`cargo install ucp-schema`) to compile the OpenAPI 3.1 specification for model
 generation.
 
 ### Setup
@@ -194,9 +202,11 @@ uv sync
 
 ### Generating Pydantic Models
 
-The models are automatically generated from the JSON schemas in the UCP
-Specification using `ucp-schema generate-types` and `datamodel-codegen`, with
-provenance recorded in [`ucp-lock.json`](ucp-lock.json).
+The bundled OpenAPI specification (`src/ucp_sdk/openapi.json`) and Pydantic
+models are automatically generated from the UCP Specification (`>= 2026-04-08`)
+using `ucp-schema generate-openapi` and `datamodel-codegen` (configured in
+[`pyproject.toml`](pyproject.toml)), with provenance recorded in
+[`ucp-lock.json`](ucp-lock.json).
 
 To regenerate the models:
 

@@ -251,16 +251,16 @@ jobs:
           uv run ruff check src/ucp_sdk/models
           uv run ruff format --check src/ucp_sdk/models
 
-          if [ "$FORCE_RESYNC" != "true" ] && git diff --quiet "origin/${UCP_REF}" -- src/ucp_sdk/models/schemas/_generated.py; then
-            git checkout -- ucp-lock.json src/ucp_sdk/models/schemas
+          if [ "$FORCE_RESYNC" != "true" ] && git diff --quiet "origin/${UCP_REF}" -- src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas/_generated.py; then
+            git checkout -- ucp-lock.json src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas
             if [ -n "$OPEN_ROLLING_PR" ] && [ "$ROLLING_COVERED" = "true" ]; then echo "close_pr=true" >> "$GITHUB_OUTPUT"; fi
             exit 0
           fi
           if [ "$FORCE_RESYNC" != "true" ] && [ -n "$OPEN_ROLLING_PR" ] \
             && git show-ref --verify --quiet "refs/remotes/origin/${ROLLING_BRANCH}" \
             && git merge-base --is-ancestor "origin/${UCP_REF}" "origin/${ROLLING_BRANCH}" \
-            && git diff --quiet "origin/${ROLLING_BRANCH}" -- src/ucp_sdk/models/schemas/_generated.py; then
-            git checkout -- ucp-lock.json src/ucp_sdk/models/schemas
+            && git diff --quiet "origin/${ROLLING_BRANCH}" -- src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas/_generated.py; then
+            git checkout -- ucp-lock.json src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas
             exit 0
           fi
           uv run python -m unittest discover -s tests -p "test_*.py"
@@ -306,7 +306,7 @@ jobs:
           CHANNEL="release"; if [ "$UCP_REF" = "main" ]; then CHANNEL="draft"; fi
           SHORT_SHA="${NEW_SHA:0:7}"
           ROLLING_BRANCH="chore/sync-models-${UCP_REF/\//-}"
-          git add -- ucp-lock.json src/ucp_sdk/models/schemas
+          git add -- ucp-lock.json src/ucp_sdk/openapi.json src/ucp_sdk/models/schemas
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "chore(models): sync UCP schemas to ${SHORT_SHA}"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${ROLLING_BRANCH}"

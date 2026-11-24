@@ -26,10 +26,6 @@ from typing import Annotated, Any, Literal
 from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
 from typing_extensions import TypeAliasType
 
-UCPSchemaTypes = TypeAliasType(
-    "UCPSchemaTypes", Annotated[Any, Field(..., title="UCP Schema Types")]
-)
-
 
 class ActionsDeviceDataCollectionConfig(BaseModel):
     model_config = ConfigDict(
