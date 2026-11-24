@@ -172,6 +172,199 @@ ucp-schema validate payload.json --op read
 ucp-schema validate payload.json --profile profile.json --op create
 ```
 
+### Generating REST Server & Client Stubs
+
+Compiling custom capability profiles requires `ucp-schema >= 2.0.0` (starter
+Shopping models are already included in `ucp_sdk.models`), and
+`datamodel-code-generator`, `fastapi`, and `httpx` are installed separately from
+`ucp-sdk`.
+
+1. **Merchant Server Stubs**: Compile `./profile.json` into OpenAPI 3.1,
+   generate Pydantic v2 models, validate incoming payloads per
+   [Validation](#validation), and mark union request bodies with `Body()`:
+
+```bash
+ucp-schema generate-openapi --profile ./profile.json -o openapi.json
+datamodel-codegen --input openapi.json --input-file-type openapi --openapi-scopes schemas \
+    --output merchant_models.py --output-model-type pydantic_v2.BaseModel \
+    --enum-field-as-literal all --extra-fields allow --field-constraints \
+    --reuse-model --use-standard-collections --use-title-as-name --use-type-alias
+```
+
+```python
+from typing import Annotated
+from fastapi import Body, FastAPI, Response
+from merchant_models import Checkout, CheckoutCreateRequest, ErrorResponse
+
+app = FastAPI()
+
+
+async def _build_checkout(
+    payload: CheckoutCreateRequest,
+) -> Checkout | ErrorResponse:
+    raise NotImplementedError
+
+
+@app.post(
+    "/checkout-sessions",
+    response_model=Checkout | ErrorResponse,
+    response_model_exclude_none=True,
+    status_code=201,
+)
+async def create_checkout(
+    payload: Annotated[CheckoutCreateRequest, Body()],
+    response: Response,
+) -> Checkout | ErrorResponse:
+    result = await _build_checkout(payload)
+    if isinstance(result, ErrorResponse):
+        response.status_code = 200
+    return result
+```
+
+2. **Platform Client Stubs**: Compile each supported platform profile
+   (`--profile ./platform-2026-08-25.json` into `ucp_models_2026_08_25.py` with
+   the same flags above) to negotiate versions, cache stubs, and sign requests
+   (in multi-merchant services, pair `httpx` with an SSRF-safe transport
+   blocking private IPs and validate fetched profiles per
+   [Validation](#validation)):
+
+```python
+import base64
+from collections.abc import Callable, Generator
+from dataclasses import dataclass, field
+import hashlib
+from types import ModuleType
+from typing import Any
+from urllib.parse import urlsplit
+from uuid import uuid4
+import httpx
+from pydantic import BaseModel, TypeAdapter
+
+
+def _https_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError(f"Expected https:// URL, got {url!r}")
+    return url
+
+
+@dataclass
+class UcpTransportAuth(httpx.Auth):
+    agent_profile_url: str
+    sign_request: Callable[[httpx.Request], None] | None = None
+    requires_request_body = True
+
+    def auth_flow(
+        self, request: httpx.Request
+    ) -> Generator[httpx.Request, httpx.Response, None]:
+        h = request.headers
+        h.setdefault("UCP-Agent", f'profile="{self.agent_profile_url}"')
+        h.setdefault("Request-Id", str(uuid4()))
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            h.setdefault("Idempotency-Key", str(uuid4()))
+        if request.content:
+            digest = base64.b64encode(hashlib.sha256(request.content).digest())
+            h["Content-Digest"] = f"sha-256=:{digest.decode()}:"
+        if self.sign_request is not None:
+            self.sign_request(request)
+        yield request
+
+
+@dataclass
+class UcpRestStub:
+    version: str
+    models: ModuleType
+    client: httpx.Client
+    capabilities: frozenset[str] = frozenset()
+    _adapters: dict[object, TypeAdapter[Any]] = field(
+        default_factory=dict, init=False
+    )
+
+    def request_model(
+        self,
+        method: str,
+        path: str,
+        model: Any,
+        body: BaseModel | None = None,
+        **kw: Any,
+    ) -> Any:
+        data = body.model_dump(mode="json", exclude_none=True) if body else None
+        resp = self.client.request(method, path.lstrip("/"), json=data, **kw)
+        resp.raise_for_status()
+        if model not in self._adapters:
+            self._adapters[model] = TypeAdapter(
+                model | self.models.ErrorResponse
+            )
+        return self._adapters[model].validate_json(resp.content)
+
+
+@dataclass
+class PlatformStubFactory:
+    versions: dict[str, tuple[ModuleType, str]]
+    sign_request: Callable[[httpx.Request], None] | None = None
+    _cache: dict[object, UcpRestStub] = field(default_factory=dict, init=False)
+    _profiles: dict[str, dict[str, Any]] = field(
+        default_factory=dict, init=False
+    )
+
+    def close(self) -> None:
+        for stub in self._cache.values():
+            stub.client.close()
+        self._cache.clear()
+
+    def __enter__(self) -> "PlatformStubFactory":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def for_merchant(self, merchant_profile: dict[str, Any]) -> UcpRestStub:
+        ucp = merchant_profile["ucp"]
+        supported: dict[str, str] = ucp.get("supported_versions") or {}
+        candidates = {ucp["version"], *supported} & self.versions.keys()
+        if not candidates:
+            raise ValueError(f"Unsupported UCP version: {ucp['version']}")
+        ver = max(candidates)
+        if ver != ucp["version"]:
+            prof_url = _https_url(supported[ver])
+            if prof_url not in self._profiles:
+                with httpx.Client(follow_redirects=False) as c:
+                    self._profiles[prof_url] = (
+                        c.get(prof_url).raise_for_status().json()["ucp"]
+                    )
+            ucp = self._profiles[prof_url]
+            if ucp.get("version") != ver or "supported_versions" in ucp:
+                raise ValueError(f"Invalid version profile: {ver}")
+        svcs = ucp.get("services", {}).get("dev.ucp.shopping", ())
+        rest = next((s for s in svcs if s.get("transport") == "rest"), None)
+        if rest is None:
+            raise ValueError("Merchant profile has no REST shopping endpoint")
+        ep = _https_url(rest["endpoint"]).rstrip("/")
+        # Merchant-advertised capability names (not pruned to platform profile)
+        caps = frozenset(ucp.get("capabilities", ()))
+        key = (ver, ep, caps)
+        if key not in self._cache:
+            models, agent_url = self.versions[ver]
+            auth = UcpTransportAuth(_https_url(agent_url), self.sign_request)
+            http = httpx.Client(base_url=f"{ep}/", auth=auth)
+            self._cache[key] = UcpRestStub(ver, models, http, caps)
+        return self._cache[key]
+```
+
+```python
+from pydantic import TypeAdapter
+import ucp_models_2026_08_25 as m
+
+with PlatformStubFactory(
+    {"2026-08-25": (m, "https://platform.example.com/profiles/2026-08-25.json")}
+) as factory:
+    stub = factory.for_merchant(merchant_profile)
+    req = TypeAdapter(m.CheckoutCreateRequest).validate_python(
+        {"line_items": [{"item": {"id": "sku_1"}, "quantity": 1}]}
+    )
+    checkout = stub.request_model("POST", "/checkout-sessions", m.Checkout, req)
+```
+
 ## Development
 
 ### Prerequisites
