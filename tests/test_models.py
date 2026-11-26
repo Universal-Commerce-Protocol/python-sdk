@@ -18,14 +18,19 @@ from __future__ import annotations
 
 import importlib
 from importlib.metadata import PackageNotFoundError
+from importlib.resources import files
+import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Any
 import unittest
 from unittest.mock import patch
+import zipfile
 
 from pydantic import TypeAdapter, ValidationError
 import ucp_sdk
@@ -892,6 +897,11 @@ class PureDtoStructureAndOpennessTest(unittest.TestCase):
             *("UCPSchemaTypes", "UcpSchemaTypes", "AnyUrl", "AwareDatetime"),
             *("BaseModel", "ConfigDict", "Field", "RootModel"),
             *("date", "timedelta", "TypeAliasType"),
+            *(
+                "CheckoutSessionsPostResponse",
+                "CartsPostResponse",
+                "OrdersIdGetResponse",
+            ),
         )
         for sym in forbidden:
             self.assertNotIn(sym, schemas_module.__all__)
@@ -1024,6 +1034,20 @@ class LockfileAndVersionContractTest(unittest.TestCase):
             self.assertEqual(ucp_sdk.__version__, "0.0.0.dev0")
         importlib.reload(ucp_sdk)
 
+    def test_pyproject_datamodel_codegen_openapi_config(self) -> None:
+        if sys.version_info >= (3, 11):
+            import tomllib
+
+            pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            cfg = data["tool"]["datamodel-codegen"]
+            self.assertEqual(cfg["input-file-type"], "openapi")
+            self.assertEqual(cfg["openapi-scopes"], ["schemas"])
+            self.assertEqual(cfg["output-model-type"], "pydantic_v2.BaseModel")
+            self.assertEqual(cfg["extra-fields"], "allow")
+        else:
+            self.skipTest("tomllib requires Python 3.11+")
+
     def test_generate_models_cli_rejects_positionals_and_invalid_flag_combos(
         self,
     ) -> None:
@@ -1038,6 +1062,9 @@ class LockfileAndVersionContractTest(unittest.TestCase):
             ["--write-lock"],
             ["--spec-dir", ".", "--write-lock"],
             ["--channel", "draft"],
+            ["--ref", "feature/invalid", "--write-lock"],
+            ["--ref", "main", "--channel", "release", "--write-lock"],
+            ["--ref=-invalid"],
         ):
             proc = subprocess.run(
                 [sys.executable, str(script), *bad_args],
@@ -1053,6 +1080,152 @@ class LockfileAndVersionContractTest(unittest.TestCase):
             text=True,
         )
         self.assertNotEqual(bad_bin.returncode, 0)
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            old_bin = tmp / "ucp-schema-old"
+            old_bin.write_text(
+                "#!/bin/sh\necho 'Usage: ucp-schema generate-openapi -p <P>'\n",
+                encoding="utf-8",
+            )
+            old_bin.chmod(0o755)
+            old_res = subprocess.run(
+                [sys.executable, str(script), "--from-lock"],
+                env={**os.environ, "UCP_SCHEMA_BIN": str(old_bin)},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(old_res.returncode, 0)
+            self.assertIn("generate-openapi --vertical", old_res.stderr)
+
+            new_bin = tmp / "ucp-schema-new"
+            new_bin.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "ucp-schema 2.1.0"; exit 0; fi\n'
+                'if [ "$2" = "--help" ]; then echo "--schema-dir --vertical"; exit 0; fi\n'
+                'case "$*" in\n'
+                '  *"generate-openapi --schema-dir "*"/legacy-spec/source/schemas --vertical shopping -o "*)\n'
+                '    echo "error: no REST service template (requires UCP >= 2026-04-08)" >&2\n'
+                "    exit 2 ;;\n"
+                '  *) echo "unexpected args: $*" >&2; exit 99 ;;\n'
+                "esac\n",
+                encoding="utf-8",
+            )
+            new_bin.chmod(0o755)
+            spec = tmp / "legacy-spec"
+            (spec / "source/schemas").mkdir(parents=True)
+            (spec / "source/schemas/ucp.json").write_text("{}", "utf-8")
+            sub_cwd = tmp / "nested-cwd"
+            sub_cwd.mkdir()
+            rel_spec = Path("..") / "legacy-spec"
+            legacy_res = subprocess.run(
+                [sys.executable, str(script), "--spec-dir", str(rel_spec)],
+                cwd=sub_cwd,
+                env={**os.environ, "UCP_SCHEMA_BIN": str(new_bin)},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(legacy_res.returncode, 0)
+            self.assertIn("2026-04-08", legacy_res.stderr)
+
+    def test_bundled_openapi_resource_and_wheel_packaging(self) -> None:
+        raw_bytes = files("ucp_sdk").joinpath("openapi.json").read_bytes()
+        spec = json.loads(raw_bytes.decode("utf-8"))
+        self.assertTrue(str(spec.get("openapi", "")).startswith("3.1."))
+        self.assertTrue(spec.get("paths"))
+        schemas: dict[str, Any] = spec["components"]["schemas"]
+        self.assertIn("Checkout", schemas)
+        self.assertIn("ErrorResponse", schemas)
+
+        def check_refs(node: Any) -> None:
+            if isinstance(node, dict):
+                ref = node.get("$ref")
+                if isinstance(ref, str):
+                    prefix = "#/components/schemas/"
+                    self.assertTrue(ref.startswith(prefix), msg=ref)
+                    self.assertIn(ref[len(prefix) :], schemas)
+                for val in node.values():
+                    check_refs(val)
+            elif isinstance(node, list):
+                for item in node:
+                    check_refs(item)
+
+        check_refs(schemas)
+
+        uv_bin = shutil.which("uv")
+        if uv_bin is not None:
+            repo_root = Path(__file__).resolve().parents[1]
+            with tempfile.TemporaryDirectory() as tmp_str:
+                subprocess.run(
+                    [uv_bin, "build", "--wheel", "--out-dir", tmp_str],
+                    cwd=repo_root,
+                    check=True,
+                    capture_output=True,
+                )
+                wheels = list(Path(tmp_str).glob("*.whl"))
+                self.assertEqual(len(wheels), 1)
+                with zipfile.ZipFile(wheels[0]) as zf:
+                    self.assertIn("ucp_sdk/openapi.json", zf.namelist())
+                    self.assertEqual(zf.read("ucp_sdk/openapi.json"), raw_bytes)
+
+    def test_bundled_openapi_jsonschema_validation(self) -> None:
+        if importlib.util.find_spec("jsonschema") is None:
+            self.skipTest("jsonschema optional dependency not installed")
+        js_mod = importlib.import_module("jsonschema")
+        ref_mod = importlib.import_module("referencing")
+        ref_js = importlib.import_module("referencing.jsonschema")
+
+        spec = json.loads(
+            files("ucp_sdk").joinpath("openapi.json").read_text("utf-8")
+        )
+        registry = ref_mod.Registry().with_resource(
+            "urn:ucp:openapi", ref_js.DRAFT202012.create_resource(spec)
+        )
+        validator_cls = js_mod.Draft202012Validator
+        validator = validator_cls(
+            {"$ref": "urn:ucp:openapi#/components/schemas/Checkout"},
+            registry=registry,
+            format_checker=validator_cls.FORMAT_CHECKER,
+        )
+        valid_checkout: dict[str, Any] = {
+            "ucp": {"version": "2026-08-25", "payment_handlers": {}},
+            "id": "chk_1",
+            "status": "incomplete",
+            "currency": "USD",
+            "line_items": [
+                {
+                    "id": "li_1",
+                    "item": {"id": "sku_1", "title": "Widget", "price": 500},
+                    "quantity": 1,
+                    "totals": [{"type": "total", "amount": 500}],
+                }
+            ],
+            "totals": [{"type": "total", "amount": 500}],
+            "links": [
+                {
+                    "type": "terms_of_service",
+                    "url": "https://merchant.example.com/tos",
+                }
+            ],
+        }
+        validator.validate(valid_checkout)
+        parsed = Checkout.model_validate(valid_checkout)
+        self.assertEqual(parsed.id, "chk_1")
+
+        missing_currency = {
+            k: v for k, v in valid_checkout.items() if k != "currency"
+        }
+        with self.assertRaises(js_mod.ValidationError):
+            validator.validate(missing_currency)
+
+        if "uri" not in validator_cls.FORMAT_CHECKER.checkers:
+            self.skipTest("jsonschema[format-nongpl] URI checker not installed")
+        bad_uri = {
+            **valid_checkout,
+            "links": [{"type": "terms_of_service", "url": "not a valid uri"}],
+        }
+        with self.assertRaises(js_mod.ValidationError):
+            validator.validate(bad_uri)
 
 
 if __name__ == "__main__":

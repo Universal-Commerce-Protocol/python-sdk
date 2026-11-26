@@ -43,6 +43,22 @@ build-backend = "hatchling.build"
 packages = ["src/ucp_sdk"]
 
 [tool.datamodel-codegen]
+input-file-type = "openapi"
+openapi-scopes = ["schemas"]
+output-model-type = "pydantic_v2.BaseModel"
+use-schema-description = true
+field-constraints = true
+use-field-description = true
+enum-field-as-literal = "all"
+disable-timestamp = true
+use-double-quotes = true
+extra-fields = "allow"
+use-type-alias = true
+use-standard-collections = true
+reuse-model = true
+use-title-as-name = true
+additional-imports = "pydantic.ConfigDict"
+formatters = ["black", "isort"]
 custom-file-header = """
 # Copyright 2026 UCP Authors
 #
